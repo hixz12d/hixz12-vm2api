@@ -17,6 +17,7 @@ import { ensureSlotClaudeOwnership } from '../oauth/oauth-credentials.mjs'
 import { materializeWrapCli } from './wrap-cli-runtime.mjs'
 import { ensureGuestMachineIdFile } from '../identity/workstation-fingerprint.mjs'
 import { ensureProxyEgress, isLocalEgressProxy, slotNetworkForVm } from './egress.mjs'
+import { OS_CATALOG, OS_ORDER, inspectKernelImage } from './os-images.mjs'
 
 export const RUNTIME = 'docker'
 const WORKER_BIN = process.env.KIN_WORKER_BIN || '/opt/kin-gateway/bin/kin-worker'
@@ -27,14 +28,7 @@ const MEM = SLOT_MEMORY
 const NET = process.env.KIN_VM_NETWORK || 'bridge'
 const PUBLIC_IP = process.env.PUBLIC_HOST || '166.88.96.199'
 
-export const OS_CATALOG = {
-  'ubuntu-24.04': { image: 'kin-os/ubuntu:24.04', family: 'ubuntu', pretty: 'Ubuntu 24.04' },
-  'debian-12': { image: 'kin-os/debian:12', family: 'debian', pretty: 'Debian 12' },
-  archlinux: { image: 'kin-os/arch:latest', family: 'arch', pretty: 'Arch Linux' },
-  'fedora-41': { image: 'kin-os/fedora:41', family: 'fedora', pretty: 'Fedora 41' },
-}
-
-export const OS_ORDER = ['ubuntu-24.04', 'debian-12', 'archlinux', 'fedora-41']
+export { OS_CATALOG, OS_ORDER } from './os-images.mjs'
 export { normalizeTimezone, normalizeTimezone as normalizeUsTimezone, US_TIMEZONES } from '../core/timezone.mjs'
 export const STANDARD_LOCALE = 'en_US.UTF-8'
 
@@ -390,6 +384,16 @@ export function shouldReplaceSlotContainer({ existing, recreate = false, network
   return !!(wrongNet || wrongImg)
 }
 
+/** Check before rewriting worker files or removing an existing slot container. */
+export function checkSlotStartImage(
+  { existing, recreate = false, network, kernel },
+  { inspectImage = inspectKernelImage } = {},
+) {
+  const replace = shouldReplaceSlotContainer({ existing, recreate, network, image: imageForKernel(kernel) })
+  if (existing && !replace) return { ok: true, skipped: true }
+  return inspectImage(kernel)
+}
+
 export function startVmRuntime(vm, projectRoot, { recreate = false } = {}) {
   const name = containerName(vm.id)
   const slotName = displayName(vm.id)
@@ -420,6 +424,8 @@ export function startVmRuntime(vm, projectRoot, { recreate = false } = {}) {
     })
     return { ok: true, action: 'already-running', runtime: vm.runtime }
   }
+  const imageReady = checkSlotStartImage({ existing, recreate: replace, network: slotNetworkForVm(vm), kernel })
+  if (!imageReady.ok) return imageReady
   try {
     materializeWrapCli(projectRoot, vm, { uid: runtimeUidNum(vm), gid: Number(GID) })
   } catch {}
@@ -472,6 +478,7 @@ export function startVmRuntime(vm, projectRoot, { recreate = false } = {}) {
   const args = [
     'docker',
     'run',
+    '--pull=never',
     '-d',
     '--name',
     name,

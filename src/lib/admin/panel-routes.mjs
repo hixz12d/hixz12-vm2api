@@ -105,6 +105,7 @@ import {
 } from '../vm/vm-registry.mjs'
 import { syncVmTimezoneFromProxy } from '../vm/proxy-timezone.mjs'
 import { validTimezone } from '../core/timezone.mjs'
+import { inspectKernelImage } from '../vm/os-images.mjs'
 import { stampVmKind, isCodexVm } from '../vm/vm-kind.mjs'
 import { parseAllowedModelsPatch } from '../pool/slot-model-gate.mjs'
 import { parseScheduleLevelInput } from '../pool/credential-weight.mjs'
@@ -2070,6 +2071,15 @@ export function createPanelHandler(ctx) {
         }
         const startNow = body.start !== false && body.status !== 'stopped'
         const wantKernel = body.kernel && OS_CATALOG[body.kernel] ? body.kernel : kernelForIndex(idx)
+        if (startNow && body.runtime_type !== 'kvm') {
+          const imageReady = (ctx.inspectKernelImage || inspectKernelImage)(wantKernel)
+          if (!imageReady.ok) {
+            return json(res, imageReady.code === 'slot_image_missing' ? 409 : 503, {
+              ok: false,
+              error: { code: imageReady.code, message: imageReady.error },
+            })
+          }
+        }
         const generated = generateWorkstationFingerprint(
           { id, kernel: wantKernel, timezone: body.timezone, locale: STANDARD_LOCALE },
           { taken: takenFingerprintKeys(existing) },

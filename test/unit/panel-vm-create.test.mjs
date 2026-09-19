@@ -5,10 +5,11 @@ import os from 'node:os'
 import path from 'node:path'
 import { createPanelHandler } from '../../src/lib/admin/panel-routes.mjs'
 
-function makeCreateHandler(project, body) {
+function makeCreateHandler(project, body, inspectKernelImage = () => ({ ok: true })) {
   const response = {}
   const handlePanel = createPanelHandler({
     cfg: { paths: { project } },
+    inspectKernelImage,
     requireAuth(req) {
       req.apiKeyKind = 'master'
       req.panelRole = 'admin'
@@ -52,6 +53,60 @@ test('import-style create succeeds without seed_policy or SOCKS5', async () => {
     assert.equal(saved.seed_policy.telemetry_disabled, false)
     assert.equal(saved.proxy_required, false)
     assert.equal(saved.proxy, null)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+for (const kernel of ['ubuntu-24.04', 'debian-12', 'archlinux', 'fedora-41']) {
+  test(`missing ${kernel} image refuses create before saving a slot or allocating a proxy`, async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-create-image-'))
+    try {
+      const { handlePanel, response } = makeCreateHandler(
+        root,
+        { id: 'vm-09', kernel, start: true, auto_allocate_proxy: true, activate: true },
+        (selected) => {
+          assert.equal(selected, kernel)
+          assert.equal(fs.existsSync(path.join(root, 'vms', 'vm-09.json')), false)
+          return { ok: false, code: 'slot_image_missing', error: 'Prepare the local OS image first' }
+        },
+      )
+      await handlePanel({ method: 'POST' }, {}, new URL('http://localhost/api/panel/vms/create'))
+      assert.equal(response.status, 409)
+      assert.equal(response.body.error.code, 'slot_image_missing')
+      assert.deepEqual(fs.readdirSync(path.join(root, 'vms')), [])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+}
+
+test('create-only does not require Docker or an OS image', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-create-offline-'))
+  try {
+    const { handlePanel, response } = makeCreateHandler(root, { kernel: 'debian-12', start: false }, () => {
+      throw new Error('Image inspection must not run for an idle slot')
+    })
+    await handlePanel({ method: 'POST' }, {}, new URL('http://localhost/api/panel/vms/create'))
+    assert.equal(response.status, 200)
+    assert.equal(response.body.data.vm.status, 'stopped')
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('Docker inspection failure is reported as unavailable without saving a slot', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-create-docker-'))
+  try {
+    const { handlePanel, response } = makeCreateHandler(root, { start: true }, () => ({
+      ok: false,
+      code: 'docker_unavailable',
+      error: 'Cannot connect to the Docker daemon',
+    }))
+    await handlePanel({ method: 'POST' }, {}, new URL('http://localhost/api/panel/vms/create'))
+    assert.equal(response.status, 503)
+    assert.equal(response.body.error.code, 'docker_unavailable')
+    assert.deepEqual(fs.readdirSync(path.join(root, 'vms')), [])
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }

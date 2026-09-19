@@ -47,6 +47,7 @@ export function startSlot(vm, projectRoot, opts = {}) {
 export async function startSlotReady(vm, projectRoot, opts = {}) {
   if (isCodexVm(vm)) {
     const boot = startSlot(vm, projectRoot, opts)
+    if (!boot?.ok) return boot
     const kernel = await ensureSlotInferenceRuntime(vm, projectRoot, opts)
     if (!kernel.ok) return kernel
     return { ok: true, engine: 'codex', docker: boot, kernel }

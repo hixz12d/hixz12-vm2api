@@ -54,7 +54,13 @@ fi
 if [ ! -S /var/run/docker.sock ]; then
   echo "vm2api: /var/run/docker.sock not mounted; slot create/start will fail." >&2
 elif [ -f /opt/vm2api/docker/kin-os/build.mjs ]; then
-  node /opt/vm2api/docker/kin-os/build.mjs ubuntu
+  # Every OS offered by the panel needs its host-local image, not only Ubuntu.
+  # Production deployments may prebuild under a capped builder and only check here.
+  case "${VM2API_SLOT_IMAGE_MODE:-build}" in
+    build) node /opt/vm2api/docker/kin-os/build.mjs ;;
+    check) node /opt/vm2api/docker/kin-os/build.mjs --check ;;
+    *) echo "vm2api: VM2API_SLOT_IMAGE_MODE must be build or check" >&2; exit 1 ;;
+  esac
 fi
 
 cd /opt/vm2api

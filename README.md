@@ -59,7 +59,7 @@ docker compose up -d --build
 curl -sS --noproxy '*' http://127.0.0.1:8787/health
 ```
 
-`--build` 拷仓内 `bin/kin-{kernel,egress,worker,codex-kernel}` 和 `share/wrap-cli`，**不在服务器上编 Rust/Go**。缺槽位 OS 时入口编 `kin-os/ubuntu:24.04`。其它发行版：`node docker/kin-os/build.mjs`。槽 UID 是 `10000+序号`，`bin/kin-*` 必须 **755**，不要 `700`。
+`--build` 拷仓内 `bin/kin-{kernel,egress,worker,codex-kernel}` 和 `share/wrap-cli`，**不在服务器上编 Rust/Go**。入口默认补齐 Ubuntu、Debian、Arch、Fedora 四种本地槽位镜像；生产环境可提前运行 `node docker/kin-os/build.mjs`，再设置 `VM2API_SLOT_IMAGE_MODE=check` 只检查镜像，详见 [部署](docs/DEPLOY.md)。槽 UID 是 `10000+序号`，`bin/kin-*` 必须 **755**，不要 `700`。
 
 
 

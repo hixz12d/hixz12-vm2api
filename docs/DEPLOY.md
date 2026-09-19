@@ -4,7 +4,7 @@
 
 ## 机器
 
-Ubuntu 24.04 + Docker Engine。Debian 12 上槽内核常常起不来。
+Ubuntu 24.04 或 Debian 12 + Docker Engine。槽位使用所选 `kin-os` 镜像的用户态环境，运行二进制及 glibc 兼容包装由项目提供。
 
 最少三个环境变量，写在仓库 `.env`（`chmod 600`），不要进 git：
 
@@ -41,7 +41,20 @@ docker compose up -d --build
 curl -sS --noproxy '*' http://127.0.0.1:8787/health
 ```
 
-二进制在仓内 `bin/`，Compose 会拷到挂载目录。`bin/kin-*` 必须 **755**。缺槽位系统镜像时会编 `kin-os/ubuntu:24.04`。
+二进制在仓内 `bin/`，Compose 会拷到挂载目录。`bin/kin-*` 必须 **755**。入口会串行准备面板支持的 Ubuntu、Debian、Arch、Fedora 四种本地槽位镜像，已有镜像跳过。首次启动可能需要较长时间，生产环境建议提前构建。
+
+这些 `kin-os/*` 标签是项目本地构建的镜像，不是公共仓库镜像；缺失时不要执行 `docker login` 或尝试拉取同名镜像。
+
+```bash
+# 默认检查并补齐全部四种系统；也可指定 debian / debian-12 / kin-os/debian:12
+node docker/kin-os/build.mjs
+# 只验证镜像齐全，不构建
+node docker/kin-os/build.mjs --check
+```
+
+源码和运行目录分离时，上述命令在源码目录执行。可通过 `VM2API_BUILD_BUILDER` 指定已有的 Buildx builder（自动 `--load`），通过 `VM2API_BUILD_CGROUP_PARENT` 指定构建 cgroup。构建前必须在宿主机配置并核实所需的 CPU/内存硬上限；这两个参数只选择 builder/cgroup，不会代为创建资源限制。
+
+生产部署提前构建完镜像后，在控制面 Compose 的 `environment` 中设置 `VM2API_SLOT_IMAGE_MODE: check`，入口只检查镜像，不临时构建。默认值 `build` 会补齐缺少的镜像。创建并开机前也会检查镜像；镜像缺失时不保存槽位、不占用出口，可在补齐镜像后重试。仅创建、暂不开机的槽位不要求镜像已经存在。
 
 升级：`git pull && docker compose up -d --build`。已有槽容器不会被这次 `docker rm`。
 
