@@ -67,11 +67,37 @@ export function gatewayFromSubnet(subnet) {
   return m ? `${m[1]}.1` : ''
 }
 
-export function iptablesPlan({ chain, bridge, subnet, tcpPort, dnsPort }) {
+export function iptablesPlan({ chain, bridge, subnet, gateway = gatewayFromSubnet(subnet), tcpPort, dnsPort }) {
   const tcp = String(tcpPort)
   const dns = String(dnsPort)
+  // REDIRECT delivers packets to host INPUT, not FORWARD. Permit only this
+  // bridge's clients to reach its gateway listeners, ahead of host firewall drops.
+  const input = gateway
+    ? [
+        ['tcp', tcp],
+        ['tcp', dns],
+        ['udp', dns],
+      ].map(([protocol, port]) => [
+        '-i',
+        bridge,
+        '-s',
+        subnet,
+        '-d',
+        gateway,
+        '-p',
+        protocol,
+        '--dport',
+        port,
+        '-j',
+        'ACCEPT',
+      ])
+    : []
   return {
     add: [
+      ...input.flatMap((rule) => [
+        ['-t', 'filter', '-C', 'INPUT', ...rule],
+        ['-t', 'filter', '-I', 'INPUT', '1', ...rule],
+      ]),
       ['-t', 'nat', '-N', chain],
       ['-t', 'nat', '-C', 'PREROUTING', '-i', bridge, '-j', chain],
       ['-t', 'nat', '-A', 'PREROUTING', '-i', bridge, '-j', chain],
@@ -88,6 +114,7 @@ export function iptablesPlan({ chain, bridge, subnet, tcpPort, dnsPort }) {
       ['-t', 'nat', '-F', chain],
       ['-t', 'nat', '-X', chain],
       ['-t', 'filter', '-D', 'FORWARD', '-i', bridge, '!', '-d', subnet, '-j', 'DROP'],
+      ...input.map((rule) => ['-t', 'filter', '-D', 'INPUT', ...rule]),
     ],
   }
 }
@@ -371,6 +398,7 @@ export function ensureProxyEgress(projectRoot, proxy, { runDocker = docker, runI
     chain,
     bridge: net.bridge,
     subnet: net.subnet,
+    gateway: listenHost,
     tcpPort: ports.tcp,
     dnsPort: ports.dns,
   })
@@ -408,6 +436,7 @@ export function stopProxyEgress(projectRoot, proxyId, { subnet, runDocker = dock
     chain: chainName(proxyId),
     bridge: bridgeName(proxyId),
     subnet: subnet || net?.subnet || '0.0.0.0/0',
+    gateway: net?.gateway || gatewayFromSubnet(subnet || net?.subnet),
     tcpPort: portsForProxy(proxyId).tcp,
     dnsPort: portsForProxy(proxyId).dns,
   })

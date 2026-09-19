@@ -51,6 +51,45 @@ test('iptables plan redirects tcp and dns, returns subnet, drops the rest', () =
   assert.ok(plan.del.some((row) => row.includes('-X')))
 })
 
+test('host firewall admits only the proxy bridge listeners and removes the same rules', () => {
+  const plan = iptablesPlan({
+    chain: 'KEGtest',
+    bridge: 'kegtest',
+    subnet: '172.27.0.0/16',
+    gateway: '172.27.0.254',
+    tcpPort: 25884,
+    dnsPort: 25885,
+  })
+  const inserts = plan.add.filter((row) => row[2] === '-I' && row[3] === 'INPUT')
+  assert.equal(inserts.length, 3)
+  const destinations = new Set()
+  for (const insert of inserts) {
+    assert.equal(insert[4], '1', 'accept before UFW/default-deny rules')
+    const rule = insert.slice(5)
+    const value = (flag) => rule[rule.indexOf(flag) + 1]
+    assert.equal(value('-i'), 'kegtest')
+    assert.equal(value('-s'), '172.27.0.0/16')
+    assert.equal(value('-d'), '172.27.0.254', 'use actual Docker gateway')
+    assert.equal(value('-j'), 'ACCEPT')
+    destinations.add(`${value('-p')}:${value('--dport')}`)
+    const index = plan.add.indexOf(insert)
+    assert.deepEqual(plan.add[index - 1], ['-t', 'filter', '-C', 'INPUT', ...rule], 'idempotent check')
+    assert.ok(plan.del.some((row) => JSON.stringify(row) === JSON.stringify(['-t', 'filter', '-D', 'INPUT', ...rule])))
+    assert.ok(index < plan.add.findIndex((row) => row.includes('REDIRECT')), 'allow listeners before redirect')
+  }
+  assert.deepEqual([...destinations].sort(), ['tcp:25884', 'tcp:25885', 'udp:25885'])
+})
+
+test('legacy plan callers derive a gateway and missing network cleanup never allows all sources', () => {
+  const opts = { chain: 'KEGtest', bridge: 'kegtest', tcpPort: 20010, dnsPort: 20011 }
+  const plan = iptablesPlan({ ...opts, subnet: '172.31.0.0/24' })
+  const input = plan.add.filter((row) => row.includes('INPUT'))
+  assert.equal(input.length, 6)
+  assert.ok(input.every((row) => row[row.indexOf('-d') + 1] === '172.31.0.1'))
+  const missing = iptablesPlan({ ...opts, subnet: '0.0.0.0/0', gateway: '' })
+  assert.ok(!missing.add.some((row) => row.includes('INPUT')))
+  assert.ok(!missing.del.some((row) => row.includes('INPUT')))
+})
 test('slot network is bound proxy net and never host', () => {
   const vm = { proxy: { id: 'px-a1b2c3d4' } }
   assert.equal(slotNetworkForVm(vm, { KIN_VM_NETWORK: 'host' }), 'kin-eg-px-a1b2c3d4')
