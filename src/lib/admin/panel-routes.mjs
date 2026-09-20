@@ -172,6 +172,7 @@ import { rustKernelHealth, toPublicKernelHealth } from '../transport/rust-kernel
 import { codexKernelHealth } from '../transport/codex-kernel-client.mjs'
 import { setManualScheduleWins } from '../pool/schedule-policy.mjs'
 import { normalizeHealthProbeConfig } from './health-probe.mjs'
+import { publicRoutingNotify } from './notify.mjs'
 import { normalizeUsageProbeConfig } from '../oauth/usage-probe-monitor.mjs'
 
 async function commitImportedCodexVm({ cfg, vmPath, existing, account }) {
