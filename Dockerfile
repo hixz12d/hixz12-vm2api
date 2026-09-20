@@ -7,7 +7,8 @@ RUN pnpm install --frozen-lockfile
 COPY web/ ./
 RUN pnpm build
 
-FROM node:22-bookworm-slim
+# The prebuilt cookie-auth helper requires GLIBC_2.38; Bookworm only has 2.36.
+FROM node:22-trixie-slim
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates iptables iproute2 python3 \
   && rm -rf /var/lib/apt/lists/*
@@ -24,6 +25,9 @@ COPY share/wrap-cli /opt/vm2api/image-wrap-cli
 COPY scripts/docker-entrypoint.sh /usr/local/bin/vm2api-entrypoint
 RUN chmod 755 /usr/local/bin/vm2api-entrypoint /opt/vm2api/image-bin/* \
   && mkdir -p /opt/vm2api/vms /opt/vm2api/data /opt/vm2api/bin /opt/vm2api/share
+# With no credentials, the helper must reach its input validator, not fail in ld.so.
+RUN output="$(/opt/vm2api/image-bin/kin-cookie-auth 2>&1)"; \
+    code=$?; test "$code" -eq 2 && printf '%s\n' "$output" | grep -Fq 'expected sk-ant-sid* sessionKey'
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=8787 \
