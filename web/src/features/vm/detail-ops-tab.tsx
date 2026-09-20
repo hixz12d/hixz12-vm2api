@@ -1,5 +1,6 @@
 import type { Vm, VmProxySnap } from '@/types/panel-vm'
 import { type CredType, credTypeLabel } from '@/lib/cred-type'
+import { guestIdentityState } from '@/lib/guest-identity'
 import { isCodexVm } from '@/lib/vm-kind'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -45,6 +46,7 @@ export function VmOpsTab(props: VmOpsTabProps) {
   } = props
 
   const gpt = isCodexVm(vm)
+  const guest = guestIdentityState(vm)
   return (
     <TabsContent value='ops' className='space-y-3 pt-4'>
       <Card>
@@ -63,12 +65,18 @@ export function VmOpsTab(props: VmOpsTabProps) {
             </span>
           </Field>
           <Field label='guest'>
-            <span className='font-mono text-xs'>
-              {String(
-                (vm.fingerprint as Record<string, unknown> | undefined)
-                  ?.hostname || '未采集'
-              )}
-            </span>
+            <span className='font-mono text-xs'>{guest.hostname}</span>
+          </Field>
+          <Field label='特征采集'>
+            <span>{guest.status}</span>
+            {guest.collectedAt ? (
+              <time
+                className='ml-2 text-xs text-muted-foreground'
+                dateTime={guest.collectedAt}
+              >
+                {new Date(guest.collectedAt).toLocaleString('zh-CN')}
+              </time>
+            ) : null}
           </Field>
         </CardContent>
       </Card>

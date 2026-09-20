@@ -8,7 +8,7 @@ import path from 'node:path'
 import { atomicWriteJson } from './vm-file.mjs'
 import { runtimeKind } from './runtime-kind.mjs'
 import { slotExec } from './slot-runtime.mjs'
-import { callWorkerGet } from '../transport/go-worker-client.mjs'
+import { collectDockerGuestIdentity } from './docker-guest-identity.mjs'
 import { OFFICIAL_STAINLESS } from '../identity/vm-identity.mjs'
 import { applyOfficialFingerprintToVm } from '../identity/official-fingerprint.mjs'
 import { isHostKernel } from '../identity/workstation-profile.mjs'
@@ -91,20 +91,23 @@ export function mergeGuestFingerprint(prev = {}, guest = {}) {
   return next
 }
 
-export async function collectSlotIdentity(projectRoot, vm, { callGet = callWorkerGet, timeoutMs = 5000 } = {}) {
+export async function collectSlotIdentity(
+  projectRoot,
+  vm,
+  { collectGuest = collectDockerGuestIdentity, timeoutMs = 5000 } = {},
+) {
   if (!vm?.id) return { ok: false, error: 'vm required' }
   const exec = slotExec(projectRoot, vm)
-  const res = await callGet(exec, '/internal/identity', { timeoutMs })
+  const res = await collectGuest(vm, { timeoutMs })
   if (!res?.ok) {
-    const message = res?.body?.error?.message || res?.body?.error || `identity status ${res?.status || 0}`
     return {
       ok: false,
       id: vm.id,
-      error: String(message).slice(0, 300),
-      code: res?.status === 404 ? 'worker_identity_unsupported' : res?.body?.error?.code || 'worker_identity_failed',
+      error: String(res?.error || 'guest identity collection failed').slice(0, 300),
+      code: res?.code || 'guest_identity_failed',
     }
   }
-  const guest = res.body?.identity && typeof res.body.identity === 'object' ? res.body.identity : res.body
+  const guest = res.identity
   const vmPath = exec.vmPath
   let current
   try {
