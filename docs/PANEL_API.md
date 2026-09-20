@@ -47,7 +47,7 @@
 | POST | `/vms/:id/reload` | 重载该槽 worker |
 | GET | `/wrap-cli` | wrap 母样本 inspect：`ok, dir, kernel_bin, glibc_shim, wrapper, meta` |
 | POST | `/wrap-cli/make` | `{ glibc_vm? }` 重整 share/wrap-cli；可从指定槽拷 glibc shim |
-| POST | `/wrap-cli/sync` | `{ ids?, restart? }` 铺到槽 `.kin`；rust 槽默认 bounce kernel |
+| POST | `/wrap-cli/sync` | `{ ids?, restart? }` 铺到槽 `.kin`（cli-node ELF + kernel.bin + 包装器）。1.2.5 升级用这条换槽内 CLI，**不是**重装整槽。`restart` 默认 true，rust 槽 bounce kernel |
 | POST | `/vms/:id/wrap-cli/promote` | 从该槽晋升母样本，不复制凭证/SOCKS |
 | POST | `/vms/:id/wrap-cli/repair` | 单槽重装 wrap。`{ wrap, kernel }`；wrap 成功时 HTTP 200 |
 | POST | `/vms/:id/start` · `/stop` | 容器生命周期。运行中容器除非显式 recreate，禁止 `docker rm -f` |
@@ -68,7 +68,7 @@
 | GET | `/models` | 策略目录（不 hop worker） |
 | GET | `/oauth` | 全槽脱敏 credential |
 
-`cred_status`：`无凭证` / `可用` / `5h 警告` / `5h 限制` / `7d 警告` / `7d 限制` / `普通限制` / `不可用` / `被吊销` / `探测失败`。Fable 不可用 / 7d_oi / 家族冷却不抬账号级限制。等级：Fable 窗或真实 7d_oi = Max；`plan_denied` = Pro。
+`cred_status`：`无凭证` / `可用` / `5h 警告` / `5h 限制` / `7d 警告` / `7d 限制` / `普通限制` / `不可用` / `被吊销` / `探测失败`。Fable 不可用 / 7d_oi / 家族冷却不抬账号级限制。等级：官方 `/usage` 有 Fable 模型或真实 7d_oi = Max；无 Fable 的 `plan_denied` = Pro。落盘 pro 不能盖掉 usage 里的 Fable。
 
 `account.runtime_window`：`rate_limited_at` / `rate_limit_reset_at` / `overload_until` / `session_window_start|end|status`。
 

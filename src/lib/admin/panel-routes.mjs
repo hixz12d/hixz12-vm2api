@@ -19,7 +19,7 @@ import { RefusalGuardsRepo } from '../db/repos/refusal-guards-repo.mjs'
 import { SettingsRepo } from '../db/repos/settings-repo.mjs'
 import { parseCodexImportPayload, upsertCodexAccount, readCodexAccounts } from '../vm/codex-slot.mjs'
 import { generateAuthUrl, exchangeAuthCode, normalizeOauthFlavor } from '../oauth/oauth-auth-url.mjs'
-import { sessionKeyToOAuth, panelImportErrorPayload } from '../../../scripts/session-to-oauth.mjs'
+import { sessionKeyToOAuth, panelImportErrorPayload } from '../oauth/cookie-auth.mjs'
 import { generateCodexAuthUrl, exchangeCodexAuthCode } from '../oauth/codex-oauth.mjs'
 import {
   completeClaudeSetupToken,
@@ -2155,30 +2155,38 @@ export function createPanelHandler(ctx) {
             activateVmSlot(id)
           } catch (e) {}
         }
+        let startError = null
         if (startNow && vm.proxy?.url) {
           const boot = await startSlotReady(vm, cfg.paths.project, { routing: ctx.routingConfig })
           if (!boot.ok) {
+            // Slot JSON is already on disk. 500 here makes the console treat
+            // create as a no-op, so the new row never refetches into the list.
             vm.status = 'error'
             vm.schedulable = false
             vm.schedule_disabled_reason = boot.error || 'runtime start failed'
             vm.updated_at = new Date().toISOString()
             atomicWriteJson(vmPath, vm, { mode: 0o600 })
-            return json(res, 500, {
-              ok: false,
-              error: { message: boot.error || 'runtime start failed' },
-              vm: summarizeVm(vm),
-            })
+            startError = boot.error || 'runtime start failed'
+          } else {
+            vm.status = 'running'
+            vm.updated_at = new Date().toISOString()
+            atomicWriteJson(vmPath, vm, { mode: 0o600 })
           }
-          vm.status = 'running'
-          vm.updated_at = new Date().toISOString()
-          atomicWriteJson(vmPath, vm, { mode: 0o600 })
         } else if (startNow) {
           vm.status = 'stopped'
           vm.updated_at = new Date().toISOString()
           atomicWriteJson(vmPath, vm, { mode: 0o600 })
         }
         const saved = getVm(cfg.paths.project, id) || vm
-        return json(res, 200, panel.ok({ vm: summarizeVm(saved), allocated_proxy: allocated }))
+        return json(
+          res,
+          200,
+          panel.ok({
+            vm: summarizeVm(saved),
+            allocated_proxy: allocated,
+            ...(startError ? { start_error: startError } : {}),
+          }),
+        )
       }
       // POST /api/panel/vms/:id/start
       if (req.method === 'POST' && /^\/api\/panel\/vms\/[^/]+\/start$/.test(p)) {
@@ -2335,7 +2343,6 @@ export function createPanelHandler(ctx) {
               String(body.scope || '').toLowerCase() === 'inference'
             oauth = await sessionKeyToOAuth(String(sessionKey).trim(), {
               proxyUrl,
-              allowDirectFallback: false,
               scope: inference ? 'inference' : 'full',
             })
             if (inference) {

@@ -8,6 +8,7 @@ bin/*
 !bin/kin-egress
 !bin/kin-worker
 !bin/kin-codex-kernel
+!bin/kin-cookie-auth
 share/*
 !share/wrap-cli
 !share/wrap-cli/**
@@ -18,7 +19,7 @@ data
 **/*.dek
 docs/images
 test
-crates/*/target
+crates
 worker/bin
 *.md
 !README.md

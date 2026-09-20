@@ -56,7 +56,7 @@ node docker/kin-os/build.mjs --check
 
 生产部署提前构建完镜像后，在控制面 Compose 的 `environment` 中设置 `VM2API_SLOT_IMAGE_MODE: check`，入口只检查镜像，不临时构建。默认值 `build` 会补齐缺少的镜像。创建并开机前也会检查镜像；镜像缺失时不保存槽位、不占用出口，可在补齐镜像后重试。仅创建、暂不开机的槽位不要求镜像已经存在。
 
-升级：`git pull && docker compose up -d --build`。已有槽容器不会被这次 `docker rm`。
+升级到 **v1.2.5** 见下面「已部署机升级到 1.2.5」。控制面重启 + wrap-cli sync，不要 `docker rm` 槽。
 
 Docker Desktop / WSL 下 `curl 127.0.0.1:8787` 可能失败：
 
@@ -92,6 +92,102 @@ location / {
 ## 本机 Node（备选）
 
 仓内已有 `bin/kin-*`。还要 `npm ci`、`pnpm -C web install --frozen-lockfile && npm run build:web`，以及占位 `vms/active.json`。单元：[deploy/vm2api.service](deploy/vm2api.service)。细节见 [BUILD.md](BUILD.md)。
+
+## 已部署机升级到 1.2.5
+
+1.2.5 动两处：**控制面 Node** 和槽内 **wrap CLI ELF**（`cli-node` 替换原来的 `cli-dist`）。槽容器不要 `docker rm`。
+
+### 1. 控制面
+
+```bash
+cd /opt/vm2api
+git fetch --tags
+git checkout v1.2.5
+docker compose up -d --build
+curl -sS --noproxy '*' http://127.0.0.1:8787/health
+```
+
+本机 systemd：`git checkout v1.2.5` → `npm ci` → `pnpm -C web install --frozen-lockfile && npm run build:web` → `systemctl restart vm2api` **一次**。
+
+### 2. 槽内 wrap CLI
+
+换 `vms/<id>/cli-home/.kin/cli-node`（以及 kernel.bin / 包装器）。用面板同步：
+
+```bash
+curl -sS -X POST http://127.0.0.1:8787/api/panel/wrap-cli/sync \
+  -H "Authorization: Bearer $VM2API_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"restart":true}'
+```
+
+`ids` 可限定槽；省略则全槽。未启动的槽下次 start 会铺新文件。
+
+## 已部署机升级到 1.2.4
+
+1.2.4 只动**控制面 Node + web**（协议页简化 UI、缓存 TTL 默认 1h）。不必换槽内 kin-kernel，也不要 `docker rm` 槽。
+
+```bash
+cd /opt/vm2api
+git fetch --tags
+git checkout v1.2.4
+docker compose up -d --build
+curl -sS --noproxy '*' http://127.0.0.1:8787/health
+```
+
+本机 systemd：`git checkout v1.2.4` → `npm ci` → `pnpm -C web install --frozen-lockfile && npm run build:web` → `systemctl restart vm2api` **一次**。
+
+## 已部署机升级到 1.2.3
+
+1.2.3 只动**控制面 Node + web**（蒸馏拦截、创建槽 `start_error`、集群/列表页）。相对 1.2.2 **不必**换槽内 kin-kernel，也不要 `docker rm` 槽。
+
+```bash
+cd /opt/vm2api
+git fetch --tags
+git checkout v1.2.3
+docker compose up -d --build
+curl -sS --noproxy '*' http://127.0.0.1:8787/health
+```
+
+本机 systemd：`git checkout v1.2.3` → `npm ci` → `pnpm -C web install --frozen-lockfile && npm run build:web` → `systemctl restart vm2api` **一次**。同一轮不要 restart 两次，不要 `stop` 后不拉起。
+
+当前不在 1.2.2 的机器：先按下面「已部署机升级到 1.2.2」换槽内 kernel，再 `git checkout v1.2.3` 重启控制面。
+
+## 已部署机升级到 1.2.2
+
+1.2.2 要动两处：**控制面 Node**（`prepareCliHopBody` 剥 messages 断点）和槽内 **kin-kernel ELF**。槽容器不要 `docker rm`。
+
+### 1. 控制面
+
+更新 Node，**重启一次**。
+
+```bash
+cd /opt/vm2api
+git fetch --tags
+git checkout v1.2.2
+docker compose up -d --build
+curl -sS --noproxy '*' http://127.0.0.1:8787/health
+```
+
+本机 systemd：`git checkout v1.2.2` → `npm ci`（web 有改再 `pnpm -C web build`）→ `systemctl restart vm2api` **一次**。同一轮不要 restart 两次，不要 `stop` 后不拉起。
+
+### 2. 槽内 kin-kernel
+
+换 `vms/<id>/cli-home/.kin/kin-kernel.bin` 和包装器 `kin-kernel`。用面板同步即可，**只同步 kernel，不是重装 wrap**：
+
+```bash
+curl -sS -X POST http://127.0.0.1:8787/api/panel/wrap-cli/sync \
+  -H "Authorization: Bearer $VM2API_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"restart":true}'
+```
+
+`ids` 可限定槽；省略则全槽。等价拷贝：把仓内 `bin/kin-kernel` 装到该槽 `.kin/kin-kernel.bin`（755），并更新同目录包装器 `kin-kernel`。不要走 `POST /vms/:id/wrap-cli/repair` 当这次升级路径。
+
+### 3. bounce kernel
+
+每槽只留 **一个** kernel 进程，让它加载新 ELF。`sync` 带 `restart`（默认 true）一般会 bounce rust 槽。完成后确认槽内不是两个 `kin-kernel`。
+
+未启动的槽下次 start 会铺新文件，不必先 sync。
 
 ---
 

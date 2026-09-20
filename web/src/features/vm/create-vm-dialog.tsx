@@ -38,6 +38,7 @@ import {
   VM_WEIGHT_OPTIONS,
 } from '@/features/vm/create-options'
 import { KernelFeatTags } from '@/features/vm/kernel-feat-tags'
+import { vmsListQueryOptions } from '@/features/vm/queries'
 import { TimezonePicker } from '@/features/vm/timezone-picker'
 
 /** 「之后」的 5 档，对齐 index.html `createVmFromPage()` 的派生逻辑。 */
@@ -49,6 +50,7 @@ type CreateVmResponse = {
   id?: string
   vm_id?: string
   vm?: { id?: string }
+  start_error?: string
 }
 
 /**
@@ -79,7 +81,7 @@ export type CreateVmFieldsProps = {
 }
 
 /**
- * 创建槽位的字段集 + 提交逻辑。不含弹窗外壳 —— 导入向导 / 集群页 / 槽位页共用。
+ * 创建槽位的字段集 + 提交逻辑。不含弹窗外壳 —— 导入向导 / 槽位页共用。
  * 创建不再提交 seed_policy 或槽内 SOCKS5；出口由外层透明转发，种子用网关 standard 默认。
  */
 export function CreateVmFields({
@@ -90,7 +92,8 @@ export function CreateVmFields({
 }: CreateVmFieldsProps) {
   const qc = useQueryClient()
   const dash = useQuery(dashboardQueryOptions())
-  const vms = dash.data?.vms || []
+  const listed = useQuery(vmsListQueryOptions())
+  const vms = dash.data?.vms ?? listed.data?.items ?? []
 
   const [template, setTemplate] = useState<string>(DEFAULT_TEMPLATE.id)
   const [name, setName] = useState('')
@@ -147,14 +150,28 @@ export function CreateVmFields({
           family: 'claude',
         }),
       })
-      return data.id || data.vm_id || data.vm?.id || id || ''
+      return {
+        id: data.id || data.vm_id || data.vm?.id || id || '',
+        startError: data.start_error || '',
+      }
     },
     onSuccess: async (created) => {
-      toast.success(created ? `已创建 ${created}` : '已创建')
+      if (created.startError) {
+        toast.warning(
+          created.id
+            ? `已创建 ${created.id}，开机失败：${created.startError}`
+            : `已创建，开机失败：${created.startError}`
+        )
+      } else {
+        toast.success(created.id ? `已创建 ${created.id}` : '已创建')
+      }
       setName('')
-      await qc.invalidateQueries({ queryKey: dashboardQueryOptions().queryKey })
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: dashboardQueryOptions().queryKey }),
+        qc.invalidateQueries({ queryKey: vmsListQueryOptions().queryKey }),
+      ])
       // 拿不到 id 时不回调：导入向导会把它当成 `setVmId('')`，反而把已选中的槽清掉。
-      if (created) onCreated?.(created)
+      if (created.id) onCreated?.(created.id)
     },
     onError: (error: Error) => toast.error(importErrorMessage(error)),
   })
@@ -320,7 +337,7 @@ export function CreateVmFields({
   )
 }
 
-/** `CreateVmFields` 的弹窗外壳，给集群页 / 槽位列表页用。 */
+/** `CreateVmFields` 的弹窗外壳，给槽位列表页用。 */
 export function CreateVmDialog({
   open,
   onOpenChange,
