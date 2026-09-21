@@ -10,7 +10,7 @@
 import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
-import { loadConfig, reloadActiveVm } from './lib/core/config.mjs'
+import { loadConfig, reloadActiveVm, routingConfigFile } from './lib/core/config.mjs'
 import {
   extractApiKey,
   timingSafeEqualStr,
@@ -76,7 +76,7 @@ import {
   mirrorWorkerCredentialsToVm,
 } from './lib/oauth/oauth-credentials.mjs'
 import { normalizeCredentialMode } from './lib/oauth/credential-mode.mjs'
-import { workerHealth, ensureWorkerCredential } from './lib/transport/go-worker-client.mjs'
+import { ensureWorkerCredential } from './lib/transport/go-worker-client.mjs'
 import { stopAllRustKernels } from './lib/transport/rust-kernel-supervisor.mjs'
 import { createRespond } from './lib/http/respond.mjs'
 import { tryServeWebDist } from './lib/http/web-dist.mjs'
@@ -145,7 +145,7 @@ if (vmSync.upserted || vmSync.rebuilt) {
 
 // --- P3 sticky + quota ---
 
-const routingConfigPath = process.env.KIN_ROUTING_FILE || path.join(cfg.paths.root, 'config', 'routing.json')
+const routingConfigPath = routingConfigFile(cfg.paths.project)
 let healthMonitor = null
 let credentialRefreshMonitor = null
 let kernelWatchdog = null

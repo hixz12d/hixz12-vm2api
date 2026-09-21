@@ -9,6 +9,7 @@ import {
   handleCodexProtocol,
 } from '../../src/lib/protocol/handle-codex.mjs'
 import { persistCodexUsage, getVm } from '../../src/lib/vm/vm-registry.mjs'
+import { getTurnState, putTurnState, resetCodexRotateStore } from '../../src/lib/protocol/codex-rotate.mjs'
 
 test('502 upstream_transport is retryable before commit', () => {
   assert.equal(
@@ -164,8 +165,9 @@ test('quota 429 hops the next GPT slot and records 5h/7d extra', async () => {
   assert.equal(spent.codex.extra.codex_primary_used_percent, 100)
   assert.ok(spent.codex.extra.codex_limited_until)
   assert.equal(spent.codex.usage.quota.utilization_5h, 1)
-  assert.equal(spent.schedulable, false)
-  assert.equal(spent.schedule_disabled_reason, 'quota_5h_header')
+  assert.equal(spent.schedulable, true)
+  assert.equal(spent.schedule_disabled_reason ?? null, null)
+  assert.equal(spent.claude?.temp_unschedulable_reason || spent.temp_unschedulable_reason, 'quota_5h_header')
   assert.equal(spent.status, 'running')
   fs.rmSync(root, { recursive: true, force: true })
 })
@@ -189,7 +191,7 @@ test('persistCodexUsage writes cluster 5h/7d quota', () => {
   fs.rmSync(root, { recursive: true, force: true })
 })
 
-test('persistCodexUsage restores 调度关 after the 5h window opens', () => {
+test('persistCodexUsage keeps switch on and clears restriction after the 5h window opens', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-codex-restore-'))
   writeGptVm(root, 'vm-gpt-a')
   const now = Date.parse('2026-09-17T00:00:00.000Z')
@@ -201,7 +203,9 @@ test('persistCodexUsage restores 调度关 after the 5h window opens', () => {
       'x-codex-primary-reset-after-seconds': '60',
     },
   })
-  assert.equal(getVm(root, 'vm-gpt-a').schedulable, false)
+  const spent = getVm(root, 'vm-gpt-a')
+  assert.equal(spent.schedulable, true)
+  assert.equal(spent.claude?.temp_unschedulable_reason || spent.temp_unschedulable_reason, 'quota_5h_header')
   persistCodexUsage(root, 'vm-gpt-a', {
     now: now + 61_000,
     headers: {
@@ -212,7 +216,74 @@ test('persistCodexUsage restores 调度关 after the 5h window opens', () => {
   })
   const restored = getVm(root, 'vm-gpt-a')
   assert.equal(restored.schedulable, true)
-  assert.equal(restored.schedule_disabled_reason, null)
+  assert.equal(restored.schedule_disabled_reason ?? null, null)
+  assert.equal(restored.claude?.temp_unschedulable_reason, undefined)
+  fs.rmSync(root, { recursive: true, force: true })
+})
+
+test('openai.chat GPT request is washed to Responses before the kernel hop', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-codex-wash-'))
+  writeGptVm(root, 'vm-gpt-a')
+  let hopBody = null
+  const writes = []
+  const res = {
+    headersSent: false,
+    write(chunk) {
+      this.headersSent = true
+      writes.push(String(chunk))
+    },
+    end() {},
+  }
+  const logBag = {}
+  await handleCodexProtocol({
+    req: { headers: { 'user-agent': 'cursor' } },
+    res,
+    protocol: 'openai.chat',
+    ctx: {
+      path: '/v1/chat/completions',
+      body: {
+        model: 'gpt-5.6-sol',
+        messages: [
+          { role: 'system', content: 'be brief' },
+          { role: 'user', content: 'hello' },
+        ],
+        stream: true,
+        max_completion_tokens: 32,
+      },
+    },
+    inbound: { stream: true },
+    logBag,
+    stats: { errors: 0, requests: 0, by_route: {} },
+    json: (_res, status, body) => {
+      res.statusCode = status
+      res.body = body
+      return body
+    },
+    writeSSEHeaders() {
+      res.headersSent = true
+    },
+    routing: {},
+    projectRoot: root,
+    ops: {
+      writeCodexKernelConfig() {},
+      ensureCodexKernel: async () => ({ ok: true }),
+      streamCodexKernel: async ({ body, envelope, onEvent }) => {
+        hopBody = envelope?.body || body
+        await onEvent('data: {"type":"response.output_text.delta","delta":"Hi"}')
+        await onEvent('data: {"type":"response.completed"}')
+        return { ok: true, status: 200, terminalState: 'verified' }
+      },
+    },
+  })
+  assert.ok(hopBody)
+  assert.equal(Array.isArray(hopBody.input), true)
+  assert.equal(hopBody.messages, undefined)
+  assert.equal(hopBody.input[0].role, 'developer')
+  assert.equal(logBag.protocol, 'openai.responses')
+  assert.equal(logBag.path, '/v1/responses')
+  assert.equal(logBag.hop_meta.inbound_path, '/v1/chat/completions')
+  assert.equal(logBag.hop_meta.inbound_protocol, 'openai.chat')
+  assert.match(writes.join(''), /chat\.completion\.chunk/)
   fs.rmSync(root, { recursive: true, force: true })
 })
 
@@ -277,4 +348,174 @@ test('GPT on anthropic.messages converts and pins a GPT slot', async () => {
   assert.match(writes.join(''), /message_start/)
   assert.match(writes.join(''), /Hi/)
   fs.rmSync(root, { recursive: true, force: true })
+})
+
+test('rotate plugin injects cached turn-state into the kernel envelope', async () => {
+  resetCodexRotateStore()
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-codex-rotate-'))
+  writeGptVm(root, 'vm-gpt-a')
+  const token = 'r'.repeat(292)
+  putTurnState({ vmId: 'vm-gpt-a', account: 'vm-gpt-a', model: 'gpt-5.4', value: token })
+  let envelope = null
+  let collected = 0
+  const res = {
+    headersSent: false,
+    statusCode: 0,
+    body: null,
+    write() {},
+    end() {},
+  }
+  const logBag = {}
+  await handleCodexProtocol({
+    req: { headers: {}, apiKeyKind: 'user' },
+    res,
+    protocol: 'openai.responses',
+    ctx: { body: { model: 'gpt-5.4', input: 'hi', stream: false } },
+    inbound: { stream: false },
+    logBag,
+    stats: { errors: 0, requests: 0, by_route: {} },
+    json: (_res, status, body) => {
+      res.statusCode = status
+      res.body = body
+      return body
+    },
+    writeSSEHeaders() {
+      res.headersSent = true
+    },
+    routing: { codex: { plugin: { rotate: { enabled: true } } } },
+    projectRoot: root,
+    ops: {
+      writeCodexKernelConfig() {},
+      ensureCodexKernel: async () => ({ ok: true }),
+      collectCodexRotate() {
+        collected += 1
+      },
+      streamCodexKernel: async ({ envelope: next }) => {
+        envelope = next
+        return {
+          ok: true,
+          status: 200,
+          terminalState: 'verified',
+          headers: { 'x-codex-turn-state': 's'.repeat(332) },
+          body: { id: 'resp_ok' },
+        }
+      },
+    },
+  })
+  assert.equal(envelope.body.turn_state, token)
+  assert.equal(envelope.body.client_metadata['x-codex-turn-state'], token)
+  assert.equal(envelope.headers['x-codex-turn-state'], token)
+  assert.equal(logBag.codex_rotate_injected, true)
+  assert.equal(collected, 0)
+  assert.equal(
+    getTurnState({ vmId: 'vm-gpt-a', account: 'vm-gpt-a', model: 'gpt-5.4', ttlSeconds: 3600 })?.value,
+    's'.repeat(332),
+  )
+  fs.rmSync(root, { recursive: true, force: true })
+  resetCodexRotateStore()
+})
+
+test('rotate plugin schedules collect on cache miss when enabled', async () => {
+  resetCodexRotateStore()
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-codex-rotate-miss-'))
+  writeGptVm(root, 'vm-gpt-a')
+  let collected = 0
+  const res = {
+    headersSent: false,
+    statusCode: 0,
+    body: null,
+    write() {},
+    end() {},
+  }
+  await handleCodexProtocol({
+    req: { headers: {}, apiKeyKind: 'user' },
+    res,
+    protocol: 'openai.responses',
+    ctx: { body: { model: 'gpt-5.4', input: 'hi', stream: false } },
+    inbound: { stream: false },
+    logBag: {},
+    stats: { errors: 0, requests: 0, by_route: {} },
+    json: (_res, status, body) => {
+      res.statusCode = status
+      res.body = body
+      return body
+    },
+    writeSSEHeaders() {
+      res.headersSent = true
+    },
+    routing: { codex: { plugin: { rotate: { enabled: true } } } },
+    projectRoot: root,
+    ops: {
+      writeCodexKernelConfig() {},
+      ensureCodexKernel: async () => ({ ok: true }),
+      collectCodexRotate() {
+        collected += 1
+      },
+      streamCodexKernel: async () => ({
+        ok: true,
+        status: 200,
+        terminalState: 'verified',
+        body: { id: 'resp_ok' },
+      }),
+    },
+  })
+  assert.equal(collected, 1)
+  fs.rmSync(root, { recursive: true, force: true })
+  resetCodexRotateStore()
+})
+
+test('rotate plugin stays off and does not collect', async () => {
+  resetCodexRotateStore()
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-codex-rotate-off-'))
+  writeGptVm(root, 'vm-gpt-a')
+  let envelope = null
+  let collected = 0
+  const res = {
+    headersSent: false,
+    statusCode: 0,
+    body: null,
+    write() {},
+    end() {},
+  }
+  await handleCodexProtocol({
+    req: { headers: {}, apiKeyKind: 'user' },
+    res,
+    protocol: 'openai.responses',
+    ctx: { body: { model: 'gpt-5.4', input: 'hi', stream: false } },
+    inbound: { stream: false },
+    logBag: {},
+    stats: { errors: 0, requests: 0, by_route: {} },
+    json: (_res, status, body) => {
+      res.statusCode = status
+      res.body = body
+      return body
+    },
+    writeSSEHeaders() {
+      res.headersSent = true
+    },
+    routing: {},
+    projectRoot: root,
+    ops: {
+      writeCodexKernelConfig() {},
+      ensureCodexKernel: async () => ({ ok: true }),
+      collectCodexRotate() {
+        collected += 1
+      },
+      streamCodexKernel: async ({ envelope: next }) => {
+        envelope = next
+        return {
+          ok: true,
+          status: 200,
+          terminalState: 'verified',
+          headers: { 'x-codex-turn-state': 'z'.repeat(292) },
+          body: { id: 'resp_ok' },
+        }
+      },
+    },
+  })
+  assert.equal(envelope.body.turn_state, undefined)
+  assert.equal(collected, 0)
+  assert.equal(getTurnState({ vmId: 'vm-gpt-a', account: 'vm-gpt-a', model: 'gpt-5.4', ttlSeconds: 3600 }), null)
+  fs.rmSync(root, { recursive: true, force: true })
+  resetCodexRotateStore()
 })

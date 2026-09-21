@@ -59,6 +59,7 @@ export const ErrorCode = {
   UPSTREAM_OVERLOADED: 'upstream_overloaded',
   UPSTREAM_TIMEOUT: 'upstream_timeout',
   UPSTREAM_ERROR: 'upstream_error',
+  INCOMPLETE_RESPONSE: 'incomplete_response',
   // protocol
   PROTOCOL_UNSUPPORTED: 'protocol_unsupported',
   CONVERT_FAILED: 'convert_failed',
@@ -92,6 +93,11 @@ const POOL_CAPACITY_CODES = new Set([
 ])
 
 const POOL_CAPACITY_MESSAGE = /no eligible|no ready api|account pool|号池没有|无可用账号|eligible claude/i
+const WRAP_CONNECTION_MESSAGE = /provider error:.*connection error/i
+
+export function isWrapConnectionError(message = '') {
+  return WRAP_CONNECTION_MESSAGE.test(String(message || ''))
+}
 
 export function isPoolCapacityError(code, message = '') {
   if (POOL_CAPACITY_CODES.has(String(code || '').trim())) return true
@@ -165,6 +171,61 @@ export function isAssistantMessageBody(body) {
   return body.type === 'message' || Array.isArray(body.content)
 }
 
+export function assistantVisibleOutput(body) {
+  const content = body?.content || body?.message?.content
+  if (!Array.isArray(content)) return false
+  for (const block of content) {
+    if (block?.type === 'text' && String(block.text || '').trim()) return true
+    if (block?.type === 'tool_use') return true
+    if (block?.type === 'refusal' && String(block.refusal || block.text || '').trim()) return true
+  }
+  return false
+}
+
+export function assistantStopReason(result = {}) {
+  return String(result?.stopReason || result?.body?.stop_reason || '').trim()
+}
+
+/** Envelope plus stop_reason plus visible text/tool/refusal. Thinking-only is not complete. */
+export function isCompleteAssistantMessage(result = {}) {
+  const body = result?.body && typeof result.body === 'object' ? result.body : result
+  if (!isAssistantMessageBody(body)) return false
+  if (!assistantStopReason({ body, stopReason: result?.stopReason })) return false
+  return assistantVisibleOutput(body)
+}
+
+export function isIncompleteAssistantMessage(result = {}) {
+  const body = result?.body && typeof result.body === 'object' ? result.body : result
+  if (!isAssistantMessageBody(body)) return false
+  return !isCompleteAssistantMessage(result?.body ? result : { body })
+}
+
+export function finalizeAssembledAssistantHop(result = {}) {
+  if (isCompleteAssistantMessage(result)) return result?.ok ? result : { ...result, ok: true }
+  if (isIncompleteAssistantMessage(result) || result?.ok) {
+    return { ...result, ok: false, committed: false, terminalState: 'incomplete' }
+  }
+  return result
+}
+
+export function incompleteAssistantClientError(result = {}) {
+  return {
+    ...result,
+    ok: false,
+    committed: false,
+    terminalState: 'incomplete',
+    status: 502,
+    body: {
+      type: 'error',
+      error: {
+        type: ErrorType.UPSTREAM,
+        code: ErrorCode.INCOMPLETE_RESPONSE,
+        message: 'Assistant hop ended without visible output or stop_reason',
+      },
+    },
+  }
+}
+
 export function mapUpstreamError(status, body, headers = {}) {
   const upType = upstreamErrorType(body)
   const inboundCode = body?.error?.code || null
@@ -189,6 +250,22 @@ export function mapUpstreamError(status, body, headers = {}) {
       message: String(msg || 'Client closed the connection'),
       status: 499,
       details: { upstream_status: status },
+    })
+  }
+  if (inboundCode === 'slot_busy' || /rust kernel has no free slot/i.test(String(msg || ''))) {
+    return makeError({
+      type: ErrorType.OVERLOADED,
+      code: 'slot_busy',
+      message: String(msg || 'rust kernel has no free slot'),
+      status: 503,
+    })
+  }
+  if (inboundCode === 'wrap_connection_error' || isWrapConnectionError(msg)) {
+    return makeError({
+      type: ErrorType.API,
+      code: 'wrap_connection_error',
+      message: String(msg || 'wrap CLI connection error'),
+      status: 503,
     })
   }
 
@@ -259,13 +336,16 @@ export function mapUpstreamError(status, body, headers = {}) {
   }
 
   if (
+    inboundCode === 'incomplete_response' ||
     inboundCode === 'upstream_stream_incomplete' ||
     inboundCode === 'stream_incomplete' ||
-    /ended before a valid terminal event|stream closed before message_stop/i.test(String(msg || ''))
+    /ended before a valid terminal event|stream closed before message_stop|without visible output or stop_reason/i.test(
+      String(msg || ''),
+    )
   ) {
     return makeError({
       type: ErrorType.UPSTREAM,
-      code: ErrorCode.UPSTREAM_ERROR,
+      code: inboundCode === 'incomplete_response' ? ErrorCode.INCOMPLETE_RESPONSE : ErrorCode.UPSTREAM_ERROR,
       message: String(msg),
       status: 502,
       details: { upstream_type: upType, upstream_status: status, stream: 'incomplete' },

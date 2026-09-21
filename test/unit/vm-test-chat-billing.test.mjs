@@ -35,6 +35,12 @@ function seedVm(root, id = 'vm-01') {
   )
 }
 
+function seedRouting(root) {
+  const configDir = path.join(root, 'src', 'config')
+  fs.mkdirSync(configDir, { recursive: true })
+  fs.writeFileSync(path.join(configDir, 'routing.json'), JSON.stringify({}))
+}
+
 async function startLoopbackServer(t, respond) {
   const calls = []
   const server = http.createServer(async (req, res) => {
@@ -71,6 +77,7 @@ test('runVmTestChat loopbacks /v1/messages with x-kin-vm pin and never calls a w
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-testchat-v1-'))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
   seedVm(root)
+  seedRouting(root)
 
   const { baseUrl, calls } = await startLoopbackServer(t, () => ({
     status: 200,
@@ -124,6 +131,7 @@ test('runVmTestChat uses unofficial inbound for setup-token', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-testchat-st-'))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
   seedVm(root, 'vm-05')
+  seedRouting(root)
   const vmPath = path.join(root, 'vms', 'vm-05.json')
   const vm = JSON.parse(fs.readFileSync(vmPath, 'utf8'))
   vm.claude.mode = 'setup-token'
@@ -220,5 +228,5 @@ test('runVmTestChat reports cli-hop when slot engine is rust', async (t) => {
   assert.equal(calls[0].headers['user-agent'], 'kin-console-test/1.0')
   assert.equal(calls[0].body.system, undefined)
   assert.ok(result.log.some((l) => /cli-hop wrap/.test(l.message)))
-  assert.ok(result.log.some((l) => /cli-hop 0注入|cli-hop 透传入站/.test(l.message)))
+  assert.ok(result.log.some((l) => /cli-hop CLI 官方提示词/.test(l.message)))
 })

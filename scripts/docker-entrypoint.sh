@@ -46,10 +46,25 @@ if [ ! -x "$KERNEL" ]; then
   echo "vm2api: $KERNEL missing or not executable after image-bin copy. Rebuild with docker compose build, or put linux amd64 Release files in $ROOT/bin." >&2
   exit 1
 fi
-mkdir -p "$ROOT/share"
-if [ -d /opt/vm2api/image-wrap-cli ] && [ ! -f "$ROOT/share/wrap-cli/bun" ]; then
-  rm -rf "$ROOT/share/wrap-cli"
-  cp -a /opt/vm2api/image-wrap-cli "$ROOT/share/wrap-cli"
+mkdir -p "$ROOT/share/wrap-cli"
+WRAP_CHANGED=0
+if [ -d /opt/vm2api/image-wrap-cli ]; then
+  for name in kin-kernel.bin kin-kernel; do
+    src="/opt/vm2api/image-wrap-cli/$name"
+    dest="$ROOT/share/wrap-cli/$name"
+    if [ -f "$src" ]; then
+      if [ ! -f "$dest" ] || ! cmp -s "$src" "$dest"; then
+        WRAP_CHANGED=1
+      fi
+      cp "$src" "$dest.new"
+      chmod 755 "$dest.new"
+      mv -f "$dest.new" "$dest"
+    fi
+  done
+  if [ ! -f "$ROOT/share/wrap-cli/cli-node" ]; then
+    cp -a /opt/vm2api/image-wrap-cli/. "$ROOT/share/wrap-cli/"
+    WRAP_CHANGED=1
+  fi
 fi
 
 if [ ! -S /var/run/docker.sock ]; then
@@ -62,6 +77,67 @@ elif [ -f /opt/vm2api/docker/kin-os/build.mjs ]; then
     check) node /opt/vm2api/docker/kin-os/build.mjs --check ;;
     *) echo "vm2api: VM2API_SLOT_IMAGE_MODE must be build or check" >&2; exit 1 ;;
   esac
+fi
+
+env_get_file() {
+  name="$1"
+  file="$2"
+  [ -f "$file" ] || return 0
+  grep -E "^${name}=" "$file" 2>/dev/null | tail -n1 | cut -d= -f2- | tr -d "'" | tr -d '"' | tr -d '\r'
+}
+
+env_upsert_if_empty() {
+  name="$1"
+  value="$2"
+  file="$3"
+  [ -n "$file" ] || return 0
+  if [ -f "$file" ]; then
+    current="$(env_get_file "$name" "$file")"
+    if [ -n "$current" ]; then
+      return 0
+    fi
+    if grep -qE "^${name}=" "$file"; then
+      sed -i "s|^${name}=.*|${name}=${value}|" "$file"
+    else
+      printf '%s=%s\n' "$name" "$value" >>"$file"
+    fi
+  fi
+}
+
+rand_hex() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  else
+    python3 -c 'import secrets; print(secrets.token_hex(32))'
+  fi
+}
+
+ENVF="${ROOT}/.env"
+if [ -z "${VM2API_ADMIN_USER:-}" ]; then
+  VM2API_ADMIN_USER=admin
+  export VM2API_ADMIN_USER
+  env_upsert_if_empty VM2API_ADMIN_USER admin "$ENVF"
+fi
+if [ -z "${VM2API_ADMIN_PASSWORD:-}" ]; then
+  VM2API_ADMIN_PASSWORD=123456
+  export VM2API_ADMIN_PASSWORD
+  env_upsert_if_empty VM2API_ADMIN_PASSWORD 123456 "$ENVF"
+  echo "vm2api: VM2API_ADMIN_PASSWORD was empty; using default admin / 123456 (change after login)." >&2
+fi
+if [ -z "${VM2API_API_KEY:-}" ] && [ -z "${KIN_API_KEY:-}" ]; then
+  VM2API_API_KEY="$(rand_hex)"
+  export VM2API_API_KEY
+  env_upsert_if_empty VM2API_API_KEY "$VM2API_API_KEY" "$ENVF"
+  echo "vm2api: generated VM2API_API_KEY (empty in env)." >&2
+fi
+if [ -z "${VM2API_DB_SECRET:-}" ] && [ -z "${KIN_DB_SECRET:-}" ]; then
+  VM2API_DB_SECRET="$(rand_hex)"
+  export VM2API_DB_SECRET
+  env_upsert_if_empty VM2API_DB_SECRET "$VM2API_DB_SECRET" "$ENVF"
+fi
+
+if [ "$WRAP_CHANGED" = 1 ] && [ "${KIN_AUTO_SYNC_WRAP:-0}" = 1 ]; then
+  node /opt/vm2api/scripts/sync-wrap-cli.mjs &
 fi
 
 cd /opt/vm2api

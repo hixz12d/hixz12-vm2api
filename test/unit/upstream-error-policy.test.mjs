@@ -6,6 +6,34 @@ import {
   shouldContinue,
 } from '../../src/lib/pool/upstream-error-policy.mjs'
 
+test('unified account 429 without reset header uses usage window then 5 minutes', () => {
+  const now = 1_700_000_000_000
+  const usageReset = now + 3_600_000
+  const fromUsage = classifyUpstreamResult(
+    {
+      status: 429,
+      body: { type: 'error', error: { type: 'rate_limit_error', message: 'limited' } },
+      headers: {
+        'anthropic-ratelimit-unified-5h-status': 'rejected',
+      },
+    },
+    { model: 'claude-opus-test', now, usage: { reset_5h: new Date(usageReset).toISOString() } },
+  )
+  assert.equal(fromUsage.reason, 'account_quota_exhausted')
+  assert.equal(fromUsage.cooldownUntil, usageReset)
+  const fallback = classifyUpstreamResult(
+    {
+      status: 429,
+      body: { type: 'error', error: { type: 'rate_limit_error', message: 'limited' } },
+      headers: {
+        'anthropic-ratelimit-unified-5h-status': 'rejected',
+      },
+    },
+    { model: 'claude-opus-test', now },
+  )
+  assert.equal(fallback.cooldownUntil, now + 5 * 60_000)
+})
+
 test('unified account 429 cools account until authoritative reset', () => {
   const now = 1_700_000_000_000
   const reset = now + 120_000
@@ -50,6 +78,20 @@ test('entitlement 429 stops without poisoning pool', () => {
   )
   assert.equal(policy.scope, 'request')
   assert.equal(policy.action, 'stop')
+})
+
+test('wrap Connection error retries the same account', () => {
+  const policy = classifyUpstreamResult({
+    status: 200,
+    ok: false,
+    committed: false,
+    terminalState: 'incomplete',
+    body: { error: { type: 'api_error', message: 'provider error: provider error: Connection error.' } },
+  })
+  assert.equal(policy.scope, 'worker')
+  assert.equal(policy.action, 'continue')
+  assert.equal(policy.reason, 'wrap_connection_error')
+  assert.equal(policy.retrySameAccount, true)
 })
 
 test('committed incomplete stream never switches account', () => {
@@ -240,6 +282,69 @@ test('7d_oi 429 cools fable family not the account', () => {
   assert.equal(policy.scope, 'model')
   assert.equal(policy.model, 'fable')
   assert.equal(policy.cooldownUntil, now + 90_000)
+})
+
+test('thinking-only verified hop retries the same account', () => {
+  const policy = classifyUpstreamResult({
+    ok: true,
+    status: 200,
+    terminalState: 'verified',
+    committed: false,
+    body: {
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'thinking', thinking: 'plan', signature: 'sig' }],
+      stop_reason: null,
+    },
+  })
+  assert.equal(policy.action, 'continue')
+  assert.equal(policy.reason, 'incomplete_assistant')
+  assert.equal(policy.retrySameAccount, true)
+  assert.equal(shouldContinue(policy), true)
+})
+
+test('text plus end_turn is success even without ok flag', () => {
+  const policy = classifyUpstreamResult({
+    ok: true,
+    status: 200,
+    terminalState: 'verified',
+    body: {
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'text', text: 'hello' }],
+      stop_reason: 'end_turn',
+    },
+  })
+  assert.equal(policy.scope, 'success')
+  assert.equal(policy.action, 'complete')
+})
+
+test('verified text without stop_reason retries instead of succeeding', () => {
+  const policy = classifyUpstreamResult({
+    ok: true,
+    status: 200,
+    terminalState: 'verified',
+    committed: false,
+    body: {
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'text', text: 'partial' }],
+    },
+  })
+  assert.equal(policy.action, 'continue')
+  assert.equal(policy.reason, 'incomplete_assistant')
+})
+
+test('non-assistant ok envelope is not classified as success', () => {
+  const policy = classifyUpstreamResult({
+    ok: true,
+    status: 200,
+    terminalState: 'verified',
+    committed: false,
+    body: { output_text: 'assembled text', error: { message: 'original upstream failure' } },
+  })
+  assert.equal(policy.action, 'continue')
+  assert.equal(policy.reason, 'incomplete_assistant')
 })
 
 test('200 refusal with empty visible output is content_filter, not success', () => {

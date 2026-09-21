@@ -1,6 +1,6 @@
 # 版本与构建
 
-linux amd64 `bin/kin-{kernel,egress,worker,codex-kernel,cookie-auth}`、`share/wrap-cli` 进 git。kernel / wrap 为预编译 ELF，clone 即可部署。GitHub Release 仍挂一份 ELF。当前发布线：**1.2.5**（tag `v1.2.5`）。
+linux amd64 `bin/kin-{kernel,egress,worker,codex-kernel,cookie-auth}`、`share/wrap-cli` 进 git。kernel / wrap 为预编译 ELF，clone 即可部署。GitHub Release 仍挂一份 ELF。当前发布线：**1.2.22**（tag `v1.2.22`）。
 
 ## 版本怎么记
 
@@ -11,15 +11,15 @@ linux amd64 `bin/kin-{kernel,egress,worker,codex-kernel,cookie-auth}`、`share/w
 | `package.json` `"version"` | 人改 | 和 `VERSION` 相同 |
 | `VERSION.txt` artifact | `.github/workflows/version.yml` 在 main 推送后 | 当时 `GITHUB_SHA` 前 7 位，给人对照部署，**不会**写回 git |
 
-发版当天三处一起改：`VERSION`、`package.json`、[CHANGELOG.md](../CHANGELOG.md)，再打 annotated tag。
+发版当天三处一起改：`VERSION`、`package.json`、[CHANGELOG.md](../CHANGELOG.md)，再打 annotated tag。`Dockerfile` 把 `VERSION` 和 `CHANGELOG.md` 拷进控制面镜像，面板才能读当前版本。一键脚本 `deploy/install.sh` 按 GitHub Release tag 升级，不改这三个文件。
 
 ## 打一个 Release
 
 仓库要有 `contents: write`。流程在 `.github/workflows/release.yml`。
 
 ```bash
-git tag -a v1.2.5 -m "vm2api v1.2.5"
-git push origin v1.2.5
+git tag -a v1.2.22 -m "vm2api v1.2.22"
+git push origin v1.2.22
 ```
 
 `v*` tag 推上去之后，Actions 在 `ubuntu-latest` 编 Go linux amd64，并挂仓内预编译 kernel / wrap ELF 到该 tag 的 Release：
@@ -90,7 +90,7 @@ CI（`.github/workflows/test.yml`）在 push / PR 上跑：Node unit、Go、预�
 
 ## 升级一台已部署的机
 
-升 **v1.2.5**：更新控制面并 `wrap-cli/sync` 换槽内 CLI。步骤见 [DEPLOY.md · 已部署机升级到 1.2.5](DEPLOY.md#已部署机升级到-125)。
+升 **v1.2.22**：更新控制面和槽内 kernel；一键更新会自动同步且不会 `docker rm` 槽。步骤见 [DEPLOY.md · 已部署机升级到 1.2.22](DEPLOY.md#已部署机升级到-1222)。
 
 **Compose（其它版本通用）**
 
@@ -101,13 +101,13 @@ docker compose up -d --build
 curl -sS --noproxy '*' http://127.0.0.1:8787/health
 ```
 
-槽位容器不会被这次升级 `docker rm`。1.2.5 要 `wrap-cli/sync`；1.2.4 相对 1.2.2 不必 kernel sync。
+槽位容器不会被升级脚本 `docker rm`。从 1.2.22 开始，一键更新默认把 `share/wrap-cli` 同步到所有槽并重启槽内 dataplane；仅在明确需要延后时使用 `--no-sync-wrap`。
 
 **本机 Node + systemd**
 
 1. `git pull` 或检出目标 tag。
 2. `npm ci`；有 web 改动则 `pnpm -C web install --frozen-lockfile && npm run build:web`。
-3. 换仓内 `bin/` ELF（`install -m 755`）。1.2.5 再 `POST /api/panel/wrap-cli/sync`。
+3. 换仓内 `bin/` 和 `share/wrap-cli` ELF（`install -m 755`），再调用 `POST /api/panel/wrap-cli/sync` 并传 `{"restart":true}`。
 4. `node --check src/server.mjs`。
 5. `systemctl restart vm2api` **一次**。确认 `/health`。
 

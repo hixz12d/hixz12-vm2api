@@ -1,4 +1,10 @@
 import { classifyUpstreamResult, repairAnthropicRequest, shouldContinue } from './upstream-error-policy.mjs'
+import { listQuotaFromHeaders } from './quota-window.mjs'
+import {
+  isCompleteAssistantMessage,
+  isIncompleteAssistantMessage,
+  incompleteAssistantClientError,
+} from '../core/errors.mjs'
 import { hasRefreshPresence } from '../oauth/oauth-credentials.mjs'
 import { resolveOfficialCcInference } from '../vm/slot-engine.mjs'
 
@@ -22,7 +28,7 @@ function usageOf(result) {
 }
 
 function verifiedSuccess(result) {
-  return !!result?.ok && result?.terminalState === 'verified'
+  return !!result?.ok && result?.terminalState === 'verified' && isCompleteAssistantMessage(result)
 }
 
 function uniqueStickyKeys(stickyKey, stickyKeys) {
@@ -77,7 +83,19 @@ function signatureRepairEnabled(config, selected) {
   return resolveOfficialCcInference(selected?.vm) === 'cli-hop'
 }
 
-function classifyAttempt(result, selected, { model, repaired, oauth401CooldownMs, signatureRepair }) {
+function selectedUsage(selected, accountQuota = null) {
+  const account = selected?.account || accountQuota?.repo?.get?.(selected?.accountId)
+  const unified = account?.unified
+  if (!unified) return null
+  return listQuotaFromHeaders(unified)
+}
+
+function classifyAttempt(
+  result,
+  selected,
+  { model, repaired, oauth401CooldownMs, signatureRepair },
+  accountQuota = null,
+) {
   return classifyUpstreamResult(result, {
     model,
     repaired,
@@ -86,6 +104,7 @@ function classifyAttempt(result, selected, { model, repaired, oauth401CooldownMs
     credentialGeneration: credentialStamp(selected),
     priorAuth401Generation: priorAuth401Stamp(selected),
     signatureRepair,
+    usage: selectedUsage(selected, accountQuota),
   })
 }
 
@@ -124,8 +143,24 @@ function sleepWithSignal(ms, signal) {
   })
 }
 
+function isUnfinishedLastResult(result, policy) {
+  if (!result) return false
+  if (policy?.reason === 'incomplete_assistant') return true
+  if (result.terminalState === 'incomplete') return true
+  return isIncompleteAssistantMessage(result)
+}
+
 function preferLastResult(lastResult, lastPolicy, fallback, extras = {}) {
   if (!lastResult) return fallback
+  if (isUnfinishedLastResult(lastResult, lastPolicy)) {
+    return {
+      ...incompleteAssistantClientError(lastResult),
+      via: lastResult.via || 'pool-failover',
+      finalState: 'incomplete',
+      policy: lastPolicy || lastResult.policy,
+      ...extras,
+    }
+  }
   return {
     ...lastResult,
     via: lastResult.via || 'pool-failover',
@@ -138,7 +173,9 @@ function preferLastResult(lastResult, lastPolicy, fallback, extras = {}) {
 function canRetrySameAccount(policy, used, config, hopMs) {
   const maxRetries = Number(config.max_same_account_retries ?? 0)
   const maxHopMs = Number(config.same_account_retry_max_hop_ms ?? 10_000)
-  return !!policy?.retrySameAccount && used < maxRetries && hopMs < maxHopMs
+  if (!policy?.retrySameAccount || used >= maxRetries) return false
+  if (policy.reason === 'incomplete_assistant') return true
+  return hopMs < maxHopMs
 }
 
 function applyCooldown(scheduler, selected, policy, model, stickyRouter = null, { diagnosticPin = false } = {}) {
@@ -338,12 +375,17 @@ export class FailoverRunner {
           },
         })
         if (result) result.committed = result.committed || committed
-        policy = classifyAttempt(result, selected, {
-          model,
-          repaired,
-          oauth401CooldownMs: this.config.oauth_401_cooldown_ms,
-          signatureRepair: signatureRepairEnabled(this.config, selected),
-        })
+        policy = classifyAttempt(
+          result,
+          selected,
+          {
+            model,
+            repaired,
+            oauth401CooldownMs: this.config.oauth_401_cooldown_ms,
+            signatureRepair: signatureRepairEnabled(this.config, selected),
+          },
+          this.scheduler?.accountQuota,
+        )
         lastResult = result
         lastPolicy = policy
         notifyProxyFailure(this.onProxyFailure, selected, policy)
@@ -466,12 +508,17 @@ export class FailoverRunner {
             },
           },
         }
-        policy = classifyAttempt(result, selected, {
-          model,
-          repaired,
-          oauth401CooldownMs: this.config.oauth_401_cooldown_ms,
-          signatureRepair: signatureRepairEnabled(this.config, selected),
-        })
+        policy = classifyAttempt(
+          result,
+          selected,
+          {
+            model,
+            repaired,
+            oauth401CooldownMs: this.config.oauth_401_cooldown_ms,
+            signatureRepair: signatureRepairEnabled(this.config, selected),
+          },
+          this.scheduler?.accountQuota,
+        )
         lastResult = result
         lastPolicy = policy
         notifyProxyFailure(this.onProxyFailure, selected, policy)
@@ -522,11 +569,12 @@ export class FailoverRunner {
         selected.release?.()
       }
     }
-    return (
-      lastResult ||
+    return preferLastResult(
+      lastResult,
+      lastPolicy,
       poolError('attempts_exhausted', 'Maximum account attempts exhausted', {
         max_attempts: this.config.max_total_attempts,
-      })
+      }),
     )
   }
 }

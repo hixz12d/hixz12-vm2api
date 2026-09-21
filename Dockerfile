@@ -4,6 +4,7 @@ WORKDIR /web
 RUN corepack enable && corepack prepare pnpm@10.18.2 --activate
 COPY web/package.json web/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
+COPY VERSION /VERSION
 COPY web/ ./
 RUN pnpm build
 
@@ -18,6 +19,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY src ./src
 COPY scripts ./scripts
+COPY VERSION CHANGELOG.md ./
 COPY docker/kin-os ./docker/kin-os
 COPY --from=web /web/dist ./web/dist
 COPY bin/kin-kernel bin/kin-egress bin/kin-worker bin/kin-codex-kernel bin/kin-cookie-auth /opt/vm2api/image-bin/

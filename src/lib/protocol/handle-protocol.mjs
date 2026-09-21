@@ -58,7 +58,9 @@ import {
   validateRequestBody,
   mapModelError,
   isClientCancelledResult,
-  isAssistantMessageBody,
+  isIncompleteAssistantMessage,
+  finalizeAssembledAssistantHop,
+  incompleteAssistantClientError,
   ErrorType,
   ErrorCode,
 } from '../core/errors.mjs'
@@ -133,13 +135,14 @@ export function createHandleProtocol(deps) {
   }
 
   function acceptAssistantHop(result) {
-    if (result?.ok) return result
-    if (!isAssistantMessageBody(result?.body)) return result
-    return { ...result, ok: true }
+    return finalizeAssembledAssistantHop(result)
   }
 
   function applyDistillGuard({ req, inbound, body, fp, logBag, requestId, res }) {
-    const official = isOfficialClaudeCodeTraffic(req.headers, inbound) || isOfficialClaudeClient(fp.client_class)
+    const official =
+      isOfficialClaudeCodeTraffic(req.headers, inbound) ||
+      isOfficialClaudeClient(fp.client_class) ||
+      (detectProxiedOfficialCcFromRoutingFile(routingConfigPath) && isProxiedOfficialClaudeCode(inbound))
     const zeroInject = isZeroInjectMode()
     const hit = detectDistill({ inbound, body, official, zeroInject }, cfg.distill)
     if (hit.action !== 'block') return false
@@ -148,7 +151,11 @@ export function createHandleProtocol(deps) {
     logBag.attempt_count = 0
     logBag.final_state = 'distill_blocked'
     logBag.error_code = hit.error.code
-    logBag.error_message = hit.error.message
+    const evidence = (hit.hits || [])
+      .map((item) => item.evidence || item.rule)
+      .filter(Boolean)
+      .join(';')
+    logBag.error_message = evidence ? `${hit.error.message}: ${evidence}` : hit.error.message
     const blocked = distillBlockError(cfg.distill, requestId)
     json(res, blocked.status, blocked.body)
     return true
@@ -225,7 +232,6 @@ export function createHandleProtocol(deps) {
     signal,
     deliveryMode,
     toolNames = {},
-    onCommit,
     want1m = false,
     routing = {},
     noGoFallback = false,
@@ -241,8 +247,8 @@ export function createHandleProtocol(deps) {
       signal,
       deliveryMode,
       want1m,
-      onCommit,
       routing,
+      slotWaitMs: candidate.slotWaitMs,
       noGoFallback,
       ensureCredential: (exec) => ensureWorkerCredential(exec),
       onEvent: async (line) => {
@@ -754,6 +760,7 @@ export function createHandleProtocol(deps) {
               cacheTtl,
               cacheBreakpoints,
               cacheControlLimit: Number(getRouting()?.compatibility?.cache_control_limit) || 4,
+              unofficial: !officialTraffic,
             })
             hopBody = await materializeRemoteImageSources(hopBody)
             const cliHide = personaHideForCliZero(personaIn, hopBody, {
@@ -825,7 +832,6 @@ export function createHandleProtocol(deps) {
               signal,
               deliveryMode: attemptDelivery,
               toolNames: attemptMeta?.toolNames || {},
-              onCommit,
               want1m,
               routing: getRouting(),
               noGoFallback: !!pinVmId,
@@ -862,6 +868,7 @@ export function createHandleProtocol(deps) {
               deliveryMode: attemptDelivery,
               want1m,
               routing: getRouting(),
+              slotWaitMs: candidate.slotWaitMs,
               noGoFallback: !!pinVmId,
               ensureCredential: (exec) => ensureWorkerCredential(exec),
               onCommit: () => {
@@ -984,8 +991,9 @@ export function createHandleProtocol(deps) {
       return res.end()
     }
 
-    if (!result?.ok) {
-      const mapped = mapProtocolClientError(result, logBag, 'upstream_error')
+    if (!result?.ok || isIncompleteAssistantMessage(result)) {
+      const failed = isIncompleteAssistantMessage(result) ? incompleteAssistantClientError(result) : result
+      const mapped = mapProtocolClientError(failed, logBag, failed?.body?.error?.code || 'upstream_error')
       if (mapped.body?.error?.code !== 'client_cancelled') stats.errors++
       return json(res, mapped.status, mapped.body)
     }

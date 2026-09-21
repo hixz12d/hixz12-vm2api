@@ -36,6 +36,9 @@ const PANEL_ROUTE_SAMPLES = [
   ['POST', '/api/panel/logout'],
   ['GET', '/api/panel/dashboard'],
   ['GET', '/api/panel/database/metrics'],
+  ['GET', '/api/panel/version'],
+  ['GET', '/api/panel/changelog'],
+  ['POST', '/api/panel/update'],
   ['GET', '/api/panel/vms'],
   ['GET', '/api/panel/vms/vm-01'],
   ['PATCH', '/api/panel/vms/vm-01'],
@@ -142,4 +145,12 @@ test('ACL schedule POSTs still have handlers', () => {
   assert.match(serverSrc, /cooldown\\\/clear/)
   assert.match(serverSrc, /clearVmCooldown/)
   assert.match(serverSrc, /\/schedulable\$/)
+})
+
+test('settings save imports public routing notify helpers', () => {
+  const routes = fs.readFileSync(path.join(root, 'src/lib/admin/panel-routes.mjs'), 'utf8')
+  assert.match(
+    routes,
+    /import\s*\{[^}]*publicNotifyConfig[^}]*publicRoutingNotify[^}]*\}\s*from\s*['"]\.\/notify\.mjs['"]/,
+  )
 })

@@ -26,9 +26,11 @@ import { PageHeader } from '@/components/page-header'
 import { QueryGate } from '@/components/query-gate'
 import { SettingRow } from '@/components/setting-row'
 import { dashboardQueryOptions } from '@/features/overview/queries'
+import { AboutPane } from '@/features/settings/about-pane'
 import { BackupPane } from '@/features/settings/backup-pane'
 import { CacheBreakpointsPane } from '@/features/settings/cache-breakpoints-pane'
 import { CredentialWeightPane } from '@/features/settings/credential-weight-pane'
+import { GptPane } from '@/features/settings/gpt-pane'
 import { HealthPane } from '@/features/settings/health-pane'
 import { KernelRoutingPane } from '@/features/settings/kernel-routing-pane'
 import { LogsPane } from '@/features/settings/logs-pane'
@@ -159,7 +161,11 @@ export function SettingsPage() {
   const logging = (draft.logging as Record<string, unknown> | undefined) || {}
   const inference =
     (draft.inference as Record<string, unknown> | undefined) || {}
-  const hideSave = tab === 'socks5' || tab === 'telemetry' || tab === 'backup'
+  const hideSave =
+    tab === 'socks5' ||
+    tab === 'telemetry' ||
+    tab === 'backup' ||
+    tab === 'about'
   // 两个 tab 都写 compatibility，而 persona_templates 是在协议页编辑的：
   // 只拦协议页的话，用户可以带着畸形模板切到白名单页保存，照样吃后端 400。
   const blocked =
@@ -262,7 +268,10 @@ export function SettingsPage() {
                       <CardTitle>配额</CardTitle>
                     </CardHeader>
                     <CardContent className='divide-y'>
-                      <SettingRow label='5h 打满阻断'>
+                      <SettingRow
+                        label='5h 打满阻断'
+                        desc='过闸写入受限并切号，不拨调度关'
+                      >
                         <Switch
                           checked={quota.block_on_5h !== false}
                           onCheckedChange={(on) =>
@@ -273,7 +282,10 @@ export function SettingsPage() {
                           }
                         />
                       </SettingRow>
-                      <SettingRow label='7d 打满阻断'>
+                      <SettingRow
+                        label='7d 打满阻断'
+                        desc='过闸写入受限并切号，不拨调度关'
+                      >
                         <Switch
                           checked={quota.block_on_7d !== false}
                           onCheckedChange={(on) =>
@@ -328,6 +340,12 @@ export function SettingsPage() {
               ) : null}
               {tab === 'protocol' ? (
                 <>
+                  <GptPane
+                    value={
+                      (draft.codex as Record<string, unknown> | undefined) || {}
+                    }
+                    onChange={(next) => setDraft({ ...draft, codex: next })}
+                  />
                   <KernelRoutingPane
                     value={inference}
                     onChange={(next) => setDraft({ ...draft, inference: next })}
@@ -385,6 +403,7 @@ export function SettingsPage() {
               {tab === 'telemetry' ? <TelemetryPane /> : null}
               {tab === 'socks5' ? <Socks5Pane /> : null}
               {tab === 'backup' ? <BackupPane /> : null}
+              {tab === 'about' ? <AboutPane /> : null}
             </div>
           </QueryGate>
         </div>

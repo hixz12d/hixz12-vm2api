@@ -294,11 +294,15 @@ export function writeWorkerCredentialFile(homeDir, cred) {
   }
   const n = normalizeOauth(cred)
   if (!n.access_token && !n.refresh_token) return null
-  const scopes = Array.isArray(cred.scopes)
+  let scopes = Array.isArray(cred.scopes)
     ? cred.scopes.filter(Boolean)
     : String(n.scope || cred.scope || '')
         .split(/\s+/)
         .filter(Boolean)
+  if (mode === 'setup-token') {
+    scopes = scopes.map((s) => (s === 'inference' ? 'user:inference' : s))
+    if (!scopes.includes('user:inference')) scopes = ['user:inference']
+  }
   const expiresAtMs = expiresAtToMs(n.expires_at) || null
   const oauth = {
     accessToken: n.access_token || '',
@@ -402,6 +406,7 @@ export function persistOauthToVm(vmPath, cred, { acceptLiveGrant = false } = {})
   const rotated =
     !!(nextExp && prevExp && nextExp > prevExp + 2000) ||
     !!(n._token_version && prev._token_version && Number(n._token_version) > Number(prev._token_version))
+  const mode = credentialModeFromOauth({ ...cred, mode: cred?.mode || cred?.type || prev.mode })
   vm.claude = stripCredentialSecrets({ ...prev })
   if (n.access_token || cred.has_access || cred.has_api_key || cred.api_key) vm.claude.has_access = true
   if (n.refresh_token || cred.has_refresh) vm.claude.has_refresh = true
@@ -409,9 +414,12 @@ export function persistOauthToVm(vmPath, cred, { acceptLiveGrant = false } = {})
   if (n.email) vm.claude.email = n.email
   if (n.account_uuid) vm.claude.account_uuid = n.account_uuid
   if (n.org_uuid) vm.claude.org_uuid = n.org_uuid
-  if (n.scope) vm.claude.scope = n.scope
+  if (n.scope) {
+    vm.claude.scope = mode === 'setup-token' && n.scope === 'inference' ? 'user:inference' : n.scope
+  } else if (mode === 'setup-token') {
+    vm.claude.scope = 'user:inference'
+  }
   if (n.source) vm.claude.source = n.source
-  const mode = credentialModeFromOauth({ ...cred, mode: cred?.mode || cred?.type || vm.claude.mode })
   vm.claude.mode = mode
   vm.claude.auth_scheme = resolveAuthScheme({
     mode,
@@ -444,11 +452,49 @@ export function persistOauthToVm(vmPath, cred, { acceptLiveGrant = false } = {})
   return vm
 }
 
+function isQuotaParkReason(reason) {
+  return /^(quota_5h|quota_7d)|account_quota_exhausted|^rate_limited$/i.test(String(reason || ''))
+}
+
 function clearClaudeAuthCooldown(claude = {}) {
   delete claude.temp_unschedulable_until
   delete claude.temp_unschedulable_reason
   delete claude.oauth_401_generation
   return claude
+}
+
+/** Quota / 429 / account cooldown: same temp_unschedulable_* store as auth park. */
+export function markVmRestriction(vmPath, { until, reason } = {}) {
+  if (!vmPath || !fs.existsSync(vmPath)) return null
+  const vm = JSON.parse(fs.readFileSync(vmPath, 'utf8'))
+  vm.claude = { ...(vm.claude || {}) }
+  const untilMs = Number(until) || 0
+  if (untilMs > Date.now()) {
+    vm.claude.temp_unschedulable_until = untilMs
+    vm.temp_unschedulable_until = untilMs
+  }
+  const why = reason || 'restricted'
+  vm.claude.temp_unschedulable_reason = why
+  vm.temp_unschedulable_reason = why
+  vm.updated_at = new Date().toISOString()
+  atomicWriteJson(vmPath, vm)
+  return vm
+}
+
+/** Drop quota/429 restriction only. Auth parks stay. */
+export function clearVmQuotaRestriction(vmPath) {
+  if (!vmPath || !fs.existsSync(vmPath)) return null
+  const vm = JSON.parse(fs.readFileSync(vmPath, 'utf8'))
+  const reason = vm.claude?.temp_unschedulable_reason || vm.temp_unschedulable_reason
+  if (!isQuotaParkReason(reason)) return vm
+  vm.claude = { ...(vm.claude || {}) }
+  delete vm.claude.temp_unschedulable_until
+  delete vm.claude.temp_unschedulable_reason
+  delete vm.temp_unschedulable_until
+  delete vm.temp_unschedulable_reason
+  vm.updated_at = new Date().toISOString()
+  atomicWriteJson(vmPath, vm)
+  return vm
 }
 
 /** First messages 401: park the slot without burning the grant. */
@@ -476,6 +522,7 @@ export function healLeftoverAuthState(vmPath) {
   const reason = String(
     vm.schedule_disabled_reason || vm.claude.refresh_error || vm.claude.temp_unschedulable_reason || '',
   )
+  if (isQuotaParkReason(vm.claude.temp_unschedulable_reason || vm.temp_unschedulable_reason)) return vm
   if (/oauth_revoked|oauth_invalid_grant|token has been revoked/i.test(reason)) return vm
   const had =
     vm.claude.temp_unschedulable_until || vm.claude.temp_unschedulable_reason || vm.claude.oauth_401_generation
@@ -492,6 +539,7 @@ export function clearVmAuthCooldown(vmPath) {
   if (!vmPath || !fs.existsSync(vmPath)) return null
   const vm = JSON.parse(fs.readFileSync(vmPath, 'utf8'))
   if (!vm.claude) return vm
+  if (isQuotaParkReason(vm.claude.temp_unschedulable_reason || vm.temp_unschedulable_reason)) return vm
   const had =
     vm.claude.temp_unschedulable_until || vm.claude.temp_unschedulable_reason || vm.claude.oauth_401_generation
   if (!had) return vm

@@ -63,6 +63,87 @@ test('extractKey prefers metadata.user_id session over headers', () => {
   assert.equal(key, 'meta-sess')
 })
 
+test('persistable envelope from one API key shares one sticky key', () => {
+  const r = new StickyRouter({ dataDir: tmpDir(), config: { sticky: { enabled: true, mode: 'conversation' } } })
+  const a = r.extractKey(
+    { apiKeyRecord: { id: 'key_f041' }, headers: { 'thread-id': '01a0b947-aaaa' } },
+    {
+      thread_id: '01a0b947-aaaa',
+      metadata: { user_id: { session_id: 'sess-aaaa' } },
+      messages: [
+        {
+          role: 'user',
+          content: 'thread_id: 01a0b947-aaaa\n\nPersistable response items (JSON):\n[{"text":"缓存修复"}]',
+        },
+      ],
+    },
+  )
+  const b = r.extractPoolKey(
+    { apiKeyRecord: { id: 'key_f041' }, headers: { 'thread-id': '01a0bab2-bbbb' } },
+    {
+      thread_id: '01a0bab2-bbbb',
+      metadata: { user_id: { session_id: 'sess-bbbb' } },
+      messages: [
+        {
+          role: 'user',
+          content: 'thread_id: 01a0bab2-bbbb\n\nPersistable response items (JSON):\n[{"text":"套餐识别"}]',
+        },
+      ],
+    },
+  )
+  assert.equal(a, 'kkey_f041:envelope')
+  assert.equal(a, b)
+})
+
+test('persistable envelope beats a per-hop device_id in extractPoolKey', () => {
+  const r = new StickyRouter({ dataDir: tmpDir(), config: { sticky: { enabled: true, mode: 'conversation' } } })
+  const a = r.extractPoolKey(
+    { apiKeyRecord: { id: 'key_f041' } },
+    {
+      metadata: { user_id: { device_id: 'dev-aaaa', session_id: 'sess-aaaa' } },
+      messages: [{ role: 'user', content: 'Persistable response items (JSON):\n[{"text":"缓存修复"}]' }],
+    },
+  )
+  const b = r.extractPoolKey(
+    { apiKeyRecord: { id: 'key_f041' } },
+    {
+      metadata: { user_id: { device_id: 'dev-bbbb', session_id: 'sess-bbbb' } },
+      messages: [{ role: 'user', content: 'Persistable response items (JSON):\n[{"text":"套餐识别"}]' }],
+    },
+  )
+  assert.equal(a, 'kkey_f041:envelope')
+  assert.equal(a, b)
+})
+
+test('persistable envelope keys stay isolated per API key', () => {
+  const r = new StickyRouter({ dataDir: tmpDir(), config: { sticky: { enabled: true, mode: 'conversation' } } })
+  const body = {
+    messages: [{ role: 'user', content: 'Persistable response items (JSON):\n[{"text":"任务"}]' }],
+  }
+  assert.equal(r.extractKey({ apiKeyRecord: { id: 'key_a' } }, body), 'kkey_a:envelope')
+  assert.equal(r.extractKey({ apiKeyRecord: { id: 'key_b' } }, body), 'kkey_b:envelope')
+})
+
+test('ip mode does not switch envelope traffic onto the API-key envelope key', () => {
+  const r = new StickyRouter({ dataDir: tmpDir(), config: { sticky: { enabled: true, mode: 'ip' } } })
+  const key = r.extractKey(
+    { apiKeyRecord: { id: 'key_f041' }, headers: { 'x-forwarded-for': '203.0.113.9' } },
+    { messages: [{ role: 'user', content: 'Persistable response items (JSON):\n[{"text":"任务"}]' }] },
+  )
+  assert.equal(key, 'kkey_f041:ip:203.0.113.9')
+})
+
+test('plain first-user hash is unchanged without envelope', () => {
+  const r = new StickyRouter({ dataDir: tmpDir(), config: { sticky: { enabled: true } } })
+  const a = r.extractKey(
+    { apiKeyRecord: { id: 'key_f041' } },
+    { messages: [{ role: 'user', content: '同一段会话的第一句' }] },
+  )
+  const b = r.extractKey({ apiKeyRecord: { id: 'key_f041' } }, { messages: [{ role: 'user', content: '另一段会话' }] })
+  assert.match(a, /^kkey_f041:ch:/)
+  assert.notEqual(a, b)
+})
+
 test('extractKey ignores x-client-request-id and hashes first user', () => {
   const r = new StickyRouter({ dataDir: tmpDir(), config: { sticky: { enabled: true } } })
   const a = r.extractKey(
@@ -132,6 +213,26 @@ test('extractPoolKey pins local-agent sub-agent to parent device family', () => 
   assert.equal(r.extractPoolKey(childReq, childBody), r.extractPoolKey(parentReq, parentBody))
   assert.notEqual(r.extractKey(childReq, childBody), r.extractPoolKey(parentReq, parentBody))
   assert.deepEqual(r.collectPoolKeys(childReq, childBody), ['dev:aabbcc', 'child-sess'])
+})
+
+test('protocol aliases resolve one conversation to the same account', () => {
+  const r = new StickyRouter({ dataDir: tmpDir(), config: { sticky: { enabled: true } } })
+  const firstUser = [{ role: 'user', content: '同一段跨协议会话的首条消息' }]
+  const anthropic = {
+    metadata: { user_id: { session_id: 'anthropic-session' } },
+    messages: firstUser,
+  }
+  const openai = { messages: firstUser }
+  const req = { apiKeyRecord: { id: 'key_cross_protocol' }, headers: {} }
+
+  const primary = r.extractPoolKey(req, anthropic)
+  const aliases = r.collectPoolKeys(req, anthropic)
+  assert.match(primary, /^kkey_cross_protocol:ch:/)
+  assert.equal(aliases[1], 'kkey_cross_protocol:anthropic-session')
+  for (const key of aliases) r.bind(key, { accountId: 'acc-1', vmId: 'vm-01' })
+
+  assert.equal(r.extractPoolKey(req, openai), primary)
+  assert.equal(r.resolve(r.extractPoolKey(req, openai)).vmId, 'vm-01')
 })
 
 test('provisional bind does not increment hits', () => {

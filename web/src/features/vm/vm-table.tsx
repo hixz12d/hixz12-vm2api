@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router'
 import type { UsageAccountRow } from '@/types/panel-usage'
 import type { Vm } from '@/types/panel-vm'
 import { credTypeLabel, credTypeOf } from '@/lib/cred-type'
-import { fableState, resetCountdown } from '@/lib/fable-status'
+import { resetCountdown } from '@/lib/fable-status'
 import { fmtNum, fmtUsd, usedPctOf } from '@/lib/format'
 import { tierVisual } from '@/lib/tier-visual'
 import { cn } from '@/lib/utils'
@@ -19,7 +19,6 @@ import {
 import { vmCacheHitPct } from '@/lib/vm-usage'
 import { useNow } from '@/hooks/use-now'
 import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
 import {
   CredLaneChip,
   PlatformChip,
@@ -27,19 +26,18 @@ import {
 } from '@/components/platform-chip'
 import { StatusMark } from '@/components/status-mark'
 import { ProxyChip } from '@/features/proxies/proxy-chip'
-import { SchedulableSwitch } from '@/features/vm/schedulable-switch'
+import {
+  SchedulableSwitch,
+  vmSchedulableProps,
+} from '@/features/vm/schedulable-switch'
+import {
+  fableRow,
+  riskFg,
+  riskLevel,
+  UsageMeter,
+} from '@/features/vm/usage-meter'
 
-/** 用量条统一朝一个方向：值越高越危险。四档对应状态轴，用 solid 变体
-    （非文本图形，允许比文字版更亮更艳）。 */
-const RISK_BAR = (risk: number) =>
-  risk >= 100
-    ? 'bg-[color:var(--status-bad-solid)]'
-    : risk >= 85
-      ? 'bg-[color:var(--status-warn-solid)]'
-      : risk >= 70
-        ? 'bg-[color:var(--status-caution-solid)]'
-        : 'bg-[color:var(--status-ok-solid)]'
-
+/** 5h / 7d / Fable 用量条。倒计时贴在标签行右侧，条本身只表达「烧到哪了」。 */
 function UtilBar({
   label,
   value,
@@ -66,16 +64,18 @@ function UtilBar({
         <span className='truncate'>{label}</span>
         <span className='flex shrink-0 items-baseline gap-1.5'>
           {sub ? <span className='opacity-75'>{sub}</span> : null}
-          <span className='font-medium tabular-nums'>{value.toFixed(0)}%</span>
+          {/* 卡是分诊面：绿色数字铺满一屏就是噪声，颜色只留给越线的档。 */}
+          <span
+            className={cn(
+              'font-medium tabular-nums',
+              riskLevel(value) !== 'ok' && riskFg(value)
+            )}
+          >
+            {value.toFixed(0)}%
+          </span>
         </span>
       </div>
-      <Progress
-        // 非零但极小的值给 1.5% 底宽，否则 1% 的条渲染成看不见的一根线，
-        // 和真正的 0% 无法区分。
-        value={value > 0 ? Math.min(100, Math.max(1.5, value)) : 0}
-        className='h-[3px] track-recessed'
-        indicatorClassName={cn(RISK_BAR(value), 'rounded-full')}
-      />
+      <UsageMeter value={value} size='sm' />
     </div>
   )
 }
@@ -112,24 +112,6 @@ export function VmCards({
       ))}
     </div>
   )
-}
-
-/**
- * Max 账号的 Fable 额度。Pro 没有这个窗口，返回 null 时不占位。
- *
- * 「拒 / 满」这些态没有百分比，此时返回 `note` 走文案而不是画满格条——
- * 满格红条在一个 5h/7d 都是 0% 的号上会被误读成「烧满了」，
- * 而实际含义是「这个号根本用不了 Fable」。
- */
-function fableRow(
-  vm: Vm
-): { kind: 'bar'; pct: number } | { kind: 'note'; text: string } | null {
-  const tier = claudeTier(vm)
-  if (tier.key !== 'max') return null
-  const st = fableState(vm, tier.key)
-  if (st.usedPct != null) return { kind: 'bar', pct: st.usedPct }
-  if (st.tone.key === 'none') return null
-  return { kind: 'note', text: st.tone.text }
 }
 
 function VmCard({
@@ -328,10 +310,7 @@ function VmCard({
                 ) : null}
               </div>
             ) : null}
-            <SchedulableSwitch
-              vmId={vm.id}
-              schedulable={vm.schedulable !== false}
-            />
+            <SchedulableSwitch {...vmSchedulableProps(vm)} />
           </div>
         </div>
       </div>
@@ -344,11 +323,15 @@ export { VmTable } from './vm-list-table'
 export type VmSortKey = 'name' | 'today' | 'cache' | 'remain' | 'status'
 
 /**
- * 状态优先级：在池 → 关闭调用 → 未使用 → 无效凭证 → revoke。
- * cool / quota 与 pool 同级（都还在池里可被调度到），与 `fleetGroup` 的归并口径一致。
+ * 状态优先级：在池 → 受限 → 关闭调用 → 未使用 → 无效凭证 → revoke。
+ * cool / quota 是受限，不与在池同级。
  */
 function statusRank(vm: Vm): number {
-  return { pool: 0, off: 1, none: 2, bad: 3, revoke: 4 }[fleetGroup(vm)] ?? 5
+  return (
+    { pool: 0, restricted: 1, off: 2, none: 3, bad: 4, revoke: 5 }[
+      fleetGroup(vm)
+    ] ?? 6
+  )
 }
 
 /**

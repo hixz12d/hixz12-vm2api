@@ -9,10 +9,15 @@ import {
   dispatchStreamInference,
   dispatchCallInference,
   rustHealthTtlMs,
+  rustSlotWaitMs,
+  resolveHopSlotWaitMs,
+  rustShouldWaitForSlot,
+  waitForReadySlot,
   clearRustHealthCache,
   rememberRustHealth,
   peekRustHealth,
 } from '../../src/lib/transport/kernel-router.mjs'
+import { rustKernelBusy, rustKernelReachable } from '../../src/lib/transport/rust-kernel-client.mjs'
 import {
   ensureRustKernel,
   writeKernelConfig,
@@ -25,6 +30,8 @@ import {
   scheduleWrapRecycle,
   recycleWrapIfIdle,
   resetWrapRecycleState,
+  beginWrapHop,
+  endWrapHop,
 } from '../../src/lib/transport/rust-kernel-supervisor.mjs'
 import { rustKernelPaths, isNeedsRefreshResult } from '../../src/lib/transport/rust-kernel-client.mjs'
 import { OFFICIAL_CLI_VERSION } from '../../src/lib/identity/vm-identity.mjs'
@@ -52,6 +59,42 @@ test('rustHealthTtlMs defaults to 2s and 0 disables cache', () => {
   assert.equal(rustHealthTtlMs({}), 2000)
   assert.equal(rustHealthTtlMs({ inference: { health_ttl_ms: 0 } }), 0)
   assert.equal(rustHealthTtlMs({ inference: { health_ttl_ms: 1500 } }), 1500)
+})
+
+test('busy CLI waits for a free slot and is not hop-ready', () => {
+  const busy = { ok: true, engine: 'rust', ready_slots: 0, cli_pid: 12 }
+  const ready = { ok: true, engine: 'rust', ready_slots: 2, cli_pid: 12 }
+  assert.equal(rustKernelBusy(busy), true)
+  assert.equal(rustKernelReachable(busy), false)
+  assert.equal(rustShouldWaitForSlot(busy, 0), true)
+  assert.equal(rustShouldWaitForSlot(ready, 0), false)
+  assert.equal(rustShouldWaitForSlot(ready, 1), true)
+  assert.equal(rustSlotWaitMs({}), 30_000)
+  assert.equal(rustSlotWaitMs({ inference: { slot_wait_ms: 1500 } }), 1500)
+})
+
+test('waitForReadySlot times out instead of hopping into a full kernel', async () => {
+  const result = await waitForReadySlot({ vmId: 'vm-missing-slot' }, 250, 50)
+  assert.equal(result.ok, false)
+  assert.equal(result.reason, 'slot_busy')
+})
+
+test('hop slot wait uses remaining wait-plan budget instead of a second 30s', () => {
+  assert.equal(resolveHopSlotWaitMs({ remainingBudgetMs: 0 }), 0)
+  assert.equal(resolveHopSlotWaitMs({ remainingBudgetMs: 5000 }), 5000)
+  assert.equal(
+    resolveHopSlotWaitMs({ remainingBudgetMs: 45_000, routing: { inference: { slot_wait_ms: 8000 } } }),
+    8000,
+  )
+  assert.equal(resolveHopSlotWaitMs({}), 30_000)
+})
+
+test('waitForReadySlot with zero budget does an immediate check only', async () => {
+  const started = Date.now()
+  const result = await waitForReadySlot({ vmId: 'vm-zero-budget' }, 0, 50)
+  assert.equal(result.ok, false)
+  assert.equal(result.reason, 'slot_busy')
+  assert.ok(Date.now() - started < 80)
 })
 
 test('rust health cache hits within TTL and misses when disabled', () => {
@@ -430,11 +473,71 @@ unixTest('committed Rust stream transport failure is not replayed on Go', async 
     })
     assert.equal(result.engine, 'rust')
     assert.equal(result.wanted_engine, 'rust')
-    assert.equal(result.committed, true)
+    assert.equal(result.committed, false)
     assert.equal(result.transportError, true)
-    assert.equal(result.terminalState, 'incomplete')
-    assert.deepEqual(recycled, [])
+    assert.deepEqual(recycled, ['vm-01'])
   } finally {
+    await new Promise((resolve) => server.close(resolve))
+    fs.rmSync(root, { recursive: true, force: true })
+    if (previous == null) delete process.env.KIN_KERNEL_BIN
+    else process.env.KIN_KERNEL_BIN = previous
+  }
+})
+
+unixTest('sibling wrap hop defers recycle until the last hop ends', async () => {
+  resetWrapRecycleState()
+  const previous = process.env.KIN_KERNEL_BIN
+  process.env.KIN_KERNEL_BIN = '/bin/true'
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-kernel-sibling-'))
+  const runDir = path.join(root, 'vm-02', 'run')
+  const homeDir = path.join(root, 'vm-02', 'cli-home')
+  fs.mkdirSync(runDir, { recursive: true })
+  fs.mkdirSync(homeDir, { recursive: true })
+  fs.writeFileSync(path.join(runDir, 'internal.token'), 'internal-test\n', { mode: 0o600 })
+  const kernelSocket = path.join(runDir, 'kernel.sock')
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' })
+    res.flushHeaders()
+    res.write('data: {"type":"message_start","message":{}}\n\n', () => res.destroy())
+  })
+  await new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(kernelSocket, resolve)
+  })
+  const exec = {
+    vmId: 'vm-02',
+    homeDir,
+    vm: {
+      id: 'vm-02',
+      inference_engine: 'rust',
+      runtime: {
+        kernel_socket: kernelSocket,
+        worker_socket: path.join(runDir, 'worker.sock'),
+        worker_run_dir: runDir,
+        worker_token_file: path.join(runDir, 'internal.token'),
+      },
+    },
+  }
+  beginWrapHop(exec)
+  const recycled = []
+  try {
+    await dispatchStreamInference({
+      exec,
+      body: { model: 'claude-haiku-4-5-20251001', messages: [{ role: 'user', content: 'hi' }] },
+      routing: { inference: { engine: 'rust' } },
+      ensureRust: async () => ({ ok: true, reason: 'already_up' }),
+      recycleWrap: (target) => {
+        recycled.push(target?.vmId)
+        return { ok: true, skipped: false }
+      },
+      timeoutMs: 3000,
+    })
+    assert.deepEqual(recycled, [])
+    endWrapHop(exec)
+    assert.deepEqual(recycled, ['vm-02'])
+  } finally {
+    endWrapHop(exec)
+    resetWrapRecycleState()
     await new Promise((resolve) => server.close(resolve))
     fs.rmSync(root, { recursive: true, force: true })
     if (previous == null) delete process.env.KIN_KERNEL_BIN
@@ -482,7 +585,7 @@ test('writeKernelConfig cli-hop writes local_cli without secrets', () => {
   assert.equal(doc.claude_bin, '/home/kincli/.kin/cli-node')
   assert.equal(doc.https_proxy, undefined)
   assert.equal(doc.slots_per_worker, WRAP_SLOT_MAX)
-  assert.equal(doc.system_layout, 'zero')
+  assert.equal(doc.system_layout, 'identity')
   assert.equal(doc.cli_version, OFFICIAL_CLI_VERSION)
   assert.equal(doc.timezone, 'America/New_York')
   assert.equal(doc.proxy_url, '')
@@ -500,6 +603,18 @@ test('writeKernelConfig uses identity layout when persona_inject is rewrite', ()
       token: 'tok',
       routing: { compatibility: { persona_inject: 'rewrite', persona_preset: 'official_full' } },
     },
+  )
+  const doc = JSON.parse(fs.readFileSync(written.configPath, 'utf8'))
+  assert.equal(doc.system_layout, 'identity')
+  fs.rmSync(root, { recursive: true, force: true })
+})
+
+test('writeKernelConfig uses identity when official_full has no persona_inject', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-kernel-preset-identity-'))
+  const written = writeKernelConfig(
+    root,
+    { id: 'vm-05', inference_engine: 'rust' },
+    { token: 'tok', routing: { compatibility: { persona_preset: 'official_full' } } },
   )
   const doc = JSON.parse(fs.readFileSync(written.configPath, 'utf8'))
   assert.equal(doc.system_layout, 'identity')
@@ -728,6 +843,42 @@ unixTest('Rust supervisor recycles when ready_slots stay at 0', async () => {
     assert.equal(restarts, 1)
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve))
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+unixTest('Rust supervisor does not recycle a busy CLI with ready_slots=0', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-kernel-busy-'))
+  const written = writeKernelConfig(root, { id: 'vm-busy' }, { token: 'tok', proxyUrl: '', proxyRequired: false })
+  const exec = {
+    vmId: 'vm-busy',
+    homeDir: path.join(root, 'vms', 'vm-busy', 'cli-home'),
+    vm: {
+      id: 'vm-busy',
+      runtime: { container: 'kin-busy', kernel_socket: written.socketPath },
+    },
+  }
+  let restarts = 0
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, engine: 'rust', ready_slots: 0, cli_pid: 4412, worker_version: 'fixture' }))
+  })
+  const runDockerExec = async (args) => {
+    if (args[0] === 'inspect') return { ok: true, stdout: '/home/kincli/.kin/kin-kernel' }
+    if (args[0] === 'restart') restarts += 1
+    return { ok: true }
+  }
+  await new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(written.socketPath, resolve)
+  })
+  try {
+    const ready = await ensureRustKernel(exec, { timeoutMs: 8000, runDockerExec })
+    assert.equal(ready.ok, true, JSON.stringify(ready))
+    assert.equal(ready.reason, 'busy')
+    assert.equal(restarts, 0)
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
     fs.rmSync(root, { recursive: true, force: true })
   }
 })

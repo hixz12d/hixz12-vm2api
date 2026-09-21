@@ -4,6 +4,7 @@
  */
 
 import crypto from 'node:crypto'
+import { ENVELOPE_NEEDLES, extractPrompt } from '../core/distill-detect.mjs'
 import { resolveStoreDb } from '../db/database.mjs'
 import { StickyRepo } from '../db/repos/sticky-repo.mjs'
 import { extractCallerSession, parseUserId } from '../identity/identity-rewrite.mjs'
@@ -44,6 +45,11 @@ export function clientIp(req) {
   return String(raw)
     .replace(/^::ffff:/, '')
     .slice(0, 45)
+}
+
+export function isPersistableEnvelope(body = {}, inbound = null) {
+  const hay = extractPrompt(inbound || body, body).joined.toLowerCase()
+  return ENVELOPE_NEEDLES.some((item) => hay.includes(String(item).toLowerCase()))
 }
 
 export function firstUserFingerprint(body = {}) {
@@ -110,6 +116,11 @@ export class StickyRouter {
       return ip ? this.isolateKey(`ip:${ip}`, req) : null
     }
 
+    if (isPersistableEnvelope(body)) {
+      const id = req?.apiKeyRecord?.id
+      if (id != null && id !== '') return `k${id}:envelope`
+    }
+
     const caller = extractCallerSession({ inbound: body, body, headers: req?.headers || {} })
     if (caller && !EPHEMERAL_STICKY_KEYS.has(String(caller).toLowerCase())) {
       return this.isolateKey(caller, req)
@@ -144,19 +155,31 @@ export class StickyRouter {
     return this.isolateKey(`dev:${device}`, req)
   }
 
-  /** Prefer device family, then per-hop session. Same account for parent + sub-agent. */
-  extractPoolKey(req, body = {}) {
-    return this.extractOfficialFamilyKey(req, body) || this.extractKey(req, body)
+  /** Ordered aliases for one logical conversation across protocol adapters. */
+  collectPoolKeys(req, body = {}) {
+    if (!this.config.enabled) return []
+    const keys = []
+    const add = (key) => {
+      if (key && !keys.includes(key)) keys.push(key)
+    }
+    const mode = this.config.mode || 'conversation'
+    if (mode === 'conversation' && isPersistableEnvelope(body)) {
+      const id = req?.apiKeyRecord?.id
+      if (id != null && id !== '') add(`k${id}:envelope`)
+    }
+    add(this.extractOfficialFamilyKey(req, body))
+    if (mode === 'conversation') {
+      const fingerprint = firstUserFingerprint(body)
+      if (fingerprint) add(this.isolateKey(`ch:${fingerprint}`, req))
+    }
+    add(this.extractKey(req, body))
+    return keys
   }
 
-  /** All keys that should bind to the selected account for this request. */
-  collectPoolKeys(req, body = {}) {
-    const keys = []
-    const family = this.extractOfficialFamilyKey(req, body)
-    const session = this.extractKey(req, body)
-    if (family) keys.push(family)
-    if (session && session !== family) keys.push(session)
-    return keys
+  /** Prefer an already-bound alias, then the strongest available identity. */
+  extractPoolKey(req, body = {}) {
+    const keys = this.collectPoolKeys(req, body)
+    return keys.find((key) => this.resolve(key)) || keys[0] || null
   }
 
   /** @returns {{ accountId: string, vmId: string } | null } */

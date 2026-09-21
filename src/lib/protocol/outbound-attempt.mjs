@@ -27,6 +27,7 @@ import {
   CRS_OFFICIAL_CLI_SYSTEM,
   CRS_COMPACT_IDENTITY,
 } from '../identity/crs-persona.mjs'
+import { sealClaudeCodeCch } from '../identity/cch.mjs'
 import {
   CRS_OFFICIAL_AGENT_PROMPT,
   CRS_AGENT_EXPANSION,
@@ -71,13 +72,13 @@ export function stripCliOwnedSystem(system) {
   return kept.length ? kept : undefined
 }
 
-/** Wrap CLI already stamps tools + system. Extra tails overflow the 4-breakpoint cap. */
+/** Wrap CLI owns tools + system + current tail; Node owns the stable previous-user boundary. */
 export const CLI_HOP_CACHE_BREAKPOINTS = Object.freeze({
   enabled: true,
   preserve_client: true,
   system_tail: false,
   tools_tail: false,
-  messages: 'cli-hop',
+  messages: 'rewrite',
 })
 
 function dropNodeCacheControl(node) {
@@ -93,19 +94,12 @@ function dropCliOwnedBreakpoints(body) {
   return out
 }
 
-function dropLastUserBreakpoint(body) {
+/** Kernel restamps the current tail, so keep only Node's stable previous-user marker. */
+function dropLastMessageBreakpoint(body) {
   const messages = body?.messages
   if (!Array.isArray(messages) || messages.length === 0) return body
-  let idx = -1
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]?.role === 'user') {
-      idx = i
-      break
-    }
-  }
-  if (idx < 0) return body
+  const idx = messages.length - 1
   const last = messages[idx]
-  if (typeof last?.content === 'string') return body
   if (!last || !Array.isArray(last.content)) return body
   const content = last.content.map(dropNodeCacheControl)
   const next = messages.slice()
@@ -122,6 +116,7 @@ export function prepareCliHopBody(
     cacheTtl = null,
     cacheBreakpoints = CLI_HOP_CACHE_BREAKPOINTS,
     cacheControlLimit = 4,
+    unofficial: _unofficial = false,
   } = {},
 ) {
   let body = officialMessagesBody(canonicalBody, { stream })
@@ -140,21 +135,25 @@ export function prepareCliHopBody(
   body = alignSamplingWithThinking(body)
   body = stripIllegalCacheControlFields(body)
   if (cacheTtl) body = applyCacheTtlToBody(body, cacheTtl)
-  const cfg = normalizeCacheBreakpoints(cacheBreakpoints)
-  body = applyCacheBreakpoints(body, {
-    ttl: cacheTtl || undefined,
-    config: {
-      enabled: cfg.enabled,
-      preserve_client: cfg.preserve_client,
-      system_tail: false,
-      tools_tail: false,
-      messages: 'cli-hop',
-    },
-    inbound: body,
-  })
+  // Node rewrites last + penultimate user, then removes the current tail so
+  // the kernel can restamp it after transport conversion with the same TTL.
+  if (cacheBreakpoints) {
+    const cfg = normalizeCacheBreakpoints(cacheBreakpoints)
+    body = applyCacheBreakpoints(body, {
+      ttl: cacheTtl,
+      config: {
+        enabled: cfg.enabled,
+        preserve_client: cfg.preserve_client,
+        system_tail: false,
+        tools_tail: false,
+        messages: cfg.enabled ? 'rewrite' : 'off',
+      },
+      inbound: body,
+    })
+  }
   body = dropCliOwnedBreakpoints(body)
-  body = dropLastUserBreakpoint(body)
-  body = enforceCacheTtlOrder(body)
+  body = dropLastMessageBreakpoint(body)
+  if (cacheTtl) body = applyCacheTtlToBody(body, cacheTtl)
   enforceCacheLimit(body, cacheControlLimit)
   return body
 }
@@ -280,6 +279,6 @@ export function prepareOutboundEnvelope({
     delete headers.Authorization
   }
   if (stream) headers.accept = 'text/event-stream'
-  const body = sanitizeAnthropicBodyForBetaTokens(prepared.body, headers?.['anthropic-beta'] || '')
+  const body = sealClaudeCodeCch(sanitizeAnthropicBodyForBetaTokens(prepared.body, headers?.['anthropic-beta'] || ''))
   return { body, headers, toolNames: prepared.toolNames }
 }
