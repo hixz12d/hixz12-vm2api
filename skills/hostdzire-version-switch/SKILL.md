@@ -42,8 +42,7 @@ python3 ~/.codex/skills/ssh-skill/scripts/ssh_upload.py hostdzire "<local>" "<re
 
 ## Forward (new VERSION)
 
-1. Local: `pnpm -C web build`.
-2. Pack overlay (repo root):
+1. Pack overlay from the repo root. The packer always rebuilds `web/dist`; never reuse an earlier build after changing `VERSION`.
 
 ```
 sh skills/hostdzire-version-switch/scripts/pack-overlay.sh
@@ -51,14 +50,14 @@ sh skills/hostdzire-version-switch/scripts/pack-overlay.sh
 
 Writes `/tmp/vm2api-hostdzire-<VERSION>.tgz`. Includes `src/server.mjs`, `src/lib`, `src/config/distill-rules.json`, `bin/kin-{kernel,codex-kernel,cookie-auth,egress,worker}`, `share/wrap-cli` (no `cli-dist`/`bun`), `web/dist`, `VERSION`. Excludes routing/data/vms.
 
-3. Upload:
+2. Upload:
 
 ```
 python3 ~/.codex/skills/ssh-skill/scripts/ssh_upload.py hostdzire \
   "/tmp/vm2api-hostdzire-<VERSION>.tgz" "/tmp/vm2api-hostdzire-<VERSION>.tgz"
 ```
 
-4. Remote apply (backs up first):
+3. Remote apply (backs up first):
 
 ```
 python3 ~/.codex/skills/ssh-skill/scripts/ssh_upload.py hostdzire \
@@ -69,9 +68,9 @@ python3 ~/.codex/skills/ssh-skill/scripts/ssh_execute.py hostdzire --timeout 180
 
 Creates `/opt/kin-gateway/.deploy-bak-vm2api-<VERSION>-<UTC>/` then overlays bins via `tmp+mv`, swaps console with `--exclude dl`, restarts Node **once**.
 
-5. `POST /api/panel/wrap-cli/sync` `{"restart":true}` using systemd `KIN_API_KEY` **without printing it**. Expect `ok_count` = listed VMs.
-6. If the new wrap is compiled `cli-node` ELF, delete leftover slot `cli-dist/` and `bun` under each `vms/*/cli-home/.kin`.
-7. Verify (all required):
+4. `POST /api/panel/wrap-cli/sync` `{"restart":true}` using systemd `KIN_API_KEY` **without printing it**. Expect `ok_count` = listed VMs.
+5. If the new wrap is compiled `cli-node` ELF, delete leftover slot `cli-dist/` and `bun` under each `vms/*/cli-home/.kin`.
+6. Verify (all required):
    - Node health `service` is `vm2api` (or the new name)
    - `https://kin.fkcodex.com/` has `<title>vm2api</title>` and `id="root"`
    - `POST /api/panel/login` then `GET /api/panel/vms` lists slots
