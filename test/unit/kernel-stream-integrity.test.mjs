@@ -120,6 +120,15 @@ unixTest('a partial committed response keeps its commit flag and recycles', asyn
   assert.equal(recycled, 1)
 })
 
+unixTest('a stop reason without message_stop remains incomplete despite a verified header', async () => {
+  const { result, recycled } = await runStream([...text, end[0]])
+  assert.equal(result.ok, false)
+  assert.equal(result.terminalState, 'incomplete')
+  assert.equal(result.committed, true)
+  assert.equal(result.body.content[0].text, 'OK')
+  assert.equal(recycled, 1)
+})
+
 unixTest('thinking-only output is incomplete even with a terminal marker', async () => {
   const { result, recycled } = await runStream([
     start,

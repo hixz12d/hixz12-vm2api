@@ -58,6 +58,7 @@ import {
   validateRequestBody,
   mapModelError,
   isClientCancelledResult,
+  isCompleteAssistantMessage,
   isIncompleteAssistantMessage,
   finalizeAssembledAssistantHop,
   incompleteAssistantClientError,
@@ -66,7 +67,7 @@ import {
 } from '../core/errors.mjs'
 import { resolveWorkspaceMode, isOfficialClaudeClient } from './workspace-mode.mjs'
 import { officialMessagesBody } from './anthropic-messages.mjs'
-import { prepareOutboundEnvelope, prepareCliHopBody } from './outbound-attempt.mjs'
+import { prepareOutboundEnvelope, prepareCliHopBody, CLI_HOP_CACHE_TTL } from './outbound-attempt.mjs'
 import { loadVmIdentity, OFFICIAL_CLI_VERSION } from '../identity/vm-identity.mjs'
 import { touchTelemetrySession } from '../vm/worker-telemetry.mjs'
 import { extractCallerSession, resolveOutboundSessionId } from '../identity/identity-rewrite.mjs'
@@ -257,10 +258,17 @@ export function createHandleProtocol(deps) {
       },
     })
     if (assembler.message) {
-      workerResult.body = assembler.message
-      if (assembler.message.usage) workerResult.usage = assembler.message.usage
-      if (assembler.message.model) workerResult.model = assembler.message.model
-      if (assembler.message.stop_reason) workerResult.stopReason = assembler.message.stop_reason
+      const localComplete = isCompleteAssistantMessage({
+        body: assembler.message,
+        stopReason: assembler.message.stop_reason,
+      })
+      const workerComplete = isCompleteAssistantMessage(workerResult)
+      if (localComplete || !workerComplete) {
+        workerResult.body = assembler.message
+        if (assembler.message.usage) workerResult.usage = assembler.message.usage
+        if (assembler.message.model) workerResult.model = assembler.message.model
+        if (assembler.message.stop_reason) workerResult.stopReason = assembler.message.stop_reason
+      }
     }
     if (workerResult?.body) {
       workerResult.body = restoreToolNames(workerResult.body, toolNames)
@@ -529,7 +537,7 @@ export function createHandleProtocol(deps) {
     const outboundSessionId = resolveOutboundSessionId(extractCallerSession({ inbound, headers: req.headers }), {
       officialClient: officialTraffic,
     })
-    const cacheTtl = resolveCacheTtl({
+    let cacheTtl = resolveCacheTtl({
       headers: req.headers,
       body: inbound,
       routingFile: routingConfigPath,
@@ -743,6 +751,8 @@ export function createHandleProtocol(deps) {
           const cliHop = resolveOfficialCcInference(selected.vm, routingNow) === 'cli-hop'
           let hopBody = body
           if (cliHop) {
+            // Keep usage accounting and client-visible usage aligned with the kernel's actual TTL.
+            cacheTtl = CLI_HOP_CACHE_TTL
             const repaired = extra.repaired === true
             const inject = String(routingNow?.compatibility?.persona_inject ?? '')
               .trim()

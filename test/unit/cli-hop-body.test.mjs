@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { prepareCliHopBody, stripCliOwnedSystem } from '../../src/lib/protocol/outbound-attempt.mjs'
 import { CRS_OFFICIAL_SYSTEM, CRS_OFFICIAL_CLI_SYSTEM } from '../../src/lib/identity/crs-persona.mjs'
 import { CRS_OFFICIAL_AGENT_PROMPT } from '../../src/lib/identity/official-cc-system-2.1.241.mjs'
+import { resolveCacheTtl } from '../../src/lib/protocol/cache-ttl.mjs'
 
 test('prepareCliHopBody drops metadata and CLI-owned system but keeps official agent leftover', () => {
   const body = prepareCliHopBody({
@@ -205,7 +206,7 @@ test('cli-hop default 5m leaves last user unmarked for wrap', () => {
   assert.equal(body.messages[0].content[0].cache_control, undefined)
 })
 
-test('cli-hop disabled keeps caller conversation breakpoints except last user', () => {
+test('cli-hop disabled preserves breakpoint positions but clamps their TTL to 5m', () => {
   const body = prepareCliHopBody(
     {
       model: 'claude-sonnet-5',
@@ -220,8 +221,8 @@ test('cli-hop disabled keeps caller conversation breakpoints except last user', 
     },
     { cacheBreakpoints: { enabled: false } },
   )
-  assert.equal(body.messages[0].content[0].cache_control.ttl, '1h')
-  assert.equal(body.messages[2].content[0].cache_control.ttl, '1h')
+  assert.equal(body.messages[0].content[0].cache_control.ttl, '5m')
+  assert.equal(body.messages[2].content[0].cache_control.ttl, '5m')
   assert.equal(body.messages[4].content[0].cache_control, undefined)
 })
 
@@ -253,11 +254,11 @@ test('cli-hop rewrite wins over routing fill when inbound already stamped last u
     },
   )
   assert.equal(body.messages[0].content[0].cache_control, undefined)
-  assert.deepEqual(body.messages[2].content[0].cache_control, { type: 'ephemeral', ttl: '1h' })
+  assert.deepEqual(body.messages[2].content[0].cache_control, { type: 'ephemeral', ttl: '5m' })
   assert.equal(body.messages[4].content[0].cache_control, undefined)
 })
 
-test('cli-hop rewrite uses the resolved 1h TTL on its leftover marker', () => {
+test('cli-hop rewrite clamps requested 1h to the kernel-compatible 5m TTL', () => {
   const body = prepareCliHopBody(
     {
       model: 'claude-sonnet-5',
@@ -272,7 +273,7 @@ test('cli-hop rewrite uses the resolved 1h TTL on its leftover marker', () => {
     },
     { cacheTtl: '1h' },
   )
-  assert.deepEqual(body.messages[2].content[0].cache_control, { type: 'ephemeral', ttl: '1h' })
+  assert.deepEqual(body.messages[2].content[0].cache_control, { type: 'ephemeral', ttl: '5m' })
   assert.equal(body.messages[4].content[0].cache_control, undefined)
 })
 
@@ -287,7 +288,7 @@ test('cli-hop rewrite keeps sub2api penultimate user after dropping CLI last-use
       { role: 'assistant', content: [{ type: 'text', text: 'a2' }] },
     ],
   })
-  assert.deepEqual(body.messages[0].content[0].cache_control, { type: 'ephemeral', ttl: '1h' })
+  assert.deepEqual(body.messages[0].content[0].cache_control, { type: 'ephemeral', ttl: '5m' })
   assert.equal(body.messages[2].content[0].cache_control, undefined)
   assert.equal(body.messages[3].content[0].cache_control, undefined)
 })
@@ -307,7 +308,7 @@ test('unofficial cli-hop rewrite matches official penultimate-user leftover', ()
   const unofficial = prepareCliHopBody(inbound, { unofficial: true, cacheTtl: '1h' })
   const official = prepareCliHopBody(structuredClone(inbound), { unofficial: false, cacheTtl: '1h' })
   assert.equal(unofficial.messages[0].content[0].cache_control, undefined)
-  assert.deepEqual(unofficial.messages[2].content[0].cache_control, { type: 'ephemeral', ttl: '1h' })
+  assert.deepEqual(unofficial.messages[2].content[0].cache_control, { type: 'ephemeral', ttl: '5m' })
   assert.equal(unofficial.messages[4].content[0].cache_control, undefined)
   assert.deepEqual(
     unofficial.messages.map((message) => message.content?.[0]?.cache_control),
@@ -348,10 +349,37 @@ test('unofficial cli-hop rewrite leaves leftover mid-system unmarked', () => {
   )
   assert.equal(later.messages[1].role, 'system')
   assert.equal(later.messages.at(-1).role, 'user')
-  assert.deepEqual(later.messages[0].content[0].cache_control, { type: 'ephemeral', ttl: '1h' })
+  assert.deepEqual(later.messages[0].content[0].cache_control, { type: 'ephemeral', ttl: '5m' })
   assert.equal(later.messages[1].content[0].cache_control, undefined)
   assert.equal(later.messages.at(-1).content[0].cache_control, undefined)
   assert.equal(later.system[0].cache_control, undefined)
+})
+
+test('official multi-turn traffic with a null resolved TTL never creates an hour marker', () => {
+  const inbound = {
+    model: 'claude-opus-5',
+    messages: [
+      { role: 'user', content: 'Read the public example.' },
+      { role: 'system', content: 'Use tools to inspect files.' },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'read_1', name: 'Read', input: { file_path: '/tmp/example.txt' } }],
+      },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'read_1', content: 'Example contents.' }] },
+    ],
+  }
+  const cacheTtl = resolveCacheTtl({
+    body: inbound,
+    routing: { compatibility: { cache_ttl: '5m' } },
+    officialTraffic: true,
+  })
+  assert.equal(cacheTtl, null)
+  const out = prepareCliHopBody(inbound, { cacheTtl, unofficial: false })
+  assert.deepEqual(out.messages[0].content[0].cache_control, { type: 'ephemeral', ttl: '5m' })
+  assert.equal(out.messages[1].content[0].cache_control, undefined)
+  assert.equal(out.messages.at(-1).content[0].tool_use_id, 'read_1')
+  assert.equal(out.messages.at(-1).content[0].cache_control, undefined)
+  assert.equal(JSON.stringify(out).includes('"ttl":"1h"'), false)
 })
 
 test('cli-hop strips Claude Code last tool_use/tool_result markers', () => {

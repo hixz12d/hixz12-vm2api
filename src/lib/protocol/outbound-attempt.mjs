@@ -72,6 +72,10 @@ export function stripCliOwnedSystem(system) {
   return kept.length ? kept : undefined
 }
 
+// The shipped kernel adds 5m breakpoints and has no configurable TTL.
+// Every Node-owned marker must match, including official traffic and explicit 1h requests.
+export const CLI_HOP_CACHE_TTL = '5m'
+
 /** Wrap CLI owns tools + system + current tail; Node owns the stable previous-user boundary. */
 export const CLI_HOP_CACHE_BREAKPOINTS = Object.freeze({
   enabled: true,
@@ -113,12 +117,13 @@ export function prepareCliHopBody(
   {
     stream = true,
     repaired = false,
-    cacheTtl = null,
+    cacheTtl: _requestedCacheTtl = null,
     cacheBreakpoints = CLI_HOP_CACHE_BREAKPOINTS,
     cacheControlLimit = 4,
     unofficial: _unofficial = false,
   } = {},
 ) {
+  const cacheTtl = CLI_HOP_CACHE_TTL
   let body = officialMessagesBody(canonicalBody, { stream })
   delete body.metadata
   const leftover = stripCliOwnedSystem(body.system)

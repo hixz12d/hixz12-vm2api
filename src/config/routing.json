@@ -78,14 +78,15 @@
   },
   "inference": {
     "engine": "rust",
-    "fallback_to_go": false
+    "fallback_to_go": false,
+    "session_slots": 20
   },
 
   "compatibility": {
     "persona_preset": "official_full",
     "overlay_preset": "off",
     "persona_park": false,
-    "cache_ttl": "1h"
+    "cache_ttl": "5m"
   },
   "official_cc": {
     "enabled": true,
