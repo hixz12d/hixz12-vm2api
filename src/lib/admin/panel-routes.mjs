@@ -123,7 +123,7 @@ import {
 import { makeError, ErrorType, ErrorCode } from '../core/errors.mjs'
 import * as panel from './panel-api.mjs'
 import { GATEWAY_CAPABILITIES } from '../vm/execution-context.mjs'
-import { withVmLock, atomicWriteJson } from '../vm/vm-file.mjs'
+import { withVmLock, atomicWriteJson, isValidVmId } from '../vm/vm-file.mjs'
 import { snapshotDatabaseMetrics } from '../db/database-metrics.mjs'
 import { getUsageCache } from '../oauth/usage-cache.mjs'
 import { getDb, getDbPath } from '../db/database.mjs'
@@ -1235,14 +1235,27 @@ export function createPanelHandler(ctx) {
           for (const item of report.items || []) {
             if (!item.ok) continue
             const vm = getVm(cfg.paths.project, item.id)
+            if (vm.status !== 'running') {
+              item.kernel = { ok: true, skipped: true, reason: 'vm_stopped' }
+              continue
+            }
             if (resolveInferenceEngine(vm, ctx.routingConfig) !== 'rust') continue
             const exec = slotExec(cfg.paths.project, vm)
             item.kernel = await restartRustKernel(exec).catch((e) => ({
               ok: false,
               error: String(e?.message || e).slice(0, 200),
             }))
+            if (!item.kernel?.ok) {
+              item.ok = false
+              item.code = 'kernel_restart_failed'
+              item.error = item.kernel?.error || item.kernel?.reason || 'kernel restart failed'
+            }
           }
         }
+        const failed = (report.items || []).filter((item) => !item.ok)
+        report.ok = failed.length === 0
+        report.ok_count = report.items.length - failed.length
+        report.failed_count = failed.length
         return json(res, report.ok ? 200 : 400, panel.ok(report))
       }
       if (req.method === 'POST' && p === '/api/panel/vms/slot-policy') {
@@ -1792,7 +1805,7 @@ export function createPanelHandler(ctx) {
       // DELETE /api/panel/vms/:id — remove VM record, cli-home, unbind proxy
       if (req.method === 'DELETE' && /^\/api\/panel\/vms\/[^/]+$/.test(p)) {
         const id = p.split('/')[4]
-        if (!id || id === 'create' || id === 'import') {
+        if (!isValidVmId(id)) {
           return json(res, 400, { ok: false, error: { message: 'invalid vm id' } })
         }
         const vmPath = path.join(cfg.paths.project, 'vms', `${id}.json`)
@@ -2105,7 +2118,7 @@ export function createPanelHandler(ctx) {
         const idx = nextNumericIndex(existing)
         const rawId = body.id || 'vm-' + padVm(idx)
         const id = String(rawId).replace(/[^a-zA-Z0-9_-]/g, '')
-        if (!id) return json(res, 400, { ok: false, error: { message: 'invalid id' } })
+        if (!isValidVmId(id)) return json(res, 400, { ok: false, error: { message: 'invalid id' } })
         const vmsDir = path.join(cfg.paths.project, 'vms')
         fs.mkdirSync(vmsDir, { recursive: true })
         const vmPath = path.join(vmsDir, id + '.json')

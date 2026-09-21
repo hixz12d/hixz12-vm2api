@@ -177,13 +177,13 @@ function mergeUsage(current, next) {
   return out
 }
 
-/** First user-visible token or a real terminal — not message_start / HTTP 200. */
+/** First user-visible assistant output — never transport/terminal metadata alone. */
 export function isDownstreamCommitEvent(event) {
   if (!event || typeof event !== 'object') return false
   const t = String(event.type || '')
   if (t === 'error' || t === 'message_start' || t === 'kin_response_headers') return false
-  if (t === 'message_stop' || t === 'response.completed' || t === 'response.done') return true
-  if (t === 'message_delta') return !!event.delta?.stop_reason
+  if (t === 'message_stop' || t === 'response.completed' || t === 'response.done' || t === 'message_delta') return false
+
   if (t === 'content_block_delta') {
     const d = event.delta || {}
     return !!(d.text || d.thinking || d.partial_json || d.refusal || d.signature)
@@ -578,8 +578,9 @@ export async function streamGoWorker({
       const complete = sawTerminal && !lastError && isCompleteAssistantMessage({ body: assembled, stopReason })
       if (!committed && complete) await flushCommit()
       const headerState = trailers['x-kin-terminal-state'] || headers['x-kin-terminal-state']
-      const reportedTerminal = headerState || (sawTerminal ? 'verified' : 'incomplete')
-      const terminalState = reportedTerminal === 'verified' && !sawTerminal ? 'incomplete' : reportedTerminal
+      // A non-verified header stays authoritative so fatal states are not downgraded to a retry.
+      const vetoState = headerState && headerState !== 'verified' ? headerState : null
+      const terminalState = vetoState || (complete ? 'verified' : 'incomplete')
       const rateHeaders = mergeRateLimitHeaders({ ...sseRateHeaders, ...headers, ...trailers })
       return {
         ok: response.statusCode === 200 && !lastError && terminalState === 'verified',
@@ -587,7 +588,9 @@ export async function streamGoWorker({
         via: 'go-worker-stream',
         body: lastError || assembled || { type: 'message', role: 'assistant', content: [] },
         headers: rateHeaders,
-        usage: meta.usage || sseUsage || assembled?.usage || null,
+        // Trailer stays authoritative, but it may carry totals only (Codex/Responses hops).
+        // Merge so SSE `input_tokens_details` / cache breakdown survives instead of being short-circuited.
+        usage: mergeUsage(mergeUsage(assembled?.usage || null, sseUsage), meta.usage),
         model: meta.model || sseModel || assembled?.model || null,
         stopReason,
         ttftMs,
