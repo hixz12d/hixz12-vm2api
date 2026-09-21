@@ -25,6 +25,7 @@ import {
   deferWrapRecycle,
   credentialsNewerThanKernel,
 } from './rust-kernel-supervisor.mjs'
+import { isIncompleteAssistantMessage } from '../core/errors.mjs'
 
 const rustHealthCache = new Map()
 const DEFAULT_SLOT_WAIT_MS = 30_000
@@ -296,6 +297,11 @@ async function runHop({ mode, opts }) {
         result = { ...result, credential_retried: true }
         noteWrapHop(opts.exec)
       }
+    }
+    // Validate the assembled response before the finally block decides whether to recycle.
+    // Keep committed=true for partial streams so they can never be replayed downstream.
+    if (isIncompleteAssistantMessage(result)) {
+      result = { ...result, ok: false, terminalState: 'incomplete' }
     }
     return {
       ...result,

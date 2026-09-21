@@ -52,6 +52,7 @@ const CODE_MAP = {
   upstream_overloaded: 'overloaded',
   slot_busy: 'overloaded',
   wrap_connection_error: 'other',
+  incomplete_response: 'upstream',
   upstream_timeout: 'timeout',
   stream_incomplete: 'timeout',
   client_cancelled: 'timeout',

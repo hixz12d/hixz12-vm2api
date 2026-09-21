@@ -33,3 +33,52 @@ test('watchdog ensure is called only when rust is unreachable', async () => {
   await wd.tick()
   assert.deepEqual(ensured, ['vm-down', 'vm-go'])
 })
+
+test('watchdog recovers leaked slots only after an idle grace period', async () => {
+  let clock = 100_000
+  let live = 0
+  let slots = 0
+  let recent = false
+  const recycled = []
+  const wd = createKernelWatchdog({
+    listTargets: () => [{ id: 'vm-stuck', inference_engine: 'rust' }],
+    health: async () => ({ ok: true, ready_slots: slots, cli_pid: 17 }),
+    inflight: () => live,
+    idleMs: () => (recent ? 1000 : Number.POSITIVE_INFINITY),
+    now: () => clock,
+    recycle: (exec) => {
+      recycled.push(exec.vmId)
+    },
+    ensure: async () => {
+      throw new Error('busy kernel must use controlled recycle')
+    },
+  })
+  await wd.tick()
+  clock += 59_999
+  await wd.tick()
+  assert.deepEqual(recycled, [])
+  clock += 1
+  await wd.tick()
+  assert.deepEqual(recycled, ['vm-stuck'])
+  live = 1
+  clock += 600_000
+  await wd.tick()
+  assert.equal(recycled.length, 1)
+  live = 0
+  await wd.tick()
+  clock += 60_000
+  recent = true
+  await wd.tick()
+  assert.equal(recycled.length, 1)
+  recent = false
+  await wd.tick()
+  clock += 60_000
+  slots = 2
+  await wd.tick()
+  slots = 0
+  await wd.tick()
+  assert.equal(recycled.length, 1)
+  clock += 60_000
+  await wd.tick()
+  assert.equal(recycled.length, 2)
+})

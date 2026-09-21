@@ -3,7 +3,14 @@
  * ensureRustKernel; never falls back to kin-worker hop.
  */
 import { rustKernelHealth, rustKernelReachable, rustKernelBusy, rustKernelPaths } from './rust-kernel-client.mjs'
-import { ensureRustKernel, readExistingKernelConfig, WRAP_SLOT_MAX } from './rust-kernel-supervisor.mjs'
+import {
+  ensureRustKernel,
+  readExistingKernelConfig,
+  WRAP_SLOT_MAX,
+  wrapHopInflight,
+  wrapIdleMs,
+  scheduleWrapRecycle,
+} from './rust-kernel-supervisor.mjs'
 import { normalizeInferenceEngine } from '../vm/slot-engine.mjs'
 
 export const DEFAULT_KERNEL_WATCHDOG = Object.freeze({
@@ -50,11 +57,17 @@ export function createKernelWatchdog({
   homeDirFor,
   ensure = ensureRustKernel,
   health = rustKernelHealth,
+  inflight = wrapHopInflight,
+  idleMs = wrapIdleMs,
+  recycle = scheduleWrapRecycle,
+  now = Date.now,
 } = {}) {
   let config = normalizeKernelWatchdogConfig(initial)
   let timer = null
   let running = false
   let inTick = false
+  const busyWithoutHopSince = new Map()
+  const stuckGraceMs = 60_000
 
   async function tick() {
     if (inTick || !config.enabled) return
@@ -69,7 +82,24 @@ export function createKernelWatchdog({
           homeDir: typeof homeDirFor === 'function' ? homeDirFor(vm) : null,
         }
         const current = await health(exec, { timeoutMs: 800 })
-        if (rustKernelBusy(current)) continue
+        if (rustKernelBusy(current)) {
+          const at = now()
+          // Queue waiters are not executing hops. A busy kernel with no real hop
+          // for a full grace period has leaked its slots; never interrupt a live hop.
+          if (inflight(exec) > 0 || idleMs(exec, at) < stuckGraceMs) {
+            busyWithoutHopSince.delete(vm.id)
+            continue
+          }
+          const since = busyWithoutHopSince.get(vm.id) ?? at
+          busyWithoutHopSince.set(vm.id, since)
+          if (at - since >= stuckGraceMs) {
+            const recovery = recycle(exec)
+            if (recovery?.pending) await recovery.pending
+            busyWithoutHopSince.delete(vm.id)
+          }
+          continue
+        }
+        busyWithoutHopSince.delete(vm.id)
         if (rustKernelReachable(current) && !kernelSlotMismatch(exec)) continue
         await ensure(exec, { timeoutMs: config.timeout_ms })
       }

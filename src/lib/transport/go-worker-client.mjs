@@ -14,6 +14,7 @@ import {
 } from '../oauth/oauth-credentials.mjs'
 import { refreshSlotCredentialIfNeeded } from '../oauth/host-token-refresh.mjs'
 import { hostCountTokens, hostModels, hostOauthUsage } from '../oauth/host-anthropic.mjs'
+import { createClaudeMessageAssembler, applyClaudeSSELineToMessage } from '../protocol/convert.mjs'
 
 const MAX_BODY = 64 * 1024 * 1024
 
@@ -437,6 +438,7 @@ export async function streamGoWorker({
     let buffer = ''
     let lastError = null
     let sawTerminal = false
+    const assembler = createClaudeMessageAssembler()
     let dataBuf = ''
     let sseUsage = null
     let sseModel = null
@@ -470,6 +472,9 @@ export async function streamGoWorker({
     }
     const observeSseEvent = (event) => {
       if (!event) return event
+      if (event.type !== 'error' && event.type !== 'kin_response_headers') {
+        applyClaudeSSELineToMessage(`data: ${JSON.stringify(event)}`, assembler)
+      }
       if (event.type === 'kin_response_headers' && event.headers && typeof event.headers === 'object') {
         sseRateHeaders = { ...sseRateHeaders, ...event.headers }
       }
@@ -538,15 +543,21 @@ export async function streamGoWorker({
         if (isDownstreamCommitEvent(event)) await flushCommit()
       }
       const trailers = mergeRateLimitHeaders(publicHeaders(response.trailers))
-      const terminalState =
+      const reportedTerminal =
         trailers['x-kin-terminal-state'] || headers['x-kin-terminal-state'] || (sawTerminal ? 'verified' : 'incomplete')
+      const terminalState = reportedTerminal === 'verified' && !sawTerminal ? 'incomplete' : reportedTerminal
       const meta = streamMetaFromHeaders({ ...headers, ...trailers })
+      if (assembler.message) {
+        assembler.message.usage = meta.usage || sseUsage || assembler.message.usage
+        assembler.message.model = meta.model || sseModel || assembler.message.model
+        assembler.message.stop_reason = meta.stopReason || sseStop || assembler.message.stop_reason
+      }
       const rateHeaders = mergeRateLimitHeaders({ ...sseRateHeaders, ...headers, ...trailers })
       return {
         ok: response.statusCode === 200 && !lastError && terminalState === 'verified',
         status: response.statusCode || 0,
         via: 'go-worker-stream',
-        body: lastError || { type: 'message', role: 'assistant', content: [] },
+        body: lastError || assembler.message || { type: 'message', role: 'assistant', content: [] },
         headers: rateHeaders,
         usage: meta.usage || sseUsage,
         model: meta.model || sseModel,
