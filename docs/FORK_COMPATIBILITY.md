@@ -13,3 +13,16 @@
 ## 流式完整性
 
 合并上游 SSE 组装修复时保留 fork 的真实终止事件校验：只有响应正文和头部中的 stop reason / verified 标志不足以证明流已结束。每个 SSE 事件只能组装一次，避免重复文本或工具 JSON；外层完整性校验与异常槽位回收继续生效。
+
+
+v1.3.7 的 `mergeAssembledAssistantHop` 保留真实上游错误，不允许空 assistant 覆盖错误正文。最终判定同时保留 transport / terminal 状态：正文存在 stop_reason 不能把 `incomplete`、传输失败或拒绝改成成功。已提交给客户端的流即使失败也保留 committed，避免再次派发。
+
+## 同会话串行
+
+合并 v1.3.7 的同 sticky session 串行行为，并提取为 `SessionQueue`，由 `FailoverRunner` 在账号选择之前排队；不同 session 以及无 session key 的请求保持独立。取消等待者不会提前移除仍有执行中前驱的队列，也不会让后来的请求越过前驱。执行中的任务必须真正结束后才能释放下一轮，失败不会阻塞后续请求；队列空闲后清理对应 key。
+
+串行队列仅作用于当前控制面进程。排队取消通过请求 AbortSignal 处理；既有 failover 重试预算仍在取得 session 执行权后开始计算，不应把它理解为跨进程锁或新增的总请求超时。
+
+## Watchdog 保护
+
+保留 fork 对继承 Rust 配置的运行中 Claude VM 的检查，排除 Codex、KVM 和已停止 VM。默认每 5 秒检查：只有 kernel 无空闲位置、没有实际 hop、最近 hop 已结束至少 10 秒，再连续观察 10 秒后才回收。正常执行中的长请求与健康空闲 kernel 不会因此重启。不能直接用上游旧版 watchdog 覆盖此保护。

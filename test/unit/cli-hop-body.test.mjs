@@ -243,7 +243,6 @@ test('cli-hop rewrite wins over routing fill when inbound already stamped last u
       ],
     },
     {
-      cacheTtl: '1h',
       cacheBreakpoints: {
         enabled: true,
         preserve_client: true,
@@ -305,8 +304,8 @@ test('unofficial cli-hop rewrite matches official penultimate-user leftover', ()
       { role: 'user', content: 'u3' },
     ],
   }
-  const unofficial = prepareCliHopBody(inbound, { unofficial: true, cacheTtl: '1h' })
-  const official = prepareCliHopBody(structuredClone(inbound), { unofficial: false, cacheTtl: '1h' })
+  const unofficial = prepareCliHopBody(inbound, { unofficial: true })
+  const official = prepareCliHopBody(structuredClone(inbound), { unofficial: false })
   assert.equal(unofficial.messages[0].content[0].cache_control, undefined)
   assert.deepEqual(unofficial.messages[2].content[0].cache_control, { type: 'ephemeral', ttl: '5m' })
   assert.equal(unofficial.messages[4].content[0].cache_control, undefined)
@@ -326,7 +325,7 @@ test('unofficial cli-hop rewrite leaves leftover mid-system unmarked', () => {
       { role: 'system', content: 'caller leftover after first user' },
     ],
   }
-  const firstTurn = prepareCliHopBody(leftover, { unofficial: true, cacheTtl: '1h' })
+  const firstTurn = prepareCliHopBody(leftover, { unofficial: true })
   assert.equal(firstTurn.messages.length, 2)
   assert.equal(firstTurn.messages[0].role, 'user')
   assert.equal(firstTurn.messages[1].role, 'system')
@@ -335,18 +334,15 @@ test('unofficial cli-hop rewrite leaves leftover mid-system unmarked', () => {
   assert.equal(firstTurn.messages[1].content[0].cache_control, undefined)
   assert.equal(firstTurn.system[0].cache_control, undefined)
 
-  const later = prepareCliHopBody(
-    {
-      ...leftover,
-      messages: [
-        { role: 'user', content: 'u1' },
-        { role: 'system', content: 'caller leftover after first user' },
-        { role: 'assistant', content: 'a1' },
-        { role: 'user', content: 'u2' },
-      ],
-    },
-    { unofficial: true, cacheTtl: '1h' },
-  )
+  const later = prepareCliHopBody({
+    ...leftover,
+    messages: [
+      { role: 'user', content: 'u1' },
+      { role: 'system', content: 'caller leftover after first user' },
+      { role: 'assistant', content: 'a1' },
+      { role: 'user', content: 'u2' },
+    ],
+  })
   assert.equal(later.messages[1].role, 'system')
   assert.equal(later.messages.at(-1).role, 'user')
   assert.deepEqual(later.messages[0].content[0].cache_control, { type: 'ephemeral', ttl: '5m' })

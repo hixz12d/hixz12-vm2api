@@ -7,6 +7,7 @@ import {
 } from '../core/errors.mjs'
 import { hasRefreshPresence } from '../oauth/oauth-credentials.mjs'
 import { resolveOfficialCcInference } from '../vm/slot-engine.mjs'
+import { SessionQueue } from './session-queue.mjs'
 
 const DEFAULTS = {
   max_account_switches: 10,
@@ -224,6 +225,7 @@ export class FailoverRunner {
     this.onProxyFailure = onProxyFailure
     this.onCredentialFailure = onCredentialFailure
     this.onFablePlanDenied = onFablePlanDenied
+    this.sessionQueue = new SessionQueue()
   }
 
   forgetCredential(selected, policy) {
@@ -238,7 +240,16 @@ export class FailoverRunner {
     }
   }
 
-  async run({
+  async run(args = {}) {
+    try {
+      return await this.sessionQueue.run(args.stickyKey, () => this.runOnce(args), { signal: args.signal })
+    } catch (error) {
+      if (error?.code === 'request_cancelled') return poolError('request_cancelled', 'Request was cancelled')
+      throw error
+    }
+  }
+
+  async runOnce({
     requestId,
     canonicalBody,
     model,

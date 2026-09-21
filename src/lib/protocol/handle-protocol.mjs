@@ -58,9 +58,9 @@ import {
   validateRequestBody,
   mapModelError,
   isClientCancelledResult,
-  isCompleteAssistantMessage,
   isIncompleteAssistantMessage,
   finalizeAssembledAssistantHop,
+  mergeAssembledAssistantHop,
   incompleteAssistantClientError,
   ErrorType,
   ErrorCode,
@@ -133,10 +133,6 @@ export function createHandleProtocol(deps) {
     logBag.error_code = originalCode || mapped.body?.error?.code
     logBag.error_message = summary || originalMessage || mapped.body?.error?.message || null
     return mapped
-  }
-
-  function acceptAssistantHop(result) {
-    return finalizeAssembledAssistantHop(result)
   }
 
   function applyDistillGuard({ req, inbound, body, fp, logBag, requestId, res }) {
@@ -257,23 +253,11 @@ export function createHandleProtocol(deps) {
         applyClaudeSSELineToMessage(restoreToolNamesInSSELine(line, toolNames), assembler)
       },
     })
-    if (assembler.message) {
-      const localComplete = isCompleteAssistantMessage({
-        body: assembler.message,
-        stopReason: assembler.message.stop_reason,
-      })
-      const workerComplete = isCompleteAssistantMessage(workerResult)
-      if (localComplete || !workerComplete) {
-        workerResult.body = assembler.message
-        if (assembler.message.usage) workerResult.usage = assembler.message.usage
-        if (assembler.message.model) workerResult.model = assembler.message.model
-        if (assembler.message.stop_reason) workerResult.stopReason = assembler.message.stop_reason
-      }
-    }
-    if (workerResult?.body) {
-      workerResult.body = restoreToolNames(workerResult.body, toolNames)
-    }
-    return acceptAssistantHop(workerResult)
+    const merged = mergeAssembledAssistantHop(workerResult, assembler.message)
+    return finalizeAssembledAssistantHop({
+      ...merged,
+      body: merged.body ? restoreToolNames(merged.body, toolNames) : merged.body,
+    })
   }
 
   async function handleProtocol(req, res, protocol, pathName) {
@@ -767,7 +751,6 @@ export function createHandleProtocol(deps) {
             hopBody = prepareCliHopBody(repaired ? body : cliAppliesNodePersona ? body : personaIn, {
               stream: upstreamStream,
               repaired,
-              cacheTtl,
               cacheBreakpoints,
               cacheControlLimit: Number(getRouting()?.compatibility?.cache_control_limit) || 4,
               unofficial: !officialTraffic,
@@ -927,7 +910,7 @@ export function createHandleProtocol(deps) {
       }
     }
 
-    result = acceptAssistantHop(result)
+    result = finalizeAssembledAssistantHop(result)
     logBag.vm_id = result?.vmId || null
     logBag.account_id = result?.accountId || null
     logBag.final_account_id = result?.accountId || null

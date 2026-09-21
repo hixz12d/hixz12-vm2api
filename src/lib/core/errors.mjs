@@ -203,11 +203,30 @@ export function isIncompleteAssistantMessage(result = {}) {
 }
 
 export function finalizeAssembledAssistantHop(result = {}) {
-  if (isCompleteAssistantMessage(result)) return result?.ok ? result : { ...result, ok: true }
+  if (isCompleteAssistantMessage(result)) {
+    // A stop_reason in the body cannot override a missing SSE terminator or failed transport.
+    if (result.transportError || (result.terminalState && result.terminalState !== 'verified')) {
+      return { ...result, ok: false }
+    }
+    return result?.ok ? result : { ...result, ok: true }
+  }
   if (isIncompleteAssistantMessage(result) || result?.ok) {
-    return { ...result, ok: false, committed: false, terminalState: 'incomplete' }
+    return { ...result, ok: false, committed: result.committed === true, terminalState: 'incomplete' }
   }
   return result
+}
+
+export function mergeAssembledAssistantHop(result = {}, assembled = null) {
+  if (!assembled || result?.body?.error || result?.body?.type === 'error') return result
+  const assembledResult = { body: assembled, stopReason: assembled.stop_reason }
+  if (!isCompleteAssistantMessage(assembledResult) && isCompleteAssistantMessage(result)) return result
+  return {
+    ...result,
+    body: assembled,
+    usage: assembled.usage || result.usage,
+    model: assembled.model || result.model,
+    stopReason: assembled.stop_reason || result.stopReason,
+  }
 }
 
 export function incompleteAssistantClientError(result = {}) {
