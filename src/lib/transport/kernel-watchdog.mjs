@@ -11,11 +11,11 @@ import {
   wrapIdleMs,
   scheduleWrapRecycle,
 } from './rust-kernel-supervisor.mjs'
-import { normalizeInferenceEngine } from '../vm/slot-engine.mjs'
+import { resolveInferenceEngine } from '../vm/slot-engine.mjs'
 
 export const DEFAULT_KERNEL_WATCHDOG = Object.freeze({
   enabled: true,
-  interval_sec: 20,
+  interval_sec: 5,
   timeout_ms: 15_000,
 })
 
@@ -39,9 +39,9 @@ export function isKernelWatchdogTarget(vm) {
   if (!vm?.id) return false
   if (vm.runtime_kind === 'kvm') return false
   if (HARD_DOWN.has(String(vm.status || '').toLowerCase())) return false
-  const configured = normalizeInferenceEngine(vm.inference_engine, { inherit: true })
-  if (configured === 'rust') return true
-  return String(vm.runtime?.engine || '').toLowerCase() === 'rust'
+  // Match request dispatch: unmarked Claude VMs inherit the Rust engine.
+  // resolveInferenceEngine also excludes Codex guests from this watchdog.
+  return resolveInferenceEngine(vm) === 'rust'
 }
 
 function kernelSlotMismatch(exec) {
@@ -67,7 +67,9 @@ export function createKernelWatchdog({
   let running = false
   let inTick = false
   const busyWithoutHopSince = new Map()
-  const stuckGraceMs = 60_000
+  // Recover idle native slots within the pool's 45s wait budget.
+  // Live hops and recently completed hops always suppress recovery.
+  const stuckGraceMs = 10_000
 
   async function tick() {
     if (inTick || !config.enabled) return
