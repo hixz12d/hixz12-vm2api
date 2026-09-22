@@ -515,9 +515,21 @@ function writeKernelJsonAtomically(configPath, config) {
   try {
     if (fs.readFileSync(configPath, 'utf8') === body) return false
   } catch {}
+  let owner
+  try {
+    owner = fs.statSync(configPath)
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
   const tempPath = `${configPath}.${process.pid}.${Date.now()}.tmp`
   try {
     fs.writeFileSync(tempPath, body, { mode: 0o600 })
+    // The root control plane writes for an unprivileged slot. A rename must
+    // preserve its uid/gid or the 0600 config becomes unreadable after reload.
+    if (owner && process.platform !== 'win32') {
+      const created = fs.statSync(tempPath)
+      if (created.uid !== owner.uid || created.gid !== owner.gid) fs.chownSync(tempPath, owner.uid, owner.gid)
+    }
     fs.renameSync(tempPath, configPath)
   } catch (error) {
     try {
