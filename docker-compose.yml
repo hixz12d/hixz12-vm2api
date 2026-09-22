@@ -1,13 +1,11 @@
 # 控制面容器 + 宿主机 Docker 管槽位。
-# 仓库请放在 /opt/vm2api，否则槽位 -v 路径对不上。
-# 仓内 bin/kin-* 与 share/wrap-cli 直接进镜像；启动写入 ./bin 与 ./share，并准备全部支持的 kin-os 镜像。
+# 槽容器的 -v 源路径由控制面 Mounts 换算成宿主路径，部署目录不限定 /opt/vm2api。
+# Fork 源码构建：docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+# 槽位镜像默认沿用本地 kin-os/* 标签；生产预构建后设置 VM2API_SLOT_IMAGE_MODE=check。
 services:
   vm2api:
-    image: vm2api
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: vm2api
+    image: ${VM2API_IMAGE:-hixz12-vm2api}:${VM2API_IMAGE_TAG:-local}
+    container_name: ${VM2API_CONTAINER_NAME:-vm2api}
     restart: unless-stopped
     init: true
     network_mode: host
@@ -25,6 +23,9 @@ services:
       KIN_CODEX_KERNEL_BIN: /opt/vm2api/bin/kin-codex-kernel
       KIN_COOKIE_AUTH_BIN: /opt/vm2api/bin/kin-cookie-auth
       KIN_AUTO_SYNC_WRAP: ${KIN_AUTO_SYNC_WRAP:-1}
+      # 自省容器名；VM2API_HOST_ROOT 可显式覆盖宿主安装目录。
+      VM2API_CONTAINER_NAME: ${VM2API_CONTAINER_NAME:-vm2api}
+      VM2API_HOST_ROOT: ${VM2API_HOST_ROOT:-}
       HOST: 0.0.0.0
       PORT: ${PORT:-8787}
     volumes:

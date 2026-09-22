@@ -2,9 +2,15 @@
 
 ## CLI 缓存 TTL
 
-当前发行的 CLI / Rust kernel 会添加 5m 缓存断点，且不读取 `kernel.json.cache_ttl`。因此 CLI hop 在 `prepareCliHopBody` 中统一采用 5m，包括官方 Claude Code 请求、显式请求 1h、关闭自动断点时保留的历史标记。缓存断点位置和工具调用内容保留。
+合并上游 v1.3.17 后，CLI hop 继续在 `prepareCliHopBody` 中统一采用 5m，包括官方 Claude Code 请求、显式请求 1h、关闭自动断点时保留的历史标记。新版 kernel 支持 `default_cache_ttl` 热投影及请求级 TTL；但 wrap 的 tools/system 仍会出现无 ttl（即 5m）的标记，因此 CLI hop 仍强制 5m，避免其后出现 1h。Node 维护历史 user 边界，移除由 kernel 重建的 tools/system/当前尾部标记；工具调用内容保留。即使官方请求解析 TTL 为 null，也仍执行这套边界处理。
 
-`handle-protocol` 同步使用实际的 5m TTL 处理 usage，避免将 5m 写入按 1h 计费。直接 API 上游的 TTL 选择不受此限制。只有发行内核确实支持端到端 1h，并通过真实工具循环与上游 usage 验证后，才能解除 CLI 限制。
+`handle-protocol` 同步使用实际的 5m TTL 处理 usage，避免将 5m 写入按 1h 计费。直接 API 上游的 TTL 选择不受此限制，fork 的 routing 默认值仍为 5m。只有端到端 1h 通过真实工具循环与上游 usage 验证后，才能解除 CLI 限制。
+
+## 槽位镜像与部署
+
+沿用本地 `kin-os/*` 标签，`os-catalog.mjs` 是构建、检查与运行的共同来源，避免两套镜像名导致已有容器被替换。显式设置 `KIN_OS_REGISTRY` 可选用上游 registry 标签，再通过 `build.mjs --pull` 预拉取；构建兜底仍使用指定 builder/cgroup。`--pull-only` 不构建，`--check` 不拉取或构建，建槽/开机请求也不自动构建。生产保留预构建后 `VM2API_SLOT_IMAGE_MODE=check`。
+
+保留上游宿主路径自动换算，安装目录可与容器内 `/opt/vm2api` 不同。控制面默认镜像为本 fork 的 `hixz12-vm2api:local`，使用 `docker-compose.build.yml` 构建；官方控制面预构建镜像不含本 fork 定制。
 
 ## Session 位置
 

@@ -1,6 +1,6 @@
 # 部署
 
-推荐 **Docker Compose**。仓库放在 `/opt/vm2api`。
+推荐 **Docker Compose**，**拉预构建镜像**，不在你的机器上构建。安装目录任意（下文用 `/opt/vm2api`）。
 
 ## 机器
 
@@ -26,7 +26,7 @@ VM2API_DB_SECRET='再一串'
 
 不是一个父容器里多个子进程。
 
-仓库必须在 `/opt/vm2api`（槽的 `-v` 路径由宿主机 Docker 解释）。挂 `docker.sock`，`network_mode: host`。
+挂 `docker.sock`，`network_mode: host`。安装目录不再限定 `/opt/vm2api`：控制面自省 `docker inspect vm2api` 的 Mounts，把槽的 `-v` 源换算成宿主路径；也可用 `VM2API_HOST_ROOT` 显式指定。
 
 ## 安装
 
@@ -36,7 +36,7 @@ VM2API_DB_SECRET='再一串'
 curl -sSL https://raw.githubusercontent.com/dofastted/vm2api/main/deploy/install.sh | sudo bash
 ```
 
-脚本会 clone 到 `/opt/vm2api`、补全 `.env`（`chmod 600`）、`docker compose up -d --build`。`.env` 缺失或 `VM2API_ADMIN_PASSWORD` 为空时写入默认管理台 **`admin` / `123456`**（已有密码不覆盖）。空的 `VM2API_API_KEY` / `VM2API_DB_SECRET` 会生成随机值。登录：`http://<ip>:8787/cc#/login`。以后：
+脚本只下载 `docker-compose.yml` / `.env.example` / `VERSION`（不 clone 仓库），补全 `.env`（`chmod 600`），然后 `docker compose pull && up -d`。`.env` 缺失或 `VM2API_ADMIN_PASSWORD` 为空时写入默认管理台 **`admin` / `123456`**（已有密码不覆盖）。空的 `VM2API_API_KEY` / `VM2API_DB_SECRET` 会生成随机值。登录：`http://<ip>:8787/cc#/login`。以后：
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/dofastted/vm2api/main/deploy/install.sh | sudo bash -s -- upgrade
@@ -46,33 +46,44 @@ sudo bash /opt/vm2api/deploy/install.sh changelog
 
 保留 `.env` / `vms/` / `data/`。不要 `docker rm` 槽。一键更新会自动把新版 `share/wrap-cli`（包括 `kin-kernel.bin`）同步到所有槽并重启槽内 dataplane；如需暂时跳过可加 `--no-sync-wrap`。管理台 **设置 → 关于** 可复制同一条命令、看 changelog。指定版本：`--version v1.2.22`。
 
-**手动：**
+**手动（同样只拉镜像）：**
 
 ```bash
-git clone https://github.com/dofastted/vm2api.git /opt/vm2api
-cd /opt/vm2api
-cp .env.example .env
+mkdir -p /opt/vm2api && cd /opt/vm2api
+curl -sSLO https://raw.githubusercontent.com/dofastted/vm2api/main/docker-compose.yml
+curl -sSL -o .env https://raw.githubusercontent.com/dofastted/vm2api/main/.env.example
 chmod 600 .env
 # 空密码默认 admin / 123456；API key / DB secret 为空时入口会生成
 
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 curl -sS --noproxy '*' http://127.0.0.1:8787/health
 ```
 
-二进制在仓内 `bin/`，Compose 会拷到挂载目录。`bin/kin-*` 必须 **755**。入口会串行准备面板支持的 Ubuntu、Debian、Arch、Fedora 四种本地槽位镜像，已有镜像跳过。首次启动可能需要较长时间，生产环境建议提前构建。
+`bin/` 与 `share/wrap-cli` 由镜像入口写入挂载目录，`src/config` 缺文件时用镜像内默认值补齐。`bin/kin-*` 必须 **755**。
 
-这些 `kin-os/*` 标签是项目本地构建的镜像，不是公共仓库镜像；缺失时不要执行 `docker login` 或尝试拉取同名镜像。
+**本 fork 源码模式：**上面的官方安装脚本与镜像不包含 fork 定制；使用 fork 源码构建，Compose 默认镜像为 `hixz12-vm2api:local`。
 
 ```bash
-# 默认检查并补齐全部四种系统；也可指定 debian / debian-12 / kin-os/debian:12
-node docker/kin-os/build.mjs
-# 只验证镜像齐全，不构建
-node docker/kin-os/build.mjs --check
+git clone https://github.com/hixz12d/hixz12-vm2api.git /opt/vm2api
+cd /opt/vm2api && cp .env.example .env && chmod 600 .env
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
-源码和运行目录分离时，上述命令在源码目录执行。可通过 `VM2API_BUILD_BUILDER` 指定已有的 Buildx builder（自动 `--load`），通过 `VM2API_BUILD_CGROUP_PARENT` 指定构建 cgroup。构建前必须在宿主机配置并核实所需的 CPU/内存硬上限；这两个参数只选择 builder/cgroup，不会代为创建资源限制。
+本 fork 默认沿用本地 Ubuntu、Debian、Arch、Fedora 四种 `kin-os/*` 标签，不会自动切换现有槽位的镜像名称。入口默认串行准备缺失镜像，生产环境应提前构建：
 
-生产部署提前构建完镜像后，在控制面 Compose 的 `environment` 中设置 `VM2API_SLOT_IMAGE_MODE: check`，入口只检查镜像，不临时构建。默认值 `build` 会补齐缺少的镜像。创建并开机前也会检查镜像；镜像缺失时不保存槽位、不占用出口，可在补齐镜像后重试。仅创建、暂不开机的槽位不要求镜像已经存在。
+```bash
+# 默认补齐四种系统，也可指定 debian / debian-12 / kin-os/debian:12
+node docker/kin-os/build.mjs
+# 只验证，不构建或拉取
+node docker/kin-os/build.mjs --check
+# 显式选择上游预构建槽位镜像；控制面也必须使用同一 KIN_OS_REGISTRY
+KIN_OS_REGISTRY=ghcr.io/dofastted node docker/kin-os/build.mjs --pull
+```
+
+源码和运行目录分离时，在源码目录执行这些命令。可通过 `VM2API_BUILD_BUILDER` 指定已有 Buildx builder（自动 `--load`），通过 `VM2API_BUILD_CGROUP_PARENT` 指定构建 cgroup；构建前须在宿主机配置并核实 CPU/内存硬上限。
+
+生产预构建后在控制面 Compose 的 `environment` 中设置 `VM2API_SLOT_IMAGE_MODE: check`，启动只检查。默认 `build` 补齐缺失镜像；显式 `pull` 模式要求设置 `KIN_OS_REGISTRY`，只尝试拉取、不构建。创建和开机前仍检查镜像，缺失时不保存新槽位、不占用出口，也不在请求路径临时构建；准备好镜像后重试。仅创建、暂不开机的槽位不要求镜像存在。
 
 升级到 **v1.2.22** 见下面「已部署机升级到 1.2.22」。更新控制面和槽内 kernel，但不要 `docker rm` 槽。
 
@@ -81,6 +92,8 @@ Docker Desktop / WSL 下 `curl 127.0.0.1:8787` 可能失败：
 ```bash
 docker exec vm2api python3 -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:8787/health").read().decode())'
 ```
+
+槽位安装、同步和模板制作优先使用 `KIN_KERNEL_BIN` / `bin/kin-kernel`；母样本或槽内快照只在主内核不可用时使用。更新或上传主内核后，仍需同步并重启目标槽。控制面重启本身不会替换正在运行的槽内进程。
 
 ## 上线后
 

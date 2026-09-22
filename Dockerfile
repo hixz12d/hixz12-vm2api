@@ -25,6 +25,7 @@ COPY bin/kin-kernel bin/kin-egress bin/kin-worker bin/kin-codex-kernel bin/kin-c
 COPY share/wrap-cli /opt/vm2api/image-wrap-cli
 COPY scripts/docker-entrypoint.sh /usr/local/bin/vm2api-entrypoint
 RUN chmod 755 /usr/local/bin/vm2api-entrypoint /opt/vm2api/image-bin/* \
+  && cp -a /opt/vm2api/src/config /opt/vm2api/image-config \
   && mkdir -p /opt/vm2api/vms /opt/vm2api/data /opt/vm2api/bin /opt/vm2api/share
 # With no credentials, the helper must reach its input validator, not fail in ld.so.
 RUN output="$(/opt/vm2api/image-bin/kin-cookie-auth 2>&1)"; \

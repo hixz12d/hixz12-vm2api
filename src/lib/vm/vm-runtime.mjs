@@ -18,7 +18,9 @@ import { ensureSlotClaudeOwnership } from '../oauth/oauth-credentials.mjs'
 import { materializeWrapCli } from './wrap-cli-runtime.mjs'
 import { ensureGuestMachineIdFile } from '../identity/workstation-fingerprint.mjs'
 import { ensureProxyEgress, isLocalEgressProxy, slotNetworkForVm } from './egress.mjs'
-import { OS_CATALOG, OS_ORDER, inspectKernelImage } from './os-images.mjs'
+import { inspectKernelImage } from './os-images.mjs'
+import { toHostPath } from './host-path.mjs'
+import { OS_CATALOG, OS_ORDER, imageForKernel } from './os-catalog.mjs'
 
 export const RUNTIME = 'docker'
 const WORKER_BIN = process.env.KIN_WORKER_BIN || '/opt/kin-gateway/bin/kin-worker'
@@ -29,7 +31,7 @@ const MEM = SLOT_MEMORY
 const NET = process.env.KIN_VM_NETWORK || 'bridge'
 const PUBLIC_IP = process.env.PUBLIC_HOST || '166.88.96.199'
 
-export { OS_CATALOG, OS_ORDER } from './os-images.mjs'
+export { OS_REGISTRY, OS_CATALOG, OS_ORDER, imageForKernel } from './os-catalog.mjs'
 export { normalizeTimezone, normalizeTimezone as normalizeUsTimezone, US_TIMEZONES } from '../core/timezone.mjs'
 export const STANDARD_LOCALE = 'en_US.UTF-8'
 
@@ -39,10 +41,6 @@ export function kernelForIndex(i) {
 
 export function timezoneForIndex(i) {
   return US_TIMEZONES[(Number(i) - 1) % US_TIMEZONES.length]
-}
-
-export function imageForKernel(kernel) {
-  return (OS_CATALOG[kernel] || OS_CATALOG['ubuntu-24.04']).image
 }
 
 export function parseVmIndex(value) {
@@ -465,8 +463,15 @@ export function startVmRuntime(vm, projectRoot, { recreate = false, routing } = 
     fs.rmSync(worker.kernelSocket, { force: true })
   } catch {}
   const machineIdFile = ensureGuestMachineIdFile(projectRoot, vm)
+  // Slots are created by the host engine: every -v source must be a host path.
+  const hostOf = (p) => toHostPath(p, { projectRoot })
   const machineMounts = machineIdFile
-    ? ['-v', `${machineIdFile}:/etc/machine-id:ro`, '-v', `${machineIdFile}:/var/lib/dbus/machine-id:ro`]
+    ? [
+        '-v',
+        `${hostOf(machineIdFile)}:/etc/machine-id:ro`,
+        '-v',
+        `${hostOf(machineIdFile)}:/var/lib/dbus/machine-id:ro`,
+      ]
     : []
   const netName = slotNetworkForVm(vm)
   if (!netName || netName === 'host' || netName === 'bridge') {
@@ -509,11 +514,11 @@ export function startVmRuntime(vm, projectRoot, { recreate = false, routing } = 
     '--label',
     `kin.vm.os=${kernel}`,
     '-v',
-    `${home}:/home/kincli`,
+    `${hostOf(home)}:/home/kincli`,
     '-v',
-    `${worker.runDir}:/run/kin`,
-    ...(fs.existsSync(WORKER_BIN) ? ['-v', `${WORKER_BIN}:/usr/local/bin/kin-worker:ro`] : []),
-    ...(mountKernel ? ['-v', `${kernelBin}:/usr/local/bin/kin-kernel:ro`] : []),
+    `${hostOf(worker.runDir)}:/run/kin`,
+    ...(fs.existsSync(WORKER_BIN) ? ['-v', `${hostOf(WORKER_BIN)}:/usr/local/bin/kin-worker:ro`] : []),
+    ...(mountKernel ? ['-v', `${hostOf(kernelBin)}:/usr/local/bin/kin-kernel:ro`] : []),
     ...machineMounts,
     '-e',
     'HOME=/home/kincli',

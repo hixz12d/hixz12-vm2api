@@ -1,17 +1,21 @@
 #!/usr/bin/env node
-/** Prepare host-local slot images before serving create/start requests. */
+/** Prepare slot images explicitly; production boot can use --check without building. */
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { inspectKernelImage, selectSlotImages } from '../../src/lib/vm/os-images.mjs'
+import { OS_REGISTRY } from '../../src/lib/vm/os-catalog.mjs'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 
 export function buildSlotImages(args = [], { runDocker = spawnSync, log = console.log, env = process.env } = {}) {
   const force = args.includes('--force')
   const checkOnly = args.includes('--check')
-  if (force && checkOnly) throw new Error('--force cannot be combined with --check')
-  const images = selectSlotImages(args.filter((arg) => arg !== '--force' && arg !== '--check'))
+  const pullOnly = args.includes('--pull-only')
+  const pull = pullOnly || args.includes('--pull')
+  if (checkOnly && (force || pull)) throw new Error('--check cannot be combined with --force or --pull')
+  if (pull && !OS_REGISTRY) throw new Error('--pull requires KIN_OS_REGISTRY; local kin-os tags are never pulled')
+  const images = selectSlotImages(args.filter((arg) => !['--force', '--check', '--pull', '--pull-only'].includes(arg)))
   for (const img of images) {
     const inspected = inspectKernelImage(img.kernel, { runDocker })
     if (!inspected.ok && inspected.code !== 'slot_image_missing') throw new Error(inspected.error)
@@ -20,6 +24,18 @@ export function buildSlotImages(args = [], { runDocker = spawnSync, log = consol
       continue
     }
     if (checkOnly) throw new Error(inspected.error)
+    if (pull) {
+      const pulled = runDocker('docker', ['pull', img.image], { stdio: 'inherit' })
+      if (pulled.status === 0) {
+        const ready = inspectKernelImage(img.kernel, { runDocker })
+        if (!ready.ok) throw new Error(ready.error)
+        continue
+      }
+      if (pullOnly) {
+        log(`vm2api: ${img.image} not pulled; prepare the image before starting a slot`)
+        continue
+      }
+    }
     const builder = String(env.VM2API_BUILD_BUILDER || '').trim()
     const cgroup = String(env.VM2API_BUILD_CGROUP_PARENT || '').trim()
     const command = builder ? ['buildx', 'build', '--builder', builder, '--load'] : ['build']

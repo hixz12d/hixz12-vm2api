@@ -276,6 +276,68 @@ test('cli-hop rewrite clamps requested 1h to the kernel-compatible 5m TTL', () =
   assert.equal(body.messages[4].content[0].cache_control, undefined)
 })
 
+test('cli-hop rewrites a console 1h boundary to 5m so it cannot follow wrap tools', () => {
+  const body = prepareCliHopBody(
+    {
+      model: 'claude-sonnet-5',
+      max_tokens: 256,
+      tools: [{ name: 'Read', cache_control: { type: 'ephemeral', ttl: '5m' } }],
+      system: [{ type: 'text', text: 'caller system', cache_control: { type: 'ephemeral', ttl: '5m' } }],
+      messages: [
+        { role: 'user', content: 'u1' },
+        { role: 'assistant', content: 'a1' },
+        { role: 'user', content: 'u2' },
+        { role: 'assistant', content: 'a2' },
+        { role: 'user', content: 'u3' },
+      ],
+    },
+    { cacheTtl: '1h' },
+  )
+  assert.equal(body.tools[0].cache_control, undefined)
+  assert.equal(body.system[0].cache_control, undefined)
+  assert.deepEqual(body.messages[2].content[0].cache_control, { type: 'ephemeral', ttl: '5m' })
+  assert.equal(body.messages[4].content[0].cache_control, undefined)
+})
+
+test('cli-hop writes the Node-owned boundary at 5m when the console asks for 5m', () => {
+  const body = prepareCliHopBody(
+    {
+      model: 'claude-sonnet-5',
+      max_tokens: 256,
+      messages: [
+        { role: 'user', content: 'u1' },
+        { role: 'assistant', content: 'a1' },
+        { role: 'user', content: 'u2' },
+        { role: 'assistant', content: 'a2' },
+        { role: 'user', content: 'u3' },
+      ],
+    },
+    { cacheTtl: '5m' },
+  )
+  assert.deepEqual(body.messages[2].content[0].cache_control, { type: 'ephemeral', ttl: '5m' })
+  assert.equal(body.messages[4].content[0].cache_control, undefined)
+})
+
+test('official short cli-hop removes client markers owned by the kernel', () => {
+  const body = prepareCliHopBody(
+    {
+      model: 'claude-sonnet-5',
+      max_tokens: 256,
+      system: [{ type: 'text', text: CRS_OFFICIAL_AGENT_PROMPT, cache_control: { type: 'ephemeral', ttl: '1h' } }],
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'u1', cache_control: { type: 'ephemeral', ttl: '1h' } }] },
+        { role: 'assistant', content: 'a1' },
+        { role: 'user', content: [{ type: 'text', text: 'u2', cache_control: { type: 'ephemeral', ttl: '5m' } }] },
+      ],
+    },
+    { cacheTtl: null },
+  )
+  assert.equal(body.system[0].cache_control, undefined)
+  assert.equal(body.messages[0].content[0].cache_control, undefined)
+  assert.equal(body.messages[2].content[0].cache_control, undefined)
+  assert.equal(JSON.stringify(body).includes('"ttl":"1h"'), false)
+})
+
 test('cli-hop rewrite keeps sub2api penultimate user after dropping CLI last-user stamp', () => {
   const body = prepareCliHopBody({
     model: 'claude-sonnet-5',

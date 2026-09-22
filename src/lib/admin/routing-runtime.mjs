@@ -24,6 +24,7 @@ import { markVmRefreshError } from '../oauth/oauth-credentials.mjs'
 import { shouldMarkMissingRefresh } from '../pool/schedule-eligibility.mjs'
 import { normalizeCodexRouting } from '../protocol/codex-route.mjs'
 import { rustKernelHealth } from '../transport/rust-kernel-client.mjs'
+import { syncClaudeKernelConfigs } from '../transport/rust-kernel-supervisor.mjs'
 
 export function createRoutingRuntime(ctx) {
   const getRouting = () => (typeof ctx.getRoutingConfig === 'function' ? ctx.getRoutingConfig() : ctx.routingConfig)
@@ -223,6 +224,18 @@ export function createRoutingRuntime(ctx) {
     getNotify()?.setConfig(routingConfig.notify)
   }
 
+  function compatibilityTouchesKernel(compatibility) {
+    if (!compatibility || typeof compatibility !== 'object') return false
+    return (
+      Object.prototype.hasOwnProperty.call(compatibility, 'cache_ttl') ||
+      Object.prototype.hasOwnProperty.call(compatibility, 'persona_preset')
+    )
+  }
+
+  function syncKernelPanelConfig(routingConfig) {
+    return syncClaudeKernelConfigs(ctx.cfg.paths.project, routingConfig)
+  }
+
   function persistRoutingPatch(body = {}) {
     let routingConfig = getRouting()
     const prevOfficialCc = routingConfig.official_cc
@@ -275,6 +288,7 @@ export function createRoutingRuntime(ctx) {
     ctx.stickyRouter.reloadConfig(routingConfig)
     ctx.accountQuota.reloadConfig(routingConfig)
     getPool()?.reloadConfig?.(poolSchedulerConfig())
+    const kernelPersona = compatibilityTouchesKernel(body.compatibility) ? syncKernelPanelConfig(routingConfig) : null
     if (body.pool || body.failover) initPoolRuntime()
     try {
       return {
@@ -284,6 +298,7 @@ export function createRoutingRuntime(ctx) {
           body.inference && Object.prototype.hasOwnProperty.call(body.inference, 'session_slots')
             ? applyRoutingSessionSlots(nextSessionSlots)
             : { updated: 0, skipped: 0 },
+        kernel_persona: kernelPersona,
       }
     } catch (err) {
       console.error(
@@ -292,7 +307,7 @@ export function createRoutingRuntime(ctx) {
           error: String(err?.message || err),
         }),
       )
-      return { concurrency: { skipped: 0 }, rpm: { skipped: 0 } }
+      return { concurrency: { skipped: 0 }, rpm: { skipped: 0 }, kernel_persona: kernelPersona }
     }
   }
 

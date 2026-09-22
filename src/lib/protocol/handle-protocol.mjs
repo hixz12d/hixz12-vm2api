@@ -71,10 +71,17 @@ import { officialMessagesBody } from './anthropic-messages.mjs'
 import { prepareOutboundEnvelope, prepareCliHopBody, CLI_HOP_CACHE_TTL } from './outbound-attempt.mjs'
 import { loadVmIdentity, OFFICIAL_CLI_VERSION } from '../identity/vm-identity.mjs'
 import { touchTelemetrySession } from '../vm/worker-telemetry.mjs'
-import { extractCallerSession, resolveOutboundSessionId } from '../identity/identity-rewrite.mjs'
+import {
+  applyCrsIdentityReplace,
+  extractCallerSession,
+  resolveOutboundSessionId,
+  sessionContextDiscriminator,
+} from '../identity/identity-rewrite.mjs'
+import { clientIp } from '../pool/sticky-router.mjs'
 import {
   applyCrsUnofficialPersona,
   detectProxiedOfficialCcFromRoutingFile,
+  extractFirstUserText,
   isOfficialClaudeCodeTraffic,
   isProxiedOfficialClaudeCode,
   personaHidesUsageFromRoutingFile,
@@ -90,6 +97,7 @@ import {
 import { applyCacheTtlToUsage, cacheBreakpointsFromRoutingFile, resolveCacheTtl } from './cache-ttl.mjs'
 import { ensureClaudeWebSearch, shouldInjectClaudeWebSearch } from './web-search.mjs'
 import { dispatchStreamInference } from '../transport/kernel-router.mjs'
+import { syncClaudeKernelConfigsFromFile } from '../transport/rust-kernel-supervisor.mjs'
 import { ensureWorkerCredential } from '../transport/go-worker-client.mjs'
 import { formatPoolSelectionSummary } from '../pool/pool-scheduler.mjs'
 import { extraHeadersFromLimitError } from '../pool/account-quota.mjs'
@@ -207,16 +215,20 @@ export function createHandleProtocol(deps) {
 
   function rememberRefusal({ inbound, body, result, logBag, requestId }) {
     if (!refusalEnabled()) return
-    if (!isUpstreamRefusal(result, logBag)) return
+    const contentRefusal = isUpstreamRefusal(result, logBag)
+    const timed = result?.policy?.rememberRefusal === true
+    if (!contentRefusal && !timed) return
     const repo = refusalRepo()
     if (!repo) return
     try {
+      const ttl = Number(result?.policy?.refusalTtlMs) || 0
       repo.remember({
         fingerprint: refusalFingerprint(body, inbound),
         model: body?.model || inbound?.model || '',
         requestId,
         errorMessage: logBag.error_message || result?.body?.error?.message || null,
         preview: refusalPreview(body, inbound),
+        expiresAt: contentRefusal || ttl <= 0 ? null : new Date(Date.now() + ttl).toISOString(),
       })
     } catch {}
   }
@@ -424,8 +436,20 @@ export function createHandleProtocol(deps) {
       logBag.error_message = errorResult.body?.error?.message || null
       return json(res, errorResult.status, errorResult.body)
     }
+    // Codex returns before conversion. Scan here so distill / refusal never reach a slot.
+    if (applyDistillGuard({ req, inbound, body: ctx.body, fp, logBag, requestId: logCtx.request_id, res })) {
+      return
+    }
+    if (applyRefusalGuard({ inbound, body: ctx.body, logBag, requestId: logCtx.request_id, res })) {
+      return
+    }
     if (platform.platform === 'openai') {
       const routing = getRouting() || {}
+      const codexSticky = {
+        stickyRouter,
+        sessions: accountQuota?.sessions || null,
+        body: ctx.body,
+      }
       if (protocol === 'anthropic.messages') {
         const codex = normalizeCodexRouting(routing.codex)
         return handleCodexProtocol({
@@ -450,6 +474,7 @@ export function createHandleProtocol(deps) {
             },
           },
           projectRoot: cfg.paths.project,
+          ...codexSticky,
         })
       }
       return handleCodexProtocol({
@@ -464,6 +489,7 @@ export function createHandleProtocol(deps) {
         writeSSEHeaders,
         routing,
         projectRoot: cfg.paths.project,
+        ...codexSticky,
       })
     }
     if (protocol === 'openai.responses') {
@@ -519,17 +545,39 @@ export function createHandleProtocol(deps) {
     const officialTraffic =
       isOfficialClaudeCodeTraffic(req.headers, inbound) ||
       (detectProxiedOfficialCcFromRoutingFile(routingConfigPath) && isProxiedOfficialClaudeCode(inbound))
-    const outboundSessionId = resolveOutboundSessionId(extractCallerSession({ inbound, headers: req.headers }), {
-      officialClient: officialTraffic,
+    const callerSession = extractCallerSession({ inbound, body: ctx.body, headers: req.headers })
+    const firstUserText = extractFirstUserText(ctx.body?.messages) || extractFirstUserText(inbound?.messages)
+    const clientDiscriminator = sessionContextDiscriminator({
+      clientIp: clientIp(req),
+      userAgent: req.headers['user-agent'] || '',
+      apiKeyId: req.apiKeyRecord?.id ?? '',
     })
-    let cacheTtl = resolveCacheTtl({
+    const sessionContext = {
+      officialClient: officialTraffic,
+      clientDiscriminator,
+      firstUserText,
+    }
+    // Family device_id wins when already bound so a child hop cannot open a second VM session.
+    const stickyKey = stickyRouter?.extractPoolKey?.(req, inbound, { platform: 'anthropic' }) || null
+    const stickyKeys = stickyRouter?.collectPoolKeys?.(req, inbound, { platform: 'anthropic' }) || []
+    const stickyBound =
+      stickyKey && typeof stickyRouter?.resolve === 'function' ? stickyRouter.resolve(stickyKey) : null
+    const outboundSessionId = resolveOutboundSessionId(callerSession, {
+      ...sessionContext,
+      accountId: stickyBound?.accountId || '',
+      boundSessionId: stickyBound?.sessionId || '',
+      boundAccountId: stickyBound?.accountId || '',
+    })
+    const requestedCacheTtl = resolveCacheTtl({
       headers: req.headers,
       body: inbound,
       routingFile: routingConfigPath,
       officialTraffic,
     })
+    let cacheTtl = requestedCacheTtl
     const cacheBreakpoints = cacheBreakpointsFromRoutingFile(routingConfigPath)
     const openaiCompat = String(protocol || '').startsWith('openai.')
+    syncClaudeKernelConfigsFromFile(cfg.paths?.project, routingConfigPath)
     const personaMode = personaModeFromRoutingFile(routingConfigPath)
     if (!officialClient && !officialTraffic) {
       ctx.body = ensureClaudeWebSearch(ctx.body, {
@@ -665,10 +713,6 @@ export function createHandleProtocol(deps) {
     }
 
     const canonicalBody = officialMessagesBody(ctx.body)
-    // Family key (device_id) first so Agent/local-agent sub-hops stay on the
-    // parent account even when persona classifies them unofficial.
-    const stickyKey = stickyRouter.extractPoolKey(req, inbound)
-    const stickyKeys = stickyRouter.collectPoolKeys(req, inbound)
     const streamKeepaliveMs = Number(
       getRouting()?.failover?.stream_keepalive_ms ?? cfg.limits.stream_keepalive_ms ?? 15_000,
     )
@@ -730,6 +774,12 @@ export function createHandleProtocol(deps) {
             touchTelemetrySession(cfg.paths.project, selected.vmId)
           } catch {}
           const identity = loadVmIdentity(selected.exec)
+          const attemptSessionId = resolveOutboundSessionId(callerSession, {
+            ...sessionContext,
+            accountId: selected.accountId,
+            boundSessionId: stickyBound?.sessionId || '',
+            boundAccountId: stickyBound?.accountId || '',
+          })
           const credMode = credentialModeFromOauth(selected.vm?.claude || {})
           const modeOverride = slotPersonaModeOverride(selected.vm)
           const routingNow = getRouting()
@@ -746,7 +796,7 @@ export function createHandleProtocol(deps) {
                 routingFile: routingConfigPath,
                 mode: resolvedPersona,
                 headers: req.headers,
-                sessionId: outboundSessionId,
+                sessionId: attemptSessionId,
                 model: personaIn?.model,
                 cliVersion: OFFICIAL_CLI_VERSION,
                 identity,
@@ -758,9 +808,19 @@ export function createHandleProtocol(deps) {
               repaired,
               cacheBreakpoints,
               cacheControlLimit: Number(getRouting()?.compatibility?.cache_control_limit) || 4,
+              cacheTtl,
               unofficial: !officialTraffic,
             })
             hopBody = await materializeRemoteImageSources(hopBody)
+            if (identity) {
+              hopBody = applyCrsIdentityReplace(hopBody, identity, inbound, req.headers, {
+                officialClient: officialTraffic,
+                sessionId: attemptSessionId,
+                accountId: selected.accountId,
+                boundSessionId: stickyBound?.sessionId || '',
+                boundAccountId: stickyBound?.accountId || '',
+              })
+            }
             if (getRouting()?.logging?.mode === 'debug') logBag.outbound_body = hopBody
 
             const cliHide = personaHideForCliZero(personaIn, hopBody, {
@@ -773,16 +833,17 @@ export function createHandleProtocol(deps) {
             logBag.official_cc_inference = 'cli-hop'
             logBag.provider = 'local_cli'
             logBag.outbound_summary = summarizeBody(hopBody)
-            return { body: hopBody, meta: { toolNames: {} } }
+            return { body: hopBody, meta: { toolNames: {}, sessionId: attemptSessionId } }
           }
 
+          cacheTtl = requestedCacheTtl
           if (!officialTraffic && modeOverride) {
             const rewritten = applyCrsUnofficialPersona(structuredClone(personaIn), {
               officialClient: officialTraffic,
               routingFile: routingConfigPath,
               mode: modeOverride,
               headers: req.headers,
-              sessionId: outboundSessionId,
+              sessionId: attemptSessionId,
               model: personaIn?.model,
               cliVersion: OFFICIAL_CLI_VERSION,
               identity,
@@ -804,7 +865,13 @@ export function createHandleProtocol(deps) {
             identity,
             unofficial: !officialTraffic,
             officialClient: officialTraffic,
-            sessionId: outboundSessionId,
+            sessionId: attemptSessionId,
+            accountId: selected.accountId,
+            boundSessionId: stickyBound?.sessionId || '',
+            boundAccountId: stickyBound?.accountId || '',
+            clientDiscriminator,
+            firstUserText,
+            apiKeyId: req.apiKeyRecord?.id ?? '',
             stream: upstreamStream,
             cacheControlLimit: Number(getRouting()?.compatibility?.cache_control_limit) || 4,
             toolNameRewrite: openaiCompat ? false : getRouting()?.compatibility?.tool_name_rewrite !== false,
@@ -819,7 +886,7 @@ export function createHandleProtocol(deps) {
           if (getRouting()?.logging?.mode === 'debug') logBag.outbound_body = prepared.body
           logBag.outbound_headers = redactHeaders(prepared.headers || {})
           logBag.outbound_summary = summarizeBody(prepared.body)
-          return { body: prepared.body, meta: { toolNames: prepared.toolNames } }
+          return { body: prepared.body, meta: { toolNames: prepared.toolNames, sessionId: attemptSessionId } }
         },
         callAttempt: async ({ candidate, body, attemptMeta, deliveryMode: attemptDelivery, signal, onCommit }) => {
           if (!clientStream) {
@@ -832,6 +899,7 @@ export function createHandleProtocol(deps) {
               signal,
               deliveryMode: attemptDelivery,
               toolNames: attemptMeta?.toolNames || {},
+              cacheTtl,
               want1m,
               routing: getRouting(),
               noGoFallback: !!pinVmId,
@@ -859,6 +927,7 @@ export function createHandleProtocol(deps) {
           try {
             return await dispatchStreamInference({
               exec: candidate.exec,
+              cacheTtl,
               body,
               reqHeaders: req.headers,
               timeoutMs: cfg.limits.upstream_timeout_ms,

@@ -5,6 +5,16 @@ ROOT="${KIN_PROJECT_ROOT:-/opt/vm2api}"
 IMAGE_BIN="/opt/vm2api/image-bin"
 mkdir -p "$ROOT/vms" "$ROOT/data" "$ROOT/bin"
 
+# 镜像安装没有仓库 checkout：把镜像内默认配置补进被 bind-mount 覆盖的 src/config。
+mkdir -p "$ROOT/src/config"
+if [ -d /opt/vm2api/image-config ]; then
+  for f in /opt/vm2api/image-config/*; do
+    [ -f "$f" ] || continue
+    dest="$ROOT/src/config/$(basename "$f")"
+    [ -f "$dest" ] || cp "$f" "$dest"
+  done
+fi
+
 if [ ! -f "$ROOT/vms/active.json" ]; then
   printf '%s\n' '{ "active_vm": "vm-01" }' > "$ROOT/vms/active.json"
 fi
@@ -70,12 +80,12 @@ fi
 if [ ! -S /var/run/docker.sock ]; then
   echo "vm2api: /var/run/docker.sock not mounted; slot create/start will fail." >&2
 elif [ -f /opt/vm2api/docker/kin-os/build.mjs ]; then
-  # Every OS offered by the panel needs its host-local image, not only Ubuntu.
-  # Production deployments may prebuild under a capped builder and only check here.
+  # Production deployments prebuild under a capped builder and only check here.
   case "${VM2API_SLOT_IMAGE_MODE:-build}" in
     build) node /opt/vm2api/docker/kin-os/build.mjs ;;
     check) node /opt/vm2api/docker/kin-os/build.mjs --check ;;
-    *) echo "vm2api: VM2API_SLOT_IMAGE_MODE must be build or check" >&2; exit 1 ;;
+    pull) node /opt/vm2api/docker/kin-os/build.mjs --pull-only ;;
+    *) echo "vm2api: VM2API_SLOT_IMAGE_MODE must be build, check or pull" >&2; exit 1 ;;
   esac
 fi
 

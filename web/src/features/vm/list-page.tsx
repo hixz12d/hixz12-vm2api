@@ -93,6 +93,18 @@ export function VmListPage() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
+  const clearCooldown = useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/panel/vms/${encodeURIComponent(id)}/cooldown/clear`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }),
+    onSuccess: async () => {
+      toast.success('已恢复冷却并刷新状态')
+      await qc.invalidateQueries({ queryKey: vmsListQueryOptions().queryKey })
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
   const vms: Vm[] = vmsQ.data?.items || []
   const accounts = usage.data?.accounts
   const canCreate =
@@ -191,6 +203,8 @@ export function VmListPage() {
           view === 'grid' ? (
             <VmCards
               vms={list}
+              accounts={accounts}
+              onClearCooldown={(vm) => clearCooldown.mutate(vm.id)}
               onReset={(vm) => {
                 setResetInput('')
                 setResetTarget(vm)
@@ -204,6 +218,7 @@ export function VmListPage() {
             <VmTable
               vms={list}
               accounts={accounts}
+              onClearCooldown={(vm) => clearCooldown.mutate(vm.id)}
               onReset={(vm) => {
                 setResetInput('')
                 setResetTarget(vm)
