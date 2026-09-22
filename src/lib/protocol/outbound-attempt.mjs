@@ -43,6 +43,7 @@ import {
   stripIllegalCacheControlFields,
 } from './cache-ttl.mjs'
 import { apiKeyBetaHeader, setupTokenBetaHeader } from './claude-code-betas.mjs'
+import { applyOpus55RequestRules } from './model-policy.mjs'
 import { isApiKeyMode, isSetupTokenMode } from '../oauth/credential-mode.mjs'
 
 export const INFERENCE_UA = 'kin-inference/1.0'
@@ -254,6 +255,7 @@ export function prepareCliHopBody(
     body = ensureClearThinkingContextManagement(body)
   }
   body = stripInvalidThinkingBlocks(body)
+  body = applyOpus55RequestRules(body)
   body = alignSamplingWithThinking(body)
   const ttl = CLI_HOP_CACHE_TTL
   body = stripIllegalCacheControlFields(body)
