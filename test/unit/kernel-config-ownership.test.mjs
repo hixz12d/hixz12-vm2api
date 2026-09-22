@@ -8,8 +8,9 @@ import { writeKernelConfig } from '../../src/lib/transport/rust-kernel-superviso
 
 const rootLinux = process.platform === 'linux' && process.getuid?.() === 0
 const options = { skip: !rootLinux && 'requires Linux root to exercise a distinct slot uid/gid' }
-const uid = 10002
-const gid = 987
+// A live slot can retain an owner that differs from the current VM defaults.
+const uid = 12002
+const gid = 1987
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-config-owner-'))

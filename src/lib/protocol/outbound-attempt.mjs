@@ -113,13 +113,90 @@ function dropLastMessageBreakpoint(body) {
   return { ...body, messages: next }
 }
 
+/** Official Claude Code 2.1.278 context block. A live counter here changes the cached prefix. */
+const OFFICIAL_CONTEXT_BUDGET = '<total_tokens>15000000 tokens left</total_tokens>'
+const VOLATILE_CONTEXT_BUDGET = /<total_tokens>\d+ tokens left<\/total_tokens>/g
+
+function stabilizeOfficialContextBudget(text) {
+  const raw = String(text ?? '')
+  if (!raw.includes('<total_tokens>')) return raw
+  return raw.replace(VOLATILE_CONTEXT_BUDGET, OFFICIAL_CONTEXT_BUDGET)
+}
+
+/** system[] is before every message breakpoint. A per-turn token counter there
+ * makes the next turn rewrite the whole prefix instead of reading it. */
+function stabilizeSystemBudget(body) {
+  if (!body || body.system == null) return body
+  if (typeof body.system === 'string') {
+    const text = stabilizeOfficialContextBudget(body.system)
+    return text === body.system ? body : { ...body, system: text }
+  }
+  if (!Array.isArray(body.system)) return body
+  let changed = false
+  const system = body.system.map((block) => {
+    if (typeof block === 'string') {
+      const text = stabilizeOfficialContextBudget(block)
+      if (text === block) return block
+      changed = true
+      return text
+    }
+    if (!block || typeof block !== 'object' || typeof block.text !== 'string') return block
+    const text = stabilizeOfficialContextBudget(block.text)
+    if (text === block.text) return block
+    changed = true
+    return { ...block, text }
+  })
+  return changed ? { ...body, system } : body
+}
+
+function stabilizeBlockBudget(block) {
+  if (typeof block === 'string') return stabilizeOfficialContextBudget(block)
+  if (!block || typeof block !== 'object') return block
+  let next = block
+  if (typeof block.text === 'string') {
+    const text = stabilizeOfficialContextBudget(block.text)
+    if (text !== block.text) next = { ...next, text }
+  }
+  if (typeof block.content === 'string') {
+    const content = stabilizeOfficialContextBudget(block.content)
+    if (content !== block.content) next = { ...next, content }
+  }
+  return next
+}
+
+/** Historical role=system reminders sit inside the next lookup prefix. */
+function stabilizeMessageBudgets(body) {
+  if (!Array.isArray(body?.messages)) return body
+  let changed = false
+  const messages = body.messages.map((message) => {
+    const content = message?.content
+    if (typeof content === 'string') {
+      const text = stabilizeOfficialContextBudget(content)
+      if (text === content) return message
+      changed = true
+      return { ...message, content: text }
+    }
+    if (!Array.isArray(content)) return message
+    let touched = false
+    const next = content.map((block) => {
+      const stabilized = stabilizeBlockBudget(block)
+      if (stabilized !== block) touched = true
+      return stabilized
+    })
+    if (!touched) return message
+    changed = true
+    return { ...message, content: next }
+  })
+  return changed ? { ...body, messages } : body
+}
+
 /** A CLI hop must end on a conversational user/assistant turn. Preserve older
  * role=system leftovers in place, but lift only a trailing run to system[]. */
 function liftTrailingSystemMessages(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : []
   let firstTrailing = messages.length
   while (firstTrailing > 0 && messages[firstTrailing - 1]?.role === 'system') firstTrailing--
-  if (firstTrailing === messages.length) return body
+  if (firstTrailing === messages.length) return stabilizeSystemBudget(body)
   const lifted = messages.slice(firstTrailing).flatMap((message) => {
     const content = message?.content
     if (typeof content === 'string') return content.trim() ? [{ type: 'text', text: content }] : []
@@ -128,13 +205,19 @@ function liftTrailingSystemMessages(body) {
       .map((block) => (typeof block === 'string' ? { type: 'text', text: block } : block))
       .filter((block) => block?.type === 'text' && String(block.text || '').trim())
   })
-  if (!lifted.length) return { ...body, messages: messages.slice(0, firstTrailing) }
+  if (!lifted.length) {
+    return stabilizeSystemBudget({ ...body, messages: messages.slice(0, firstTrailing) })
+  }
   const system = Array.isArray(body.system)
     ? body.system
     : body.system == null
       ? []
       : [{ type: 'text', text: String(body.system) }]
-  return { ...body, system: [...system, ...lifted], messages: messages.slice(0, firstTrailing) }
+  return stabilizeSystemBudget({
+    ...body,
+    system: [...system, ...lifted],
+    messages: messages.slice(0, firstTrailing),
+  })
 }
 
 /** Caller fields only. CLI owns UA / billing / metadata / layoutSystemBlocks. */
@@ -145,16 +228,23 @@ export function prepareCliHopBody(
     repaired = false,
     cacheBreakpoints = CLI_HOP_CACHE_BREAKPOINTS,
     cacheControlLimit = 4,
-    cacheTtl = CLI_HOP_CACHE_TTL,
+    cacheTtl = null,
     unofficial: _unofficial = false,
   } = {},
 ) {
   let body = officialMessagesBody(canonicalBody, { stream })
   delete body.metadata
+  // Wrap CLI (Claude Code) throws a fatal "max_output_tokens" error if response reaches max_tokens.
+  // Probes, ping tests, and third-party UI connection checks send max_tokens: 1 (or small numbers).
+  // Ensure a safe minimum for cli-hop so output finishes with end_turn rather than hitting max_tokens.
+  if (body.max_tokens != null && Number(body.max_tokens) < 64) {
+    body.max_tokens = 1024
+  }
   const leftover = stripCliOwnedSystem(body.system)
   if (leftover == null) delete body.system
   else body.system = leftover
   body = liftTrailingSystemMessages(body)
+  body = stabilizeMessageBudgets(body)
 
   if (!repaired) {
     body = ensureUnofficialAdaptiveThinking(body)

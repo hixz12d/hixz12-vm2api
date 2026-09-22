@@ -197,6 +197,22 @@ function canRetrySameAccount(policy, used, config, hopMs) {
   return hopMs < maxHopMs
 }
 
+function dropIncompleteSession(scheduler, selected, bindKeys, result, policy) {
+  if (
+    policy?.reason !== 'incomplete_assistant' &&
+    result?.terminalState !== 'incomplete' &&
+    !isIncompleteAssistantMessage(result)
+  ) {
+    return
+  }
+  const sessions = scheduler?.accountQuota?.sessions
+  for (const key of bindKeys) {
+    try {
+      sessions?.drop?.(selected?.accountId, key)
+    } catch {}
+  }
+}
+
 function applyCooldown(scheduler, selected, policy, model, stickyRouter = null, { diagnosticPin = false } = {}) {
   if (policy?.action !== 'continue-and-cooldown' && policy?.action !== 'disable' && policy?.action !== 'pause') return
   // VM / master pin is a diagnostic. A 401 from the wrong inbound class
@@ -445,6 +461,8 @@ export class FailoverRunner {
           },
           this.scheduler?.accountQuota,
         )
+        dropIncompleteSession(this.scheduler, selected, bindKeys, result, policy)
+
         lastResult = result
         lastPolicy = policy
         notifyProxyFailure(this.onProxyFailure, selected, policy)
@@ -593,6 +611,7 @@ export class FailoverRunner {
           },
           this.scheduler?.accountQuota,
         )
+        dropIncompleteSession(this.scheduler, selected, bindKeys, result, policy)
         lastResult = result
         lastPolicy = policy
         notifyProxyFailure(this.onProxyFailure, selected, policy)

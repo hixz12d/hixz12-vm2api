@@ -140,7 +140,7 @@ test('response-header timeout does not cool the account', () => {
   assert.equal(shouldContinue(policy), true)
 })
 
-test('generic 502 pauses scheduling for one hour instead of failing over', () => {
+test('generic 502 overload switches accounts after a short cooldown', () => {
   const policy = classifyUpstreamResult(
     {
       status: 502,
@@ -148,11 +148,28 @@ test('generic 502 pauses scheduling for one hour instead of failing over', () =>
     },
     { now: 1000 },
   )
-  assert.equal(policy.action, 'pause')
-  assert.equal(policy.reason, 'provider_pause')
-  assert.equal(policy.cooldownUntil, 1000 + 60 * 60 * 1000)
-  assert.equal(policy.rememberRefusal, true)
-  assert.equal(shouldContinue(policy), false)
+  assert.equal(policy.action, 'continue-and-cooldown')
+  assert.equal(policy.reason, 'provider_overloaded')
+  assert.equal(policy.cooldownUntil, 16_000)
+  assert.equal(policy.retrySameAccount, false)
+  assert.equal(shouldContinue(policy), true)
+})
+
+test('slot_busy 503 does not park the account', () => {
+  const policy = classifyUpstreamResult(
+    {
+      status: 503,
+      body: {
+        type: 'error',
+        error: { type: 'worker_error', code: 'slot_busy', message: 'rust kernel has no free slot' },
+      },
+    },
+    { now: 1000 },
+  )
+  assert.equal(policy.action, 'continue')
+  assert.equal(policy.reason, 'slot_busy')
+  assert.equal(policy.cooldownUntil, null)
+  assert.equal(policy.retrySameAccount, false)
 })
 
 test('a 502 plan-limit message switches accounts instead of pausing', () => {

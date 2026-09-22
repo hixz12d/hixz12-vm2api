@@ -5,6 +5,65 @@ import { CRS_OFFICIAL_SYSTEM, CRS_OFFICIAL_CLI_SYSTEM } from '../../src/lib/iden
 import { CRS_OFFICIAL_AGENT_PROMPT } from '../../src/lib/identity/official-cc-system-2.1.241.mjs'
 import { resolveCacheTtl } from '../../src/lib/protocol/cache-ttl.mjs'
 
+test('cli-hop freezes the lifted context budget while preserving the fork cache boundary', () => {
+  const budget = (n) => `<system-reminder>\n<total_tokens>${n} tokens left</total_tokens>\n</system-reminder>`
+  const stable = budget(15000000)
+  const first = prepareCliHopBody({
+    model: 'claude-sonnet-5',
+    max_tokens: 256,
+    system: [{ type: 'text', text: 'persona' }],
+    messages: [
+      { role: 'user', content: 'u1' },
+      { role: 'assistant', content: 'a1' },
+      { role: 'user', content: 'u2' },
+      { role: 'system', content: budget(14955783) },
+    ],
+  })
+  const second = prepareCliHopBody({
+    model: 'claude-sonnet-5',
+    max_tokens: 256,
+    system: [{ type: 'text', text: 'persona' }],
+    messages: [
+      { role: 'user', content: 'u1' },
+      { role: 'assistant', content: 'a1' },
+      { role: 'user', content: 'u2' },
+      { role: 'system', content: budget(14955783) },
+      { role: 'assistant', content: 'a2' },
+      { role: 'user', content: 'u3' },
+      { role: 'system', content: budget(14947383) },
+    ],
+  })
+  assert.equal(first.system.at(-1).text, stable)
+  assert.equal(second.system.at(-1).text, stable)
+  assert.deepEqual(
+    first.system.map((block) => block.text),
+    second.system.map((block) => block.text),
+  )
+  assert.equal(second.messages[3].role, 'system')
+  assert.equal(second.messages[3].content[0].text, stable)
+  assert.deepEqual(second.messages[2].content[0].cache_control, { type: 'ephemeral', ttl: '5m' })
+  assert.deepEqual(
+    second.messages.slice(0, 3).map((message) => message.content[0].text),
+    first.messages.map((message) => message.content[0].text),
+  )
+})
+
+test('prepareCliHopBody clamps small max_tokens to 1024 for automated probe tests', () => {
+  for (const [requested, expected] of [
+    [1, 1024],
+    [32, 1024],
+    [64, 64],
+    [4096, 4096],
+  ]) {
+    const body = prepareCliHopBody({
+      model: 'claude-haiku-4-5',
+      max_tokens: requested,
+      messages: [{ role: 'user', content: 'ping' }],
+    })
+    assert.equal(body.max_tokens, expected)
+  }
+})
+
 test('prepareCliHopBody drops metadata and CLI-owned system but keeps official agent leftover', () => {
   const body = prepareCliHopBody({
     model: 'claude-sonnet-5',

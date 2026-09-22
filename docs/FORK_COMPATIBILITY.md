@@ -1,5 +1,11 @@
 # Fork 运行兼容性
 
+## 上游主分支同步（be318b3）
+
+本次从 v1.3.18 同步至上游 `be318b3`，包含 v1.3.26 发布后回退 CLI 缓存改动的提交。保留下述 fork CLI 5m 与历史 user 边界策略，同时纳入上游的上下文 token 计数稳定化、小 `max_tokens` 探测修复、账号调度、额度释放、控制台日志图表和内核更新功能。直接 API 请求仍遵循原有 TTL 配置。
+
+`kernel.json` 原子替换继续保留已有非 root 属主，新增文件或旧 root 属主文件采用配置的槽位 uid/gid；内容未变化时也修复 root 属主。设置属主失败必须在替换正式配置之前抛出，保留旧配置并清理临时文件。流式终止校验、同会话串行、watchdog、本地槽位镜像与 native session 数量覆盖继续保留。
+
 ## CLI 缓存 TTL
 
 合并上游 v1.3.17 后，CLI hop 继续在 `prepareCliHopBody` 中统一采用 5m，包括官方 Claude Code 请求、显式请求 1h、关闭自动断点时保留的历史标记。新版 kernel 支持 `default_cache_ttl` 热投影及请求级 TTL；但 wrap 的 tools/system 仍会出现无 ttl（即 5m）的标记，因此 CLI hop 仍强制 5m，避免其后出现 1h。Node 维护历史 user 边界，移除由 kernel 重建的 tools/system/当前尾部标记；工具调用内容保留。即使官方请求解析 TTL 为 null，也仍执行这套边界处理。
