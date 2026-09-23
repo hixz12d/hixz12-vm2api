@@ -41,6 +41,12 @@ v1.3.7 的 `mergeAssembledAssistantHop` 保留真实上游错误，不允许空 
 
 串行队列仅作用于当前控制面进程。排队取消通过请求 AbortSignal 处理；既有 failover 重试预算仍在取得 session 执行权后开始计算，不应把它理解为跨进程锁或新增的总请求超时。
 
+## 标题任务与工具输出（2026-09-23）
+
+Claude Agent SDK 的标题请求与主任务共用 caller session，而且标题请求的 `max_tokens` 也可能是 32000。现在只对符合明确标题 system 提示、单条 `<session>` user 消息、无工具且未启用 thinking 的 Claude 请求派生稳定的标题子会话。队列 key 和发往内核的 session 同时隔离，普通主任务继续串行；标题请求仍受账号并发、Key、额度和 native slots 限制。未识别的辅助请求保持原行为，不按输出预算或无工具一概放行。
+
+蒸馏规则只提取用户与 system/developer 的文本指令，排除 Anthropic `tool_result` 和 OpenAI 工具输出。读取包含规则示例的源码、日志或 CHANGELOG 不再污染后续会话；同条消息中直接给出的用户指令仍然检查。保留原有蒸馏规则与开关。
+
 ## Watchdog 保护
 
 保留 fork 对继承 Rust 配置的运行中 Claude VM 的检查，排除 Codex、KVM 和已停止 VM。默认每 5 秒检查：只有 kernel 无空闲位置、没有实际 hop、最近 hop 已结束至少 10 秒，再连续观察 10 秒后才回收。正常执行中的长请求与健康空闲 kernel 不会因此重启。不能直接用上游旧版 watchdog 覆盖此保护。

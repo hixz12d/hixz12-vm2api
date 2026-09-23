@@ -108,14 +108,18 @@ function contentToText(content) {
     return content
       .map((part) => {
         if (typeof part === 'string') return part
+        // Tool output is evidence, not a caller instruction. Scanning it makes
+        // reading this detector or its changelog poison every subsequent turn.
+        if (part?.type && !['text', 'input_text', 'message'].includes(part.type)) return ''
+        if (part?.role && !['user', 'system', 'developer'].includes(part.role)) return ''
         if (part && typeof part.text === 'string') return part.text
-        if (part && typeof part.content === 'string') return part.content
+        if (part?.content != null) return contentToText(part.content)
         return ''
       })
       .filter(Boolean)
       .join('\n')
   }
-  if (content && typeof content.text === 'string') return content.text
+  if (content && typeof content === 'object') return contentToText([content])
   return ''
 }
 
