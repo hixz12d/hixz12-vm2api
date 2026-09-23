@@ -100,12 +100,13 @@ import {
   pinConversationCacheTtl,
   resolveCacheTtl,
 } from './cache-ttl.mjs'
+import { trackCachePrefix } from './cache-prefix.mjs'
 import { ensureClaudeWebSearch, shouldInjectClaudeWebSearch } from './web-search.mjs'
 import { dispatchStreamInference } from '../transport/kernel-router.mjs'
 import { syncClaudeKernelConfigsFromFile } from '../transport/rust-kernel-supervisor.mjs'
 import { ensureWorkerCredential } from '../transport/go-worker-client.mjs'
 import { formatPoolSelectionSummary } from '../pool/pool-scheduler.mjs'
-import { extraHeadersFromLimitError } from '../pool/account-quota.mjs'
+import { extraHeadersFromLimitError, isPlanLimitMessage } from '../pool/quota-window.mjs'
 import { getVm } from '../vm/vm-registry.mjs'
 import { credentialModeFromOauth, isApiKeyMode } from '../oauth/credential-mode.mjs'
 import {
@@ -153,7 +154,7 @@ export function createHandleProtocol(deps) {
     const official =
       isOfficialClaudeCodeTraffic(req.headers, inbound) ||
       isOfficialClaudeClient(fp.client_class) ||
-      (detectProxiedOfficialCcFromRoutingFile(routingConfigPath) && isProxiedOfficialClaudeCode(inbound))
+      (detectProxiedOfficialCcFromRoutingFile(routingConfigPath) && isProxiedOfficialClaudeCode(inbound, req.headers))
     const zeroInject = isZeroInjectMode()
     const hit = detectDistill({ inbound, body, official, zeroInject }, cfg.distill)
     if (hit.action !== 'block') return false
@@ -249,6 +250,7 @@ export function createHandleProtocol(deps) {
     toolNames = {},
     want1m = false,
     preserveCacheBreakpoints = false,
+    cliHop = false,
     routing = {},
     noGoFallback = false,
   }) {
@@ -265,6 +267,7 @@ export function createHandleProtocol(deps) {
       want1m,
       routing,
       preserveCacheBreakpoints,
+      cliHop,
       slotWaitMs: candidate.slotWaitMs,
       noGoFallback,
       ensureCredential: (exec) => ensureWorkerCredential(exec),
@@ -552,7 +555,7 @@ export function createHandleProtocol(deps) {
     const officialClient = isOfficialClaudeClient(fp.client_class)
     const officialTraffic =
       isOfficialClaudeCodeTraffic(req.headers, inbound) ||
-      (detectProxiedOfficialCcFromRoutingFile(routingConfigPath) && isProxiedOfficialClaudeCode(inbound))
+      (detectProxiedOfficialCcFromRoutingFile(routingConfigPath) && isProxiedOfficialClaudeCode(inbound, req.headers))
     const callerSession = extractCallerSession({ inbound, body: ctx.body, headers: req.headers })
     const firstUserText = extractFirstUserText(ctx.body?.messages) || extractFirstUserText(inbound?.messages)
     const clientDiscriminator = sessionContextDiscriminator({
@@ -762,6 +765,15 @@ export function createHandleProtocol(deps) {
     // Pin is panel test-chat / diagnostics (manage). Unpinned /v1 is dispatch.
     const ownerScope = pinVmId ? { type: 'any' } : ownerScopeFromRequest(req, apiKeyStore?.users)
     const healthReal = isHealthRealBypass(req.headers)
+    // Cache lives per account; a failover to another account starts cold by design.
+    const noteCachePrefix = (selected, sessionId, body) => {
+      if (!sessionId) return
+      const prefix = trackCachePrefix(`${selected.accountId}:${sessionId}`, body)
+      logBag.cache_prefix = prefix
+      if (!prefix?.break) return
+      const where = prefix.break.section === 'messages' ? `messages[${prefix.break.index}]` : prefix.break.section
+      console.warn(`[cache-prefix] request ${logCtx.request_id} turn ${prefix.turn} broke at ${where}`)
+    }
     let result
     try {
       result = await getFailoverRunner().run({
@@ -831,17 +843,22 @@ export function createHandleProtocol(deps) {
             }
             if (getRouting()?.logging?.mode === 'debug') logBag.outbound_body = hopBody
 
-            const cliHide = personaHideForCliZero(personaIn, hopBody, {
-              officialClient: officialTraffic,
-              timezone: selected.vm?.timezone || selected.vm?.fingerprint?.timezone,
-            })
+            // 0注入 hides CLI billing + env. 官方提示词 must show real usage.
+            const cliHide =
+              resolvedPersona === 'official'
+                ? 0
+                : personaHideForCliZero(personaIn, hopBody, {
+                    officialClient: officialTraffic,
+                    timezone: selected.vm?.timezone || selected.vm?.fingerprint?.timezone,
+                  })
             personaHideTokens = cliAppliesNodePersona ? (Number(personaHideTokens) || 0) + cliHide : cliHide
             logBag.inference_engine = resolveInferenceEngine(selected.vm, routingNow)
             logBag.persona_preset = resolveSlotPersonaPreset(selected.vm, routingNow)
             logBag.official_cc_inference = 'cli-hop'
             logBag.provider = 'local_cli'
             logBag.outbound_summary = summarizeBody(hopBody)
-            return { body: hopBody, meta: { toolNames: {}, sessionId: attemptSessionId } }
+            noteCachePrefix(selected, attemptSessionId, hopBody)
+            return { body: hopBody, meta: { toolNames: {}, sessionId: attemptSessionId, cliHop: true } }
           }
 
           cacheTtl = requestedCacheTtl
@@ -894,6 +911,7 @@ export function createHandleProtocol(deps) {
           if (getRouting()?.logging?.mode === 'debug') logBag.outbound_body = prepared.body
           logBag.outbound_headers = redactHeaders(prepared.headers || {})
           logBag.outbound_summary = summarizeBody(prepared.body)
+          noteCachePrefix(selected, attemptSessionId, prepared.body)
           return { body: prepared.body, meta: { toolNames: prepared.toolNames, sessionId: attemptSessionId } }
         },
         callAttempt: async ({ candidate, body, attemptMeta, deliveryMode: attemptDelivery, signal, onCommit }) => {
@@ -909,6 +927,7 @@ export function createHandleProtocol(deps) {
               toolNames: attemptMeta?.toolNames || {},
               cacheTtl,
               preserveCacheBreakpoints,
+              cliHop: attemptMeta?.cliHop === true,
               want1m,
               routing: getRouting(),
               noGoFallback: !!pinVmId,
@@ -938,6 +957,7 @@ export function createHandleProtocol(deps) {
               exec: candidate.exec,
               cacheTtl,
               preserveCacheBreakpoints,
+              cliHop: attemptMeta?.cliHop === true,
               body,
               reqHeaders: req.headers,
               timeoutMs: cfg.limits.upstream_timeout_ms,
@@ -1026,12 +1046,21 @@ export function createHandleProtocol(deps) {
           .filter(Boolean)
           .join('\n')
         const headers = extraHeadersFromLimitError(limitText, result.headers || {})
+        const exhausted = !result.ok && (Number(result.status) === 429 || isPlanLimitMessage(limitText))
         accountQuota.ingestHeaders(result.accountId, headers, healthReal ? null : logBag.usage, {
-          exhausted: !result.ok && (Number(result.status) === 429 || /hit your limit/i.test(limitText)),
+          exhausted,
           status: result.status,
           countRequest: !healthReal,
         })
         const pool = typeof deps.getPoolScheduler === 'function' ? deps.getPoolScheduler() : deps.poolScheduler
+        // Live `5h-status` on every response; `allowed` is the only early unblock.
+        if (!exhausted) {
+          pool?.rateLimitService?.updateSessionWindow?.({
+            accountId: result.accountId,
+            vmId: result.vmId || null,
+            headers: result.headers || {},
+          })
+        }
         if (pool?.syncQuotaSchedule && result.vmId && cfg?.paths?.project) {
           const vm = getVm(cfg.paths.project, result.vmId)
           if (vm) pool.syncQuotaSchedule(vm)

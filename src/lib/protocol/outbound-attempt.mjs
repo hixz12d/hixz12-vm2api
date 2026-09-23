@@ -11,7 +11,9 @@ import {
   stripInvalidThinkingBlocks,
   alignSamplingWithThinking,
   enforceCacheLimit,
+  modelSupportsMidConversationSystem,
 } from './anthropic-policy.mjs'
+import { liftMidConversationSystemMessages } from './sanitize.mjs'
 import { ensureUnofficialAdaptiveThinking, ensureUnofficialEffortHigh, normalizeThinkingForModel } from './thinking.mjs'
 import {
   applyCrsIdentityReplace,
@@ -191,37 +193,17 @@ function stabilizeMessageBudgets(body) {
   return changed ? { ...body, messages } : body
 }
 
-/** A CLI hop must end on a conversational user/assistant turn. Preserve older
- * role=system leftovers in place, but lift only a trailing run to system[]. */
-function liftTrailingSystemMessages(body) {
-  const messages = Array.isArray(body?.messages) ? body.messages : []
-  let firstTrailing = messages.length
-  while (firstTrailing > 0 && messages[firstTrailing - 1]?.role === 'system') firstTrailing--
-  if (firstTrailing === messages.length) return stabilizeSystemBudget(body)
-  const lifted = messages.slice(firstTrailing).flatMap((message) => {
-    const content = message?.content
-    if (typeof content === 'string') return content.trim() ? [{ type: 'text', text: content }] : []
-    if (!Array.isArray(content)) return []
-    return content
-      .map((block) => (typeof block === 'string' ? { type: 'text', text: block } : block))
-      .filter((block) => block?.type === 'text' && String(block.text || '').trim())
-  })
-  if (!lifted.length) {
-    return stabilizeSystemBudget({ ...body, messages: messages.slice(0, firstTrailing) })
-  }
-  const system = Array.isArray(body.system)
-    ? body.system
-    : body.system == null
-      ? []
-      : [{ type: 'text', text: String(body.system) }]
-  return stabilizeSystemBudget({
-    ...body,
-    system: [...system, ...lifted],
-    messages: messages.slice(0, firstTrailing),
-  })
-}
-
-/** Caller fields only. CLI owns UA / billing / metadata / layoutSystemBlocks. */
+/**
+ * Caller fields only. CLI owns UA / billing / metadata / layoutSystemBlocks.
+ *
+ * role=system turns stay where the caller put them, including a trailing one:
+ * Claude Code ends most turns with a reminder (SessionStart context, then
+ * `<total_tokens>`). Moving it into system[] puts a different text in the
+ * cached system block whenever the reminder changes, so the whole prefix
+ * misses. In place, it is history on the next turn and the prefix only grows.
+ * This must not depend on client classification: relays strip the billing
+ * block and rewrite the UA, so relayed Claude Code looks third-party.
+ */
 export function prepareCliHopBody(
   canonicalBody,
   {
@@ -238,14 +220,16 @@ export function prepareCliHopBody(
   // Wrap CLI (Claude Code) throws a fatal "max_output_tokens" error if response reaches max_tokens.
   // Probes, ping tests, and third-party UI connection checks send max_tokens: 1 (or small numbers).
   // Ensure a safe minimum for cli-hop so output finishes with end_turn rather than hitting max_tokens.
-  if (body.max_tokens != null && Number(body.max_tokens) < 64) {
+  if (body.max_tokens != null && Number(body.max_tokens) <= 64) {
     body.max_tokens = 1024
   }
   const leftover = stripCliOwnedSystem(body.system)
   if (leftover == null) delete body.system
   else body.system = leftover
-  body = liftTrailingSystemMessages(body)
+  body = stabilizeSystemBudget(body)
   body = stabilizeMessageBudgets(body)
+  // cli-node sends mid-conversation-system. Only models that reject the role need the lift.
+  if (!modelSupportsMidConversationSystem(body.model)) body = liftMidConversationSystemMessages(body)
 
   if (!repaired) {
     body = ensureUnofficialAdaptiveThinking(body)

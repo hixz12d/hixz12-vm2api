@@ -28,6 +28,7 @@ import {
   isQuotaWindowReason,
 } from './availability.mjs'
 import { listQuotaFromHeaders } from './quota-window.mjs'
+import { hardBlockOf } from './rate-limit-service.mjs'
 import { isSlotProxyDesynced, readWorkerProxyEndpoint, readWorkerEgressMode } from '../vm/vm-runtime.mjs'
 import { splitBlocksModel } from './weekly-split.mjs'
 import { slotAllowsModel } from './slot-model-gate.mjs'
@@ -222,6 +223,7 @@ export class PoolScheduler {
     model,
     stickyKey = null,
     excluded = new Set(),
+    spilled = new Set(),
     signal,
     deadline = null,
     allowWait = true,
@@ -231,6 +233,7 @@ export class PoolScheduler {
     const startedAt = Date.now()
     const pinned = !!String(pinVmId || '').trim()
     const blocked = new Set(excluded)
+    const spill = new Set(spilled)
     let stickyCleared = false
     const boundBefore = stickyKey ? this.stickyRouter?.resolve?.(stickyKey) : null
     const fail = (reason, candidates = [], available = [], waitPool = candidates) => {
@@ -270,7 +273,7 @@ export class PoolScheduler {
         ownerScope,
       })
       const available = candidates.filter((candidate) => this.isReservable(candidate))
-      let selected = this.pick(available, { model, stickyKey, eligible: candidates })
+      let selected = this.pick(available, { model, stickyKey, eligible: candidates, spilled: spill })
       if (this.lastStickyCleared) stickyCleared = true
       const reserveMisses = []
       const attempted = new Set()
@@ -281,6 +284,7 @@ export class PoolScheduler {
         // Dropping the key here is how one conversation lands on a second session.
         reserveMisses.push({ ...selected, busy: true, waitReason: selected.waitReason || 'concurrency_limit' })
         attempted.add(selected.accountId)
+        if (selected.selectionReason === 'sticky') break
         const remaining = available.filter(
           (candidate) =>
             !attempted.has(candidate.accountId) && !blocked.has(candidate.accountId) && !blocked.has(candidate.vmId),
@@ -318,13 +322,13 @@ export class PoolScheduler {
         requestDeadline: loopDeadline,
       })
       if (waitPlan?.queueFull && waitPlan.sticky) {
-        if (stickyKey) {
-          try {
-            this.stickyRouter?.unbind?.(stickyKey)
-          } catch {}
-        }
+        // Queue full on the bound account: this one request spills (sub2api
+        // Layer 1 spillover). The durable pin stays so the next turn returns.
         stickyCleared = true
-        if (waitPlan.accountId) blocked.add(waitPlan.accountId)
+        if (waitPlan.accountId) {
+          blocked.add(waitPlan.accountId)
+          spill.add(waitPlan.accountId)
+        }
         continue
       }
       const waitDeadline = waitPlan?.deadline || loopDeadline
@@ -427,6 +431,10 @@ export class PoolScheduler {
   }
 
   async checkEligibility({ vm, accountId, state, model, now, signal, pinned = false, sessionKey = null }) {
+    // sub2api IsSchedulable: rate_limit_reset_at / overload_until gate before any
+    // passive Extra reading or health hop. Pins are diagnostics and still reach the slot.
+    const hardBlock = pinned ? null : hardBlockOf(state, now)
+    if (hardBlock) return { ok: false, reason: hardBlock.reason, until: hardBlock.until }
     const gate = evaluateSlotGate(vm)
     if (!gate.ok && gate.reason !== 'no_credential') {
       // Master pin may test a slot taken out of the pool, but SOCKS is still mandatory.
@@ -741,7 +749,11 @@ export class PoolScheduler {
     return cleared
   }
 
-  pick(candidates, { model, stickyKey, eligible = candidates } = {}) {
+  /**
+   * `spilled`: accounts this request skipped only for capacity (wait queue
+   * full, kernel slot_busy). The session pin survives; the next turn returns.
+   */
+  pick(candidates, { model, stickyKey, eligible = candidates, spilled = null } = {}) {
     this.lastStickyCleared = false
     if (!candidates.length && !eligible?.length) return null
     const bound = stickyKey ? this.stickyRouter?.resolve?.(stickyKey) : null
@@ -749,16 +761,13 @@ export class PoolScheduler {
       const match = (candidate) => candidate.vmId === bound.vmId && candidate.accountId === bound.accountId
       const amongEligible = (eligible || candidates).find(match)
       if (!amongEligible) {
-        this.stickyRouter?.unbind?.(stickyKey)
+        if (!spilled?.has(bound.accountId)) this.stickyRouter?.unbind?.(stickyKey)
         this.lastStickyCleared = true
       } else if (this.isReservable(amongEligible)) {
         return { ...amongEligible, selectionReason: 'sticky' }
-      } else if (
-        amongEligible.busy &&
-        stickyShouldWait(amongEligible.waitReason, amongEligible.cooldownReason) &&
-        this.waiterCount(amongEligible.accountId) < this.maxWaiters()
-      ) {
-        return null
+      } else if (amongEligible.busy && stickyShouldWait(amongEligible.waitReason, amongEligible.cooldownReason)) {
+        if (this.waiterCount(amongEligible.accountId) < this.maxWaiters()) return null
+        this.lastStickyCleared = true
       } else {
         this.stickyRouter?.unbind?.(stickyKey)
         this.lastStickyCleared = true
@@ -1260,6 +1269,9 @@ export class PoolScheduler {
 
   clearQuotaRestriction(vm, accountId, file) {
     const state = this.runtimeRepo?.get?.(accountId)
+    // A live 429 block lifts only on its reset or an `allowed` header, never
+    // from a passive Extra re-read (sub2api ClearRateLimit via UpdateSessionWindow).
+    if (hardBlockOf(state)) return false
     const reason = state?.cooldown_reason || vm.claude?.temp_unschedulable_reason || vm.temp_unschedulable_reason
     if (reason && !isAccountRestrictionReason(reason) && !isQuotaWindowReason(reason)) return false
     if (isAuthCooldownReason(reason)) return false

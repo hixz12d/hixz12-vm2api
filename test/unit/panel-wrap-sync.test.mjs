@@ -143,7 +143,7 @@ test('kernel upload rejects non-ELF payloads', async () => {
   }
 })
 
-function releaseFetch(elf, { assetBytes = elf, status = 200 } = {}) {
+function releaseFetch(elf, { assetBytes = elf, cliBytes = fakeElf64Amd64('github-cli'), status = 200 } = {}) {
   return async (url) => {
     const href = String(url)
     if (href.endsWith('/releases/latest')) {
@@ -156,6 +156,11 @@ function releaseFetch(elf, { assetBytes = elf, status = 200 } = {}) {
               size: assetBytes.length,
               url: 'https://api.github.com/repos/dofastted/vm2api/releases/assets/9',
             },
+            {
+              name: 'cli-node',
+              size: cliBytes.length,
+              url: 'https://api.github.com/repos/dofastted/vm2api/releases/assets/10',
+            },
           ],
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
@@ -165,6 +170,12 @@ function releaseFetch(elf, { assetBytes = elf, status = 200 } = {}) {
       return new Response(assetBytes, {
         status,
         headers: { 'content-length': String(assetBytes.length) },
+      })
+    }
+    if (href.endsWith('/releases/assets/10')) {
+      return new Response(cliBytes, {
+        status,
+        headers: { 'content-length': String(cliBytes.length) },
       })
     }
     throw new Error(`unexpected ${href}`)
@@ -193,9 +204,10 @@ function panelFor(project, { readBody, readRawBody, fetchImpl } = {}) {
   return { response, handlePanel }
 }
 
-test('github kernel release replaces host kernel and syncs stopped slots', async () => {
+test('github release replaces host kernel and CLI and syncs both into stopped slots', async () => {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-panel-kernel-release-'))
   const elf = fakeElf64Amd64('github-kernel')
+  const cli = fakeElf64Amd64('github-cli')
   try {
     seedWrapTemplate(project)
     const vmDir = path.join(project, 'vms')
@@ -204,7 +216,7 @@ test('github kernel release replaces host kernel and syncs stopped slots', async
       path.join(vmDir, 'legacy-slot.json'),
       JSON.stringify({ id: 'legacy-slot', name: 'legacy-slot', status: 'stopped' }),
     )
-    const { response, handlePanel } = panelFor(project, { fetchImpl: releaseFetch(elf) })
+    const { response, handlePanel } = panelFor(project, { fetchImpl: releaseFetch(elf, { cliBytes: cli }) })
     await handlePanel({ method: 'POST' }, {}, new URL('http://localhost/api/panel/wrap-cli/kernel/release'))
     assert.equal(response.status, 200, JSON.stringify(response.body))
     assert.equal(response.body.data.release.tag, 'v1.2.3')
@@ -217,6 +229,8 @@ test('github kernel release replaces host kernel and syncs stopped slots', async
     const meta = JSON.parse(fs.readFileSync(path.join(project, 'share', 'wrap-cli', 'SAMPLE.json'), 'utf8'))
     assert.equal(meta.source, 'github')
     assert.equal(meta.release_tag, 'v1.2.3')
+    assert.ok(fs.readFileSync(path.join(project, 'share', 'wrap-cli', 'cli-node')).equals(cli))
+    assert.ok(fs.readFileSync(path.join(project, 'vms', 'legacy-slot', 'cli-home', '.kin', 'cli-node')).equals(cli))
 
     const uploaded = fakeElf64Amd64('manual-kernel')
     const upload = panelFor(project, { readRawBody: async () => uploaded })

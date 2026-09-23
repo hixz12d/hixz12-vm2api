@@ -26,6 +26,33 @@ test('setup-token worker envelope is inference-only', () => {
   assert.match(String(out.headers['anthropic-beta'] || ''), /oauth-2025-04-20/)
 })
 
+test('cli-hop envelope keeps role=system turns that the VM betas do not declare', () => {
+  const body = {
+    model: 'claude-opus-5-5',
+    system: [{ type: 'text', text: 'main prompt' }],
+    messages: [
+      { role: 'user', content: 'u1' },
+      { role: 'system', content: 'reminder' },
+      { role: 'assistant', content: 'a1' },
+      { role: 'user', content: 'u2' },
+    ],
+  }
+  const out = finalizeWorkerPayload({
+    body,
+    reqHeaders: {},
+    // setup-token betas omit mid-conversation-system; cli-node sends it on the wire.
+    exec: { homeDir: '', vm: { claude: { mode: 'setup-token', scope: 'user:inference' } } },
+    identity: null,
+    cliHop: true,
+  })
+  assert.doesNotMatch(String(out.headers['anthropic-beta'] || ''), /mid-conversation-system/)
+  assert.deepEqual(
+    out.body.messages.map((message) => message.role),
+    ['user', 'system', 'assistant', 'user'],
+  )
+  assert.deepEqual(out.body.system, body.system)
+})
+
 const unix = process.platform !== 'win32'
 const unixTest = unix ? test : test.skip
 
@@ -205,6 +232,99 @@ unixTest('streamGoWorker keeps rate-limit trailers on an incomplete response', a
     assert.equal(result.terminalState, 'incomplete')
     assert.equal(result.headers['anthropic-ratelimit-unified-5h-utilization'], '0.81')
     assert.equal(result.headers['set-cookie'], undefined)
+  } finally {
+    await fx.close()
+  }
+})
+
+unixTest('streamGoWorker restores a streamed plan-limit error to 429 with a parsed reset', async () => {
+  // Kernel cli-hop: HTTP 200, then `event: error` (sub2api sseStreamErrorEventError).
+  const fx = await fixture((req, res) => {
+    res.setHeader('content-type', 'text/event-stream')
+    res.write('event: message_start\ndata: {"type":"message_start","message":{"content":[]}}\n\n')
+    res.write(
+      'event: error\ndata: {"type":"error","error":{"type":"api_error","message":"provider error: You\'ve hit your limit · resets 11am (America/New_York)"}}\n\n',
+    )
+    res.end()
+  })
+  try {
+    const lines = []
+    const result = await streamGoWorker({
+      exec: fx.exec,
+      body: { model: 'claude-haiku-4-5', stream: true, messages: [{ role: 'user', content: 'hi' }] },
+      onEvent: (line) => lines.push(line),
+    })
+    assert.equal(result.ok, false)
+    assert.equal(result.committed, false)
+    assert.equal(result.status, 429)
+    assert.equal(result.terminalState, 'rejected')
+    assert.equal(result.streamError, true)
+    assert.equal(result.headers['anthropic-ratelimit-unified-5h-status'], 'rejected')
+    assert.ok(Number(result.headers['anthropic-ratelimit-unified-5h-reset']) * 1000 > Date.now())
+    assert.equal(lines.length, 0)
+  } finally {
+    await fx.close()
+  }
+})
+
+unixTest('streamGoWorker restores a streamed overloaded_error to 529', async () => {
+  const fx = await fixture((req, res) => {
+    res.setHeader('content-type', 'text/event-stream')
+    res.write('event: error\ndata: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}\n\n')
+    res.end()
+  })
+  try {
+    const result = await streamGoWorker({
+      exec: fx.exec,
+      body: { model: 'claude-haiku-4-5', stream: true, messages: [{ role: 'user', content: 'hi' }] },
+      onEvent: () => {},
+    })
+    assert.equal(result.status, 529)
+    assert.equal(result.terminalState, 'rejected')
+  } finally {
+    await fx.close()
+  }
+})
+
+unixTest('streamGoWorker marks a hop with no content as empty_response', async () => {
+  const fx = await fixture((req, res) => {
+    res.setHeader('content-type', 'text/event-stream')
+    res.write('data: {"type":"message_start","message":{"content":[]}}\n\n')
+    res.write('data: {"type":"message_stop"}\n\n')
+    res.end()
+  })
+  try {
+    const result = await streamGoWorker({
+      exec: fx.exec,
+      body: { model: 'claude-haiku-4-5', stream: true, messages: [{ role: 'user', content: 'hi' }] },
+      onEvent: () => {},
+    })
+    assert.equal(result.status, 502)
+    assert.equal(result.body.error.code, 'empty_response')
+    assert.equal(result.terminalState, 'incomplete')
+  } finally {
+    await fx.close()
+  }
+})
+
+unixTest('callGoWorker restores a kernel 502 provider_error plan limit to 429', async () => {
+  const fx = await fixture((req, res) => {
+    res.statusCode = 502
+    res.setHeader('content-type', 'application/json')
+    res.end(
+      JSON.stringify({
+        type: 'error',
+        error: { type: 'worker_error', code: 'provider_error', message: "provider error: You've hit your limit" },
+      }),
+    )
+  })
+  try {
+    const result = await callGoWorker({
+      exec: fx.exec,
+      body: { model: 'claude-haiku-4-5', messages: [{ role: 'user', content: 'hi' }] },
+    })
+    assert.equal(result.status, 429)
+    assert.equal(result.headers['anthropic-ratelimit-unified-5h-status'], 'rejected')
   } finally {
     await fx.close()
   }
