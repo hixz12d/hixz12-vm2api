@@ -474,7 +474,7 @@ test('cli-hop lifts trailing system constraints so the hop ends with a user turn
   assert.ok(later.system.every((block) => block.cache_control == null))
 })
 
-test('official multi-turn traffic with a null resolved TTL never creates an hour marker', () => {
+test('official multi-turn traffic resolves the menu TTL but keeps CLI markers at 5m', () => {
   const inbound = {
     model: 'claude-opus-5',
     messages: [
@@ -489,10 +489,10 @@ test('official multi-turn traffic with a null resolved TTL never creates an hour
   }
   const cacheTtl = resolveCacheTtl({
     body: inbound,
-    routing: { compatibility: { cache_ttl: '5m' } },
+    routing: { compatibility: { cache_ttl: '1h' } },
     officialTraffic: true,
   })
-  assert.equal(cacheTtl, null)
+  assert.equal(cacheTtl, '1h')
   const out = prepareCliHopBody(inbound, { cacheTtl, unofficial: false })
   assert.deepEqual(out.messages[0].content[0].cache_control, { type: 'ephemeral', ttl: '5m' })
   assert.equal(out.messages[1].content[0].cache_control, undefined)

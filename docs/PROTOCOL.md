@@ -97,7 +97,7 @@ Rikka / 客户端 `search_web`、`scrape_web` **不是** Anthropic 自带搜索�
 1. `thinking` 文本为空的（非官方被补 `display: omitted` 后 haiku 只回签名不回文本，这类块出站前就没了）
 2. 签名短于 24 字符或是 dummy 的（`hasUsableThinkingSignature`，兜第三方截断的 SSE 签名）
 
-HTTP hop 与 cli-hop（`prepareCliHopBody`）共用这套预过滤。cli-hop 不造签，只透传调用方 history。官方和第三方 hop 都剥光 messages 上的 `cache_control`，由 kernel 按 Claude Code 重打最后一块（跳过 thinking）和上一条 user；1.2.12 的 convert 升块对齐保留，不再在 Node 侧重打 last+prev。
+HTTP hop 与 cli-hop（`prepareCliHopBody`）共用内容预过滤，但缓存职责不同。本 fork 的 cli-hop 继续由 Node 重建历史 user 断点，移除 CLI 拥有的 tools/system/当前尾部标记，并统一采用 5m TTL；官方请求也适用。Node 对 `zero` / `official_full` persona 不再重复注入 unofficial persona，由 native CLI 完成其职责。HTTP hop 使用请求头、显式断点与菜单的 TTL 优先级，并按出站 session 固定 TTL。上游 v1.3.29 声明的“CLI 独占所有断点与 5m/1h TTL”尚未在本 fork 启用，原因与验证边界见 [Fork 运行兼容性](FORK_COMPATIBILITY.md)。
 
 长度够的签名原样转发，由 Anthropic 验。上游**严格验签名自身完整性**：乱码签名回 400 `Invalid \`signature\` in \`thinking\` block`。但签名**不与 thinking 文本绑定、也不与模型绑定** —— 真签名配改写过的文本、或 sonnet 的签名打到 opus / haiku，上游都 200（2026-08-28 实测，见 `测试结果/2026-08-28-thinking-signature/`）。
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.30 — 2026-09-23
+
+- 缓存 TTL 优先级统一：`x-kin-cache-ttl` 头 → 请求断点上显式 `5m`/`1h` → 设置菜单。官方 Claude Code 的无 ttl 断点不再落成隐式 `5m`，改用菜单值；原先官方流量直接跳过 TTL 解析。
+- 同一会话（出站 session id）只写一种 TTL：首轮解析结果钉住，空闲超过该 TTL 后才重新解析。中途改菜单不再让同一前缀在 `5m`/`1h` 之间切换。
+- 本地代理（`px-local` / `scheme=local`）按宿主机默认路由直连（`mode: direct`）：不启 kin-egress，kin-egress 未运行不再记 `egress_down`，空 worker 代理不再判 `worker_proxy_missing`。操作者手动禁用本地出口仍拦截；远程 SOCKS5 仍走 kin-egress。
+
+已部署机升级：只覆盖控制面并重启 Node 一次，不需要 `wrap-cli/sync`。二进制未变。不要 `docker rm` 槽。
+
+## 1.3.29 — 2026-09-23
+
+- 修复 native Claude 多轮 prompt cache 只写不读：Node 清理旧断点，CLI 保留当前尾部并为 `messages.length >= 4` 的倒数第二个 user 写入稳定断点。
+- 同步 `share/wrap-cli/cli-node` 为双断点修复后的 CLI 二进制；面板选择的 `5m` / `1h` TTL 继续由每轮 native job 统一使用。
+
+已部署机升级：覆盖控制面并重启 Node 一次，再执行 `wrap-cli/sync` 重启槽内 dataplane。不要 `docker rm` 槽。
+
 ## 1.3.28 — 2026-09-23
 
 - cli-hop 接受 `claude-opus-5.5`，出站写成 `claude-opus-5-5`。思考用 adaptive，缺省 effort 是 medium。价目按官方 $4 / $20。
