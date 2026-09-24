@@ -75,6 +75,7 @@ import { startProbeTest, getProbeTest, listProbeTests, cancelProbeTest, getProbe
 import { publicKeyView } from './api-keys.mjs'
 import { publicEndpointView, fetchUpstreamModels, API_ENDPOINT_PRESETS } from './api-endpoints.mjs'
 import { authorizePanelRoute, mePayload, panelIdentity } from './panel-acl.mjs'
+import { handleGroups } from './panel-groups.mjs'
 import {
   denyIfUserCannotDeleteVm,
   denyIfUserMissesKey,
@@ -790,6 +791,16 @@ export function createPanelHandler(ctx) {
           error: { message: 'user management is not available in this build', code: 'not_found' },
         })
       }
+      if (
+        await handleGroups(req, res, {
+          path: p,
+          projectRoot: cfg.paths.project,
+          groups: ctx.groupsRepo,
+          json,
+          readBody,
+        })
+      )
+        return true
       if (req.method === 'GET' && p === '/api/panel/api-keys') {
         const snap = apiKeyStore.snapshot()
         if (panelIdentity(req).role === 'user') {
@@ -814,6 +825,9 @@ export function createPanelHandler(ctx) {
               ctx.routingConfig?.concurrency?.default_max_per_account ??
               20,
           )
+          if (panelIdentity(req).role !== 'admin' && Number(body?.group_id ?? 1) !== 1) {
+            throw Object.assign(new Error('仅管理员可以分配分组'), { code: 'forbidden' })
+          }
           const rec = apiKeyStore.create({
             name: body?.name,
             key: body?.key || body?.custom_key || undefined,
@@ -853,6 +867,13 @@ export function createPanelHandler(ctx) {
         if (denyIfUserMissesKey(req, res, { apiKeyStore, json, keyId: id })) return true
         const body = await readBody(req, 8192).catch(() => ({}))
         try {
+          if (
+            panelIdentity(req).role !== 'admin' &&
+            body?.group_id !== undefined &&
+            Number(body.group_id) !== Number(apiKeyStore.getById(id)?.group_id ?? 1)
+          ) {
+            throw Object.assign(new Error('仅管理员可以更改分组'), { code: 'forbidden' })
+          }
           const rec = apiKeyStore.update(id, normalizePanelApiKeyInput(body || {}))
           if (!rec) {
             return json(res, 404, { ok: false, error: { message: 'api key not found' } })

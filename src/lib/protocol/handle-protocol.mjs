@@ -789,6 +789,7 @@ export function createHandleProtocol(deps) {
         stickyKeys,
         pinVmId,
         ownerScope,
+        groupScope: req.groupScope,
         countUsage: !healthReal,
         stream: upstreamStream,
         deliveryMode,

@@ -1,6 +1,7 @@
 export type KeyLimitsDraft = {
   name: string
   category: 'oauth' | 'api'
+  group_id?: number
   max_concurrency: number
   quota_requests: number
   quota_usd: number
@@ -27,6 +28,11 @@ export function keyLimitsPayload(
     quota_requests: requests,
     quota_usd: nonNegative(draft.quota_usd, 'USD 额度'),
     rpm: nonNegative(draft.rpm, 'RPM'),
+  }
+  if (draft.group_id !== undefined) {
+    if (!Number.isSafeInteger(draft.group_id) || draft.group_id <= 0)
+      throw new Error('请选择有效分组')
+    body.group_id = draft.category === 'api' ? 1 : draft.group_id
   }
   if (mode === 'create') {
     body.name = draft.name.trim()

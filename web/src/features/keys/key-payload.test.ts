@@ -12,6 +12,21 @@ const draft: KeyLimitsDraft = {
 }
 
 describe('API key limit payload', () => {
+  it('sends selected OAuth group on create and edit and keeps API keys on the default group', () => {
+    for (const mode of ['create', 'edit'] as const) {
+      expect(
+        keyLimitsPayload({ ...draft, category: 'oauth', group_id: 7 }, mode)
+          .group_id
+      ).toBe(7)
+      expect(
+        keyLimitsPayload({ ...draft, category: 'api', group_id: 7 }, mode)
+          .group_id
+      ).toBe(1)
+    }
+    expect(() => keyLimitsPayload({ ...draft, group_id: 0 }, 'create')).toThrow(
+      '有效分组'
+    )
+  })
   it('keeps request and USD quotas separate', () => {
     expect(keyLimitsPayload(draft, 'create')).toEqual({
       name: 'ops',

@@ -702,6 +702,7 @@ function requireAuth(req, res) {
   }
   req.apiKeyKind = 'managed'
   req.apiKeyRecord = managed.record
+  req.groupScope = managed.record.category === 'api' ? null : apiKeyStore.groups.routingScope(managed.record)
   return true
 }
 

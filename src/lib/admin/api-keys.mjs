@@ -21,6 +21,7 @@ import { ApiKeysRepo } from '../db/repos/api-keys-repo.mjs'
 import { maybeEncrypt, maybeDecrypt } from '../db/secure.mjs'
 import { calculateCost, normalizeUsage } from './pricing.mjs'
 import { UsersRepo } from '../db/repos/users-repo.mjs'
+import { GroupsRepo } from '../db/repos/groups-repo.mjs'
 
 const KEY_PREFIX = 'sk-vm-'
 const HASH_MARKER = 'hmac:'
@@ -126,6 +127,7 @@ export class ApiKeyStore {
     this.inflight = new Map() // id → count
     this.rpmBuckets = new Map() // id → number[] timestamps ms
     this.users = new UsersRepo(this.db)
+    this.groups = new GroupsRepo(this.db)
   }
 
   /** sub2api: an api key of a disabled/deleted user must not authenticate. */
@@ -148,11 +150,13 @@ export class ApiKeyStore {
     this.db = db
     this.repo = new ApiKeysRepo(db)
     this.users = new UsersRepo(db)
+    this.groups = new GroupsRepo(db)
   }
 
   list({ reveal = false } = {}) {
     return this.repo.list().map((k) => {
       const v = publicKeyView(k, { reveal })
+      v.group_name = this.groups.getById(k.group_id ?? 1)?.name || null
       v.inflight = this.inflight.get(k.id) || 0
       return v
     })
@@ -186,6 +190,7 @@ export class ApiKeyStore {
   }
 
   create(input = {}) {
+    const group = this.groups.requireActive(input.group_id ?? 1, input.category)
     const name =
       String(input.name || 'default')
         .trim()
@@ -218,7 +223,7 @@ export class ApiKeyStore {
       rate_limit_1d: Math.max(0, Number(input.rate_limit_1d) || 0),
       rate_limit_7d: Math.max(0, Number(input.rate_limit_7d) || 0),
       user_id: input.user_id ?? null,
-      group_id: input.group_id ?? 1,
+      group_id: group.id,
       rpm: clampInt(input.rpm, 0, 1e6, 0),
       expires_at: input.expires_at ? new Date(input.expires_at).toISOString() : null,
       created_at: nowIso(),
@@ -254,7 +259,9 @@ export class ApiKeyStore {
     if (patch.rate_limit_5h != null) rec.rate_limit_5h = Math.max(0, Number(patch.rate_limit_5h) || 0)
     if (patch.rate_limit_1d != null) rec.rate_limit_1d = Math.max(0, Number(patch.rate_limit_1d) || 0)
     if (patch.rate_limit_7d != null) rec.rate_limit_7d = Math.max(0, Number(patch.rate_limit_7d) || 0)
-    if (patch.group_id != null) rec.group_id = Number(patch.group_id) || 1
+    if (patch.group_id !== undefined || patch.category !== undefined) {
+      rec.group_id = this.groups.requireActive(patch.group_id ?? rec.group_id ?? 1, patch.category ?? rec.category).id
+    }
     if (patch.user_id != null) rec.user_id = patch.user_id
     if (patch.rpm != null) rec.rpm = clampInt(patch.rpm, 0, 1e6, rec.rpm)
     if (patch.expires_at === null) rec.expires_at = null
@@ -341,6 +348,11 @@ export class ApiKeyStore {
    */
   canAccept(rec, now = Date.now()) {
     if (!rec) return { ok: false, code: 'invalid_api_key', message: 'Invalid credentials', status: 401 }
+    try {
+      this.groups.requireActive(rec.group_id ?? 1, rec.category)
+    } catch (e) {
+      return { ok: false, code: e.code, message: e.message, status: 403 }
+    }
     if (rec.status !== 'active') {
       if (rec.status === 'quota_exhausted') {
         return { ok: false, code: 'api_key_quota_exhausted', message: 'API key quota exhausted', status: 429 }

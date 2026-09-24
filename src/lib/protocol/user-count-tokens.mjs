@@ -104,6 +104,7 @@ export async function peekCurrentAccount({
     stickyKey,
     signal,
     ownerScope: ownerScopeFromRequest(req, usersRepo),
+    groupScope: req.groupScope,
   })
 }
 function poolFail(peeked) {

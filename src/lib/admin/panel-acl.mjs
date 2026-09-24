@@ -89,6 +89,7 @@ const USER_EXACT_GET = new Set([
   '/api/panel/proxies',
   '/api/panel/proxies/config',
   '/api/panel/api-keys',
+  '/api/panel/groups',
   '/api/panel/request-logs',
   '/api/panel/request-logs/export',
   '/api/panel/request-logs/stats',

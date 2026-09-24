@@ -350,6 +350,7 @@ export class FailoverRunner {
     onAttempt = null,
     pinVmId = null,
     ownerScope = null,
+    groupScope = null,
     countUsage = true,
   } = {}) {
     if (!this.scheduler) throw new Error('FailoverRunner requires a scheduler')
@@ -409,6 +410,7 @@ export class FailoverRunner {
           allowWait: true,
           pinVmId,
           ownerScope,
+          groupScope,
         })
       } catch (error) {
         if (error?.code === 'selection_cancelled') {
@@ -435,17 +437,21 @@ export class FailoverRunner {
         return preferLastResult(
           lastResult,
           lastPolicy,
-          poolError('account_pool_exhausted', 'No eligible Claude accounts remain', {
-            excluded_accounts: [...excluded],
-            reason: selected?.reason || 'no_eligible_accounts',
-            wait_ms: selected?.waitMs ?? selected?.wait_ms ?? 0,
-            soonest_available_ms: selected?.soonest_available_ms ?? null,
-            wait_reasons: selected?.wait_reasons || [],
-            eligible: selected?.eligible ?? 0,
-            available: selected?.available ?? 0,
-            sticky_cleared: !!selected?.sticky_cleared,
-            attempt_count: attemptNo - 1,
-          }),
+          poolError(
+            groupScope ? 'group_no_eligible_accounts' : 'account_pool_exhausted',
+            groupScope ? '当前分组没有可用账号，不会跨组回退' : 'No eligible Claude accounts remain',
+            {
+              excluded_accounts: [...excluded],
+              reason: selected?.reason || 'no_eligible_accounts',
+              wait_ms: selected?.waitMs ?? selected?.wait_ms ?? 0,
+              soonest_available_ms: selected?.soonest_available_ms ?? null,
+              wait_reasons: selected?.wait_reasons || [],
+              eligible: selected?.eligible ?? 0,
+              available: selected?.available ?? 0,
+              sticky_cleared: !!selected?.sticky_cleared,
+              attempt_count: attemptNo - 1,
+            },
+          ),
           { attemptCount: attemptNo - 1 },
         )
       }
@@ -488,6 +494,9 @@ export class FailoverRunner {
             { accountId: selected.accountId, vmId: selected.vmId, sessionId: outboundSessionId },
             { countHit: false },
           )
+        }
+        if (groupScope && !groupScope.allowsVm(selected.vmId)) {
+          return poolError('group_membership_changed', '分组或密钥已变更，请重试')
         }
         result = await callAttempt({
           candidate: selected,

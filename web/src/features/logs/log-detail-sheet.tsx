@@ -66,6 +66,9 @@ const SUMMARY_KEYS: Record<string, true> = {
   // 已有专属掩码渲染行。同时 SECRET_KEY 也会拦住它 —— 两道锁都留着，
   // 免得将来有人放宽那条正则时这里悄悄变成明文直出。
   api_key_presented: true,
+  group_id: true,
+  group_name: true,
+  key_name: true,
   stream: true,
   total_cost: true,
   actual_cost: true,
@@ -225,6 +228,8 @@ function SummaryTab({
       protocol={item.protocol == null ? undefined : String(item.protocol)}
     />,
   ])
+  pushPresent(rows, '账号分组', item.group_name)
+  pushPresent(rows, '密钥名称', item.key_name)
   rows.push(['尝试数', dash(item.attempt_count ?? attemptCount)])
   pushPresent(rows, '归属', item.error_owner)
   pushPresent(rows, '错误码', item.error_code, mono)

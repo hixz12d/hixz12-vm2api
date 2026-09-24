@@ -57,7 +57,8 @@ export function pickCodexCandidates(projectRoot, req, { stickyRouter = null, ses
   const stickyKeys = stickyRouter?.collectPoolKeys?.(req, body || {}, { platform: 'openai' }) || []
   const sessionKey = stickyRouter?.extractPoolKey?.(req, body || {}, { platform: 'openai' }) || stickyKeys[0] || null
   const bound = sessionKey ? stickyRouter?.resolve?.(sessionKey) : null
-  const ordered = orderCodexSessionSlots(listVms(projectRoot), {
+  const candidates = listVms(projectRoot).filter((vm) => !req.groupScope || req.groupScope.allowsVm(vm.id))
+  const ordered = orderCodexSessionSlots(candidates, {
     boundVmId: bound?.vmId || null,
     sessionKey,
     sessionLimit: sessions,
@@ -273,6 +274,7 @@ export async function handleCodexProtocol({
   for (let i = 0; i < candidateIds.length; i++) {
     const vm = getVm(projectRoot, candidateIds[i])
     if (!vm || !isCodexVm(vm)) continue
+    if (req.groupScope && !req.groupScope.allowsVm(vm.id)) continue
     logBag.vm_id = vm.id
     writeCfg(projectRoot, vm, {
       proxyUrl: boundProxyUrl(vm.proxy),
@@ -300,6 +302,7 @@ export async function handleCodexProtocol({
       logBag.error_code = 'codex_kernel_unavailable'
       return json(res, 503, last.body)
     }
+    if (req.groupScope && !req.groupScope.allowsVm(vm.id)) continue
     acquireOpenAISlot(vm.id)
     let attemptKind = 'failed'
     try {

@@ -229,6 +229,7 @@ export class PoolScheduler {
     allowWait = true,
     pinVmId = null,
     ownerScope = PLATFORM_SCOPE,
+    groupScope = null,
   } = {}) {
     const startedAt = Date.now()
     const pinned = !!String(pinVmId || '').trim()
@@ -271,6 +272,7 @@ export class PoolScheduler {
         pinVmId,
         sessionKey: stickyKey,
         ownerScope,
+        groupScope,
       })
       const available = candidates.filter((candidate) => this.isReservable(candidate))
       let selected = this.pick(available, { model, stickyKey, eligible: candidates, spilled: spill })
@@ -278,6 +280,7 @@ export class PoolScheduler {
       const reserveMisses = []
       const attempted = new Set()
       while (selected) {
+        if (groupScope && !groupScope.allowsVm(selected.vmId)) return fail('group_no_eligible_accounts')
         const reservation = this.reserve(selected, { sessionKey: stickyKey, skipQuota: pinned })
         if (reservation) return finishReserve(selected, reservation)
         // A sticky hit that loses the race stays on that account and waits.
@@ -372,6 +375,7 @@ export class PoolScheduler {
     pinVmId = null,
     sessionKey = null,
     ownerScope = PLATFORM_SCOPE,
+    groupScope = null,
   } = {}) {
     const now = Date.now()
     this.runtimeRepo?.clearExpired?.(now)
@@ -385,6 +389,7 @@ export class PoolScheduler {
       if (!vm) continue
       if (!pin && platformMismatch(model, vm)) continue
       if (!vmMatchesOwnerScope(vm, ownerScope)) continue
+      if (groupScope && !groupScope.allowsVm(vm.id)) continue
       const accountId = accountIdOf(vm, this.projectRoot)
       if (!accountId || excluded.has(accountId) || excluded.has(vm.id)) continue
       const state = this.runtimeRepo?.get?.(accountId) || null
@@ -807,8 +812,8 @@ export class PoolScheduler {
   }
 
   /** Read-only current account. Never bind, unbind, reserve, or mutate WRR. */
-  async peekAccount({ model, stickyKey = null, signal, ownerScope = PLATFORM_SCOPE } = {}) {
-    const candidates = await this.eligibleCandidates({ model, sessionKey: stickyKey, signal, ownerScope })
+  async peekAccount({ model, stickyKey = null, signal, ownerScope = PLATFORM_SCOPE, groupScope = null } = {}) {
+    const candidates = await this.eligibleCandidates({ model, sessionKey: stickyKey, signal, ownerScope, groupScope })
     if (!candidates.length) {
       return { ok: false, code: isFableModel(model) ? 'fable_requires_max' : 'no_eligible_accounts' }
     }

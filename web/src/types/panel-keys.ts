@@ -13,6 +13,8 @@ export type ApiKeyItem = {
   revealable?: boolean
   status?: string
   category?: 'oauth' | 'api'
+  group_id?: number
+  group_name?: string | null
   max_concurrency?: number
   quota_requests?: number
   quota_used?: number

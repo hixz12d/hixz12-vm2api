@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import type { AccountGroup } from './groups-query'
 import type { KeyLimitsDraft } from './key-payload'
 
 const CONC = [0, 1, 2, 4, 8, 16, 20, 32, 64]
@@ -90,6 +91,8 @@ export function KeyLimitsDialog({
   initial,
   pending,
   onSubmit,
+  groups,
+  canAssignGroup = false,
 }: {
   mode: 'create' | 'edit'
   open: boolean
@@ -97,10 +100,13 @@ export function KeyLimitsDialog({
   initial?: ApiKeyItem | null
   pending: boolean
   onSubmit: (draft: KeyLimitsDraft) => void
+  groups: AccountGroup[]
+  canAssignGroup?: boolean
 }) {
   const [draft, setDraft] = useState<KeyLimitsDraft>({
     name: '',
     category: 'oauth',
+    group_id: 1,
     max_concurrency: 20,
     quota_requests: 0,
     quota_usd: 0,
@@ -114,6 +120,7 @@ export function KeyLimitsDialog({
       setDraft({
         name: initial.name || '',
         category: initial.category === 'api' ? 'api' : 'oauth',
+        group_id: initial.group_id ?? 1,
         max_concurrency: Number(initial.max_concurrency ?? 20),
         quota_requests: Number(initial.quota_requests ?? 0),
         quota_usd: Number(initial.quota_usd ?? 0),
@@ -125,6 +132,7 @@ export function KeyLimitsDialog({
     setDraft({
       name: '',
       category: 'oauth',
+      group_id: 1,
       max_concurrency: 20,
       quota_requests: 0,
       quota_usd: 0,
@@ -173,6 +181,7 @@ export function KeyLimitsDialog({
                 setDraft((d) => ({
                   ...d,
                   category: v === 'api' ? 'api' : 'oauth',
+                  group_id: v === 'api' ? 1 : d.group_id,
                 }))
               }
             >
@@ -182,6 +191,35 @@ export function KeyLimitsDialog({
               <SelectContent>
                 <SelectItem value='oauth'>OAuth 槽位</SelectItem>
                 <SelectItem value='api'>API 直连</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label='账号分组'>
+            <Select
+              value={String(draft.group_id ?? 1)}
+              disabled={!canAssignGroup || draft.category === 'api'}
+              onValueChange={(v) =>
+                setDraft((d) => ({ ...d, group_id: Number(v) }))
+              }
+            >
+              <SelectTrigger aria-label='账号分组'>
+                <SelectValue placeholder='请选择分组' />
+              </SelectTrigger>
+              <SelectContent>
+                {groups
+                  .filter(
+                    (g) => g.status === 'active' || g.id === draft.group_id
+                  )
+                  .map((g) => (
+                    <SelectItem
+                      key={g.id}
+                      value={String(g.id)}
+                      disabled={g.status !== 'active'}
+                    >
+                      {g.name}
+                      {g.status !== 'active' ? '（已停用）' : ''}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </Field>
@@ -243,7 +281,13 @@ export function KeyLimitsDialog({
           </Button>
           <Button
             onClick={() => onSubmit(draft)}
-            disabled={pending || (mode === 'create' && !draft.name.trim())}
+            disabled={
+              pending ||
+              !groups.some(
+                (g) => g.id === draft.group_id && g.status === 'active'
+              ) ||
+              (mode === 'create' && !draft.name.trim())
+            }
             loading={pending}
           >
             {mode === 'create' ? '生成' : '保存'}

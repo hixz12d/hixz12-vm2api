@@ -22,7 +22,10 @@ import { PageHeader } from '@/components/page-header'
 import { TableSkeleton } from '@/components/page-skeletons'
 import { QueryGate } from '@/components/query-gate'
 import { StatusMark } from '@/components/status-mark'
+import { meQueryOptions } from '@/features/auth/queries'
 import { apiKeysQueryOptions } from '@/features/keys/queries'
+import { GroupsDialog } from './groups-dialog'
+import { groupsQueryOptions } from './groups-query'
 import {
   keyExpiryText,
   keyIsDead,
@@ -39,6 +42,10 @@ import { KeyRevealDialog, type RevealedKey } from './key-reveal-dialog'
 export function KeysPage() {
   const qc = useQueryClient()
   const q = useQuery(apiKeysQueryOptions())
+  const groups = useQuery(groupsQueryOptions())
+  const me = useQuery(meQueryOptions())
+  const isAdmin = me.data?.role === 'admin'
+  const [groupsOpen, setGroupsOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [editId, setEditId] = useState('')
   const [delId, setDelId] = useState('')
@@ -78,7 +85,7 @@ export function KeysPage() {
         body: JSON.stringify(keyLimitsPayload(draft, 'edit')),
       }),
     onSuccess: async () => {
-      toast.success('并发已更新')
+      toast.success('密钥设置已更新')
       setEditId('')
       await refresh()
     },
@@ -182,7 +189,16 @@ export function KeysPage() {
   return (
     <PageHeader
       title={VIEW_TITLES.keys}
-      extra={<Button onClick={() => setCreateOpen(true)}>生成</Button>}
+      extra={
+        <div className='flex gap-2'>
+          {isAdmin && (
+            <Button variant='outline' onClick={() => setGroupsOpen(true)}>
+              账号分组
+            </Button>
+          )}
+          <Button onClick={() => setCreateOpen(true)}>生成</Button>
+        </div>
+      }
     >
       <QueryGate
         loading={q.isLoading}
@@ -202,6 +218,7 @@ export function KeysPage() {
                 <TableHead>名称</TableHead>
                 <TableHead>Key</TableHead>
                 <TableHead>分类</TableHead>
+                <TableHead>账号分组</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead>额度</TableHead>
                 <TableHead>限制</TableHead>
@@ -239,6 +256,8 @@ export function KeysPage() {
         )}
       </QueryGate>
       <KeyLimitsDialog
+        groups={groups.data?.items || []}
+        canAssignGroup={isAdmin}
         mode='create'
         open={createOpen}
         onOpenChange={setCreateOpen}
@@ -246,6 +265,8 @@ export function KeysPage() {
         onSubmit={(draft) => create.mutate(draft)}
       />
       <KeyLimitsDialog
+        groups={groups.data?.items || []}
+        canAssignGroup={isAdmin}
         mode='edit'
         open={!!editId}
         onOpenChange={(open) => {
@@ -258,6 +279,9 @@ export function KeysPage() {
           edit.mutate({ id: editId, draft })
         }}
       />
+      {isAdmin && (
+        <GroupsDialog open={groupsOpen} onOpenChange={setGroupsOpen} />
+      )}
       <KeyRevealDialog value={revealed} onClose={() => setRevealed(null)} />
       <ConfirmDialog
         open={!!rotateId}
@@ -370,6 +394,7 @@ function KeyRow({
         </div>
       </TableCell>
       <TableCell>{item.category === 'api' ? 'API' : 'OAuth'}</TableCell>
+      <TableCell>{item.group_name || '分组不可用'}</TableCell>
       <TableCell>
         <StatusMark tone={keyStatusTone(item)} />
       </TableCell>

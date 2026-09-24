@@ -256,6 +256,8 @@ export class RequestLogStore {
     this.dataDir = dataDir || path.join(process.cwd(), 'data')
     this.db = resolveStoreDb({ db, dataDir: this.dataDir })
     this.repo = new UsageLogsRepo(this.db)
+    this._groupNames = this.db.prepare('SELECT name FROM groups WHERE id=?')
+    this._keyNames = this.db.prepare('SELECT name FROM api_keys WHERE id=?')
     this.root = path.join(this.dataDir, 'request-logs')
     this.mode = MODES.has(String(mode).toLowerCase()) ? String(mode).toLowerCase() : 'normal'
     this.maxDebugBodyChars = Number.isFinite(maxDebugBodyChars) ? maxDebugBodyChars : 200000
@@ -304,6 +306,8 @@ export class RequestLogStore {
   rebind(db) {
     this.db = db
     this.repo = new UsageLogsRepo(db)
+    this._groupNames = db.prepare('SELECT name FROM groups WHERE id=?')
+    this._keyNames = db.prepare('SELECT name FROM api_keys WHERE id=?')
     this._mem = []
   }
 
@@ -455,6 +459,14 @@ export class RequestLogStore {
     return (items || []).filter((row) => !row.error_class || !blocked.has(row.error_class))
   }
 
+  _withGroupNames(row) {
+    return {
+      ...row,
+      group_name: this._groupNames.get(row.group_id ?? 1)?.name || null,
+      key_name: row.api_key_id ? this._keyNames.get(row.api_key_id)?.name || null : null,
+    }
+  }
+
   listNormal({ limit = 50, ...filters } = {}) {
     return this.queryNormal({ limit, ...filters }).items
   }
@@ -463,7 +475,7 @@ export class RequestLogStore {
   queryNormal(opts = {}) {
     const exclude = this._mutedExclude(opts)
     const result = this.repo.query({ ...opts, exclude_error_class: exclude })
-    result.items = this._dropMuted(result.items, exclude)
+    result.items = this._dropMuted(result.items, exclude).map((row) => this._withGroupNames(row))
     return result
   }
 
@@ -517,7 +529,7 @@ export class RequestLogStore {
     const rec = this.repo.getDebug(requestId) || this.repo.getByRequestId(requestId)
     if (!rec) return null
     if (owner_user_id && !this.repo.belongsToOwner(requestId, owner_user_id)) return null
-    return rec
+    return this._withGroupNames(rec)
   }
 
   snapshot() {
