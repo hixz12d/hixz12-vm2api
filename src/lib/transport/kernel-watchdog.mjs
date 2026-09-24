@@ -3,19 +3,12 @@
  * ensureRustKernel; never falls back to kin-worker hop.
  */
 import { rustKernelHealth, rustKernelReachable, rustKernelBusy, rustKernelPaths } from './rust-kernel-client.mjs'
-import {
-  ensureRustKernel,
-  readExistingKernelConfig,
-  WRAP_SLOT_MAX,
-  wrapHopInflight,
-  wrapIdleMs,
-  scheduleWrapRecycle,
-} from './rust-kernel-supervisor.mjs'
-import { resolveInferenceEngine } from '../vm/slot-engine.mjs'
+import { ensureRustKernel, readExistingKernelConfig, WRAP_SLOT_MAX } from './rust-kernel-supervisor.mjs'
+import { normalizeInferenceEngine } from '../vm/slot-engine.mjs'
 
 export const DEFAULT_KERNEL_WATCHDOG = Object.freeze({
   enabled: true,
-  interval_sec: 5,
+  interval_sec: 20,
   timeout_ms: 15_000,
 })
 
@@ -39,9 +32,9 @@ export function isKernelWatchdogTarget(vm) {
   if (!vm?.id) return false
   if (vm.runtime_kind === 'kvm') return false
   if (HARD_DOWN.has(String(vm.status || '').toLowerCase())) return false
-  // Match request dispatch: unmarked Claude VMs inherit the Rust engine.
-  // resolveInferenceEngine also excludes Codex guests from this watchdog.
-  return resolveInferenceEngine(vm) === 'rust'
+  const configured = normalizeInferenceEngine(vm.inference_engine, { inherit: true })
+  if (configured === 'rust') return true
+  return String(vm.runtime?.engine || '').toLowerCase() === 'rust'
 }
 
 function kernelSlotMismatch(exec) {
@@ -57,19 +50,11 @@ export function createKernelWatchdog({
   homeDirFor,
   ensure = ensureRustKernel,
   health = rustKernelHealth,
-  inflight = wrapHopInflight,
-  idleMs = wrapIdleMs,
-  recycle = scheduleWrapRecycle,
-  now = Date.now,
 } = {}) {
   let config = normalizeKernelWatchdogConfig(initial)
   let timer = null
   let running = false
   let inTick = false
-  const busyWithoutHopSince = new Map()
-  // Recover idle native slots within the pool's 45s wait budget.
-  // Live hops and recently completed hops always suppress recovery.
-  const stuckGraceMs = 10_000
 
   async function tick() {
     if (inTick || !config.enabled) return
@@ -84,24 +69,7 @@ export function createKernelWatchdog({
           homeDir: typeof homeDirFor === 'function' ? homeDirFor(vm) : null,
         }
         const current = await health(exec, { timeoutMs: 800 })
-        if (rustKernelBusy(current)) {
-          const at = now()
-          // Queue waiters are not executing hops. A busy kernel with no real hop
-          // for a full grace period has leaked its slots; never interrupt a live hop.
-          if (inflight(exec) > 0 || idleMs(exec, at) < stuckGraceMs) {
-            busyWithoutHopSince.delete(vm.id)
-            continue
-          }
-          const since = busyWithoutHopSince.get(vm.id) ?? at
-          busyWithoutHopSince.set(vm.id, since)
-          if (at - since >= stuckGraceMs) {
-            const recovery = recycle(exec)
-            if (recovery?.pending) await recovery.pending
-            busyWithoutHopSince.delete(vm.id)
-          }
-          continue
-        }
-        busyWithoutHopSince.delete(vm.id)
+        if (rustKernelBusy(current)) continue
         if (rustKernelReachable(current) && !kernelSlotMismatch(exec)) continue
         await ensure(exec, { timeoutMs: config.timeout_ms })
       }

@@ -68,7 +68,7 @@ import {
 } from '../core/errors.mjs'
 import { resolveWorkspaceMode, isOfficialClaudeClient } from './workspace-mode.mjs'
 import { officialMessagesBody } from './anthropic-messages.mjs'
-import { prepareOutboundEnvelope, prepareCliHopBody, CLI_HOP_CACHE_TTL } from './outbound-attempt.mjs'
+import { prepareOutboundEnvelope, prepareCliHopBody } from './outbound-attempt.mjs'
 import { loadVmIdentity, OFFICIAL_CLI_VERSION } from '../identity/vm-identity.mjs'
 import { touchTelemetrySession } from '../vm/worker-telemetry.mjs'
 import {
@@ -148,6 +148,10 @@ export function createHandleProtocol(deps) {
     logBag.error_code = originalCode || mapped.body?.error?.code
     logBag.error_message = summary || originalMessage || mapped.body?.error?.message || null
     return mapped
+  }
+
+  function acceptAssistantHop(result) {
+    return finalizeAssembledAssistantHop(result)
   }
 
   function applyDistillGuard({ req, inbound, body, fp, logBag, requestId, res }) {
@@ -276,11 +280,11 @@ export function createHandleProtocol(deps) {
         applyClaudeSSELineToMessage(restoreToolNamesInSSELine(line, toolNames), assembler)
       },
     })
-    const merged = mergeAssembledAssistantHop(workerResult, assembler.message)
-    return finalizeAssembledAssistantHop({
-      ...merged,
-      body: merged.body ? restoreToolNames(merged.body, toolNames) : merged.body,
-    })
+    Object.assign(workerResult, mergeAssembledAssistantHop(workerResult, assembler.message))
+    if (workerResult?.body) {
+      workerResult.body = restoreToolNames(workerResult.body, toolNames)
+    }
+    return acceptAssistantHop(workerResult)
   }
 
   async function handleProtocol(req, res, protocol, pathName) {
@@ -805,8 +809,6 @@ export function createHandleProtocol(deps) {
           const cliHop = resolveOfficialCcInference(selected.vm, routingNow) === 'cli-hop'
           let hopBody = body
           if (cliHop) {
-            // Keep usage accounting and client-visible usage aligned with the kernel's actual TTL.
-            cacheTtl = CLI_HOP_CACHE_TTL
             const repaired = extra.repaired === true
             const resolvedPersona = resolveSlotPersonaPreset(selected.vm, routingNow)
             const cliAppliesNodePersona =
@@ -826,10 +828,6 @@ export function createHandleProtocol(deps) {
             hopBody = prepareCliHopBody(repaired ? body : hopBody, {
               stream: upstreamStream,
               repaired,
-              cacheBreakpoints,
-              cacheControlLimit: Number(getRouting()?.compatibility?.cache_control_limit) || 4,
-              cacheTtl,
-              unofficial: !officialTraffic,
             })
             hopBody = await materializeRemoteImageSources(hopBody)
             if (identity) {
@@ -1016,7 +1014,7 @@ export function createHandleProtocol(deps) {
       }
     }
 
-    result = finalizeAssembledAssistantHop(result)
+    result = acceptAssistantHop(result)
     logBag.vm_id = result?.vmId || null
     logBag.account_id = result?.accountId || null
     logBag.final_account_id = result?.accountId || null

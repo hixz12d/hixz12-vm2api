@@ -213,7 +213,7 @@ export function isIncompleteAssistantMessage(result = {}) {
 
 export function finalizeAssembledAssistantHop(result = {}) {
   if (isCompleteAssistantMessage(result)) {
-    // A stop_reason in the body cannot override a missing SSE terminator or failed transport.
+    // Assembled content must not erase an explicit transport failure or rejection.
     if (result.transportError || (result.terminalState && result.terminalState !== 'verified')) {
       return { ...result, ok: false }
     }

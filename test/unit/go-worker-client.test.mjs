@@ -407,7 +407,7 @@ test('terminal metadata is not a downstream commit', () => {
   )
 })
 
-unixTest('streamGoWorker preserves partial text but requires message_stop for success', async () => {
+unixTest('streamGoWorker assembles text+stop_reason even without message_stop', async () => {
   const fx = await fixture((req, res) => {
     res.setHeader('content-type', 'text/event-stream')
     res.write('data: {"type":"message_start","message":{"type":"message","role":"assistant","content":[]}}\n\n')
@@ -423,9 +423,9 @@ unixTest('streamGoWorker preserves partial text but requires message_stop for su
       body: { model: 'claude-sonnet-5', stream: true, messages: [{ role: 'user', content: 'hi' }] },
       onEvent: (line) => lines.push(line),
     })
-    assert.equal(result.ok, false)
+    assert.equal(result.ok, true)
     assert.equal(result.committed, true)
-    assert.equal(result.terminalState, 'incomplete')
+    assert.equal(result.terminalState, 'verified')
     assert.equal(result.stopReason, 'end_turn')
     assert.equal(result.body.content[0].text, 'hello')
     assert.ok(lines.some((line) => line.includes('text_delta')))

@@ -10,7 +10,6 @@ import {
   ensureClearThinkingContextManagement,
   stripInvalidThinkingBlocks,
   alignSamplingWithThinking,
-  enforceCacheLimit,
   modelSupportsMidConversationSystem,
 } from './anthropic-policy.mjs'
 import { liftMidConversationSystemMessages } from './sanitize.mjs'
@@ -38,10 +37,8 @@ import {
 } from '../identity/official-cc-system-2.1.241.mjs'
 import {
   applyCacheTtlToBody,
-  applyCacheBreakpoints,
   enforceCacheTtlOrder,
-  forceEphemeralCacheTtl,
-  normalizeCacheBreakpoints,
+  removeCacheControlFields,
   stripIllegalCacheControlFields,
 } from './cache-ttl.mjs'
 import { apiKeyBetaHeader, setupTokenBetaHeader } from './claude-code-betas.mjs'
@@ -75,45 +72,6 @@ export function stripCliOwnedSystem(system) {
   if (!Array.isArray(system)) return system
   const kept = system.filter((block) => !isCliOwnedSystemText(systemBlockText(block)))
   return kept.length ? kept : undefined
-}
-
-/** Wrap CLI owns tools + system + current tail; Node owns the stable previous-user boundary. */
-export const CLI_HOP_CACHE_BREAKPOINTS = Object.freeze({
-  enabled: true,
-  preserve_client: true,
-  system_tail: false,
-  tools_tail: false,
-  messages: 'rewrite',
-})
-
-/** Wrap CLI tools/system omit ttl, which Anthropic treats as 5m and processes first.
- * A later message 1h is the messages.N 400, so the hop wire value is 5m. */
-export const CLI_HOP_CACHE_TTL = '5m'
-
-function dropNodeCacheControl(node) {
-  if (!node || typeof node !== 'object' || !node.cache_control) return node
-  const { cache_control: _drop, ...rest } = node
-  return rest
-}
-
-function dropCliOwnedBreakpoints(body) {
-  const out = { ...body }
-  if (Array.isArray(out.tools)) out.tools = out.tools.map(dropNodeCacheControl)
-  if (Array.isArray(out.system)) out.system = out.system.map(dropNodeCacheControl)
-  return out
-}
-
-/** Kernel restamps the current tail, so keep only Node's stable previous-user marker. */
-function dropLastMessageBreakpoint(body) {
-  const messages = body?.messages
-  if (!Array.isArray(messages) || messages.length === 0) return body
-  const idx = messages.length - 1
-  const last = messages[idx]
-  if (!last || !Array.isArray(last.content)) return body
-  const content = last.content.map(dropNodeCacheControl)
-  const next = messages.slice()
-  next[idx] = { ...last, content }
-  return { ...body, messages: next }
 }
 
 /** Official Claude Code 2.1.278 context block. A live counter here changes the cached prefix. */
@@ -204,17 +162,7 @@ function stabilizeMessageBudgets(body) {
  * This must not depend on client classification: relays strip the billing
  * block and rewrite the UA, so relayed Claude Code looks third-party.
  */
-export function prepareCliHopBody(
-  canonicalBody,
-  {
-    stream = true,
-    repaired = false,
-    cacheBreakpoints = CLI_HOP_CACHE_BREAKPOINTS,
-    cacheControlLimit = 4,
-    cacheTtl = null,
-    unofficial: _unofficial = false,
-  } = {},
-) {
+export function prepareCliHopBody(canonicalBody, { stream = true, repaired = false } = {}) {
   let body = officialMessagesBody(canonicalBody, { stream })
   delete body.metadata
   // Wrap CLI (Claude Code) throws a fatal "max_output_tokens" error if response reaches max_tokens.
@@ -241,29 +189,8 @@ export function prepareCliHopBody(
   body = stripInvalidThinkingBlocks(body)
   body = applyOpus55RequestRules(body)
   body = alignSamplingWithThinking(body)
-  const ttl = CLI_HOP_CACHE_TTL
   body = stripIllegalCacheControlFields(body)
-  // Node owns the stable previous-user boundary; the kernel receives the same
-  // resolved TTL and owns the current tail plus wrap-owned markers.
-  if (cacheBreakpoints) {
-    const cfg = normalizeCacheBreakpoints(cacheBreakpoints)
-    body = applyCacheBreakpoints(body, {
-      ttl,
-      config: {
-        enabled: cfg.enabled,
-        preserve_client: cfg.preserve_client,
-        system_tail: false,
-        tools_tail: false,
-        messages: cfg.enabled ? 'rewrite' : 'off',
-      },
-      inbound: body,
-    })
-  }
-  body = dropCliOwnedBreakpoints(body)
-  body = dropLastMessageBreakpoint(body)
-  // Retained client markers also have to match the kernel, even with auto-breakpoints disabled.
-  body = forceEphemeralCacheTtl(enforceCacheTtlOrder(body), ttl)
-  enforceCacheLimit(body, cacheControlLimit)
+  body = removeCacheControlFields(body)
   return body
 }
 /** Wrap CLI process is spawned as sonnet-5/adaptive. Haiku rejects thinking. */

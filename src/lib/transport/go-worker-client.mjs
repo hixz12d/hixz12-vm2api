@@ -564,13 +564,12 @@ export async function streamGoWorker({
     }
     let buffer = ''
     let lastError = null
-    let sawTerminal = false
-    const assembler = createClaudeMessageAssembler()
     let dataBuf = ''
     let sseUsage = null
     let sseModel = null
     let sseStop = null
     let sseRateHeaders = {}
+    const assembler = createClaudeMessageAssembler()
     const pendingLines = []
     const takeSseEvent = () => {
       try {
@@ -599,14 +598,9 @@ export async function streamGoWorker({
     }
     const observeSseEvent = (event) => {
       if (!event) return event
-      if (event.type !== 'error' && event.type !== 'kin_response_headers') {
-        applyClaudeSSELineToMessage(`data: ${JSON.stringify(event)}`, assembler)
-      }
       if (event.type === 'kin_response_headers' && event.headers && typeof event.headers === 'object') {
         sseRateHeaders = { ...sseRateHeaders, ...event.headers }
       }
-      if (event.type === 'message_stop' || event.type === 'response.completed' || event.type === 'response.done')
-        sawTerminal = true
       if (event.type === 'error') lastError = event
       const evUsage = usageFromSseEvent(event)
       if (evUsage) sseUsage = mergeUsage(sseUsage, evUsage)
@@ -641,6 +635,7 @@ export async function streamGoWorker({
         while ((newline = buffer.indexOf('\n')) >= 0) {
           const line = buffer.slice(0, newline).replace(/\r$/, '')
           buffer = buffer.slice(newline + 1)
+          applyClaudeSSELineToMessage(line, assembler)
           if (line.startsWith('data:')) {
             const piece = line.slice(5).trim()
             if (piece && piece !== '[DONE]') {
@@ -665,14 +660,7 @@ export async function streamGoWorker({
         }
       }
       if (buffer) {
-        if (buffer.startsWith('data:')) {
-          const piece = buffer.slice(5).trim()
-          if (piece && piece !== '[DONE]') dataBuf = dataBuf ? `${dataBuf}\n${piece}` : piece
-        }
-        if (dataBuf) {
-          const event = observeSseEvent(takeSseEvent())
-          if (isDownstreamCommitEvent(event)) await flushCommit()
-        }
+        applyClaudeSSELineToMessage(buffer, assembler)
         await emitLine(buffer)
       }
       if (dataBuf) {
@@ -683,23 +671,15 @@ export async function streamGoWorker({
       const meta = streamMetaFromHeaders({ ...headers, ...trailers })
       const assembled = assembler.message
       const stopReason = meta.stopReason || sseStop || assembled?.stop_reason || null
-      if (assembled) {
-        assembled.usage = meta.usage || sseUsage || assembled.usage
-        assembled.model = meta.model || sseModel || assembled.model
-        assembled.stop_reason = stopReason
-      }
-      // A complete-looking body or header cannot replace the actual stream terminator.
-      const complete = sawTerminal && !lastError && isCompleteAssistantMessage({ body: assembled, stopReason })
+      const complete = !lastError && isCompleteAssistantMessage({ body: assembled, stopReason })
       if (!committed && complete) await flushCommit()
-      const headerState = trailers['x-kin-terminal-state'] || headers['x-kin-terminal-state']
-      // A non-verified header stays authoritative so fatal states are not downgraded to a retry.
-      const vetoState = headerState && headerState !== 'verified' ? headerState : null
-      const terminalState = vetoState || (complete ? 'verified' : 'incomplete')
+      const terminalState = complete ? 'verified' : 'incomplete'
       const rateHeaders = mergeRateLimitHeaders({ ...sseRateHeaders, ...headers, ...trailers })
       return restoreUncommittedHop({
-        ok: response.statusCode === 200 && !lastError && terminalState === 'verified',
+        ok: response.statusCode === 200 && !lastError && complete,
         status: response.statusCode || 0,
         via: 'go-worker-stream',
+
         body: lastError || assembled || { type: 'message', role: 'assistant', content: [] },
         headers: rateHeaders,
         // Trailer stays authoritative, but it may carry totals only (Codex/Responses hops).

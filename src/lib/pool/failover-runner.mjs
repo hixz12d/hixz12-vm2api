@@ -12,7 +12,6 @@ import {
 } from '../core/errors.mjs'
 import { hasRefreshPresence } from '../oauth/oauth-credentials.mjs'
 import { resolveOfficialCcInference } from '../vm/slot-engine.mjs'
-import { SessionQueue } from './session-queue.mjs'
 
 const DEFAULTS = {
   max_account_switches: 10,
@@ -167,6 +166,26 @@ function sleepWithSignal(ms, signal) {
   })
 }
 
+function waitForSessionTurn(previous, signal) {
+  if (!signal) return previous.catch(() => {})
+  if (signal.aborted)
+    return Promise.reject(Object.assign(new Error('Request was cancelled'), { code: 'request_cancelled' }))
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      cleanup()
+      reject(Object.assign(new Error('Request was cancelled'), { code: 'request_cancelled' }))
+    }
+    const cleanup = () => signal.removeEventListener?.('abort', onAbort)
+    signal.addEventListener?.('abort', onAbort, { once: true })
+    previous
+      .catch(() => {})
+      .then(() => {
+        cleanup()
+        resolve()
+      })
+  })
+}
+
 function isUnfinishedLastResult(result, policy) {
   if (!result) return false
   if (policy?.reason === 'incomplete_assistant') return true
@@ -277,7 +296,7 @@ export class FailoverRunner {
     this.onCredentialFailure = onCredentialFailure
     this.onFablePlanDenied = onFablePlanDenied
     this.onFableSuccess = onFableSuccess
-    this.sessionQueue = new SessionQueue()
+    this.sessionTails = new Map()
   }
 
   forgetCredential(selected, policy) {
@@ -293,11 +312,27 @@ export class FailoverRunner {
   }
 
   async run(args = {}) {
+    const sessionKey = String(args.stickyKey || '')
+    if (!sessionKey) return this.runOnce(args)
+    const previous = this.sessionTails.get(sessionKey) || Promise.resolve()
+    let releaseTurn
+    const turn = new Promise((resolve) => {
+      releaseTurn = resolve
+    })
+    const tail = previous.catch(() => {}).then(() => turn)
+    this.sessionTails.set(sessionKey, tail)
+    // A cancelled tail still waits for its predecessors before removing the session key.
+    void tail.then(() => {
+      if (this.sessionTails.get(sessionKey) === tail) this.sessionTails.delete(sessionKey)
+    })
     try {
-      return await this.sessionQueue.run(args.stickyKey, () => this.runOnce(args), { signal: args.signal })
+      await waitForSessionTurn(previous, args.signal)
+      return await this.runOnce(args)
     } catch (error) {
       if (error?.code === 'request_cancelled') return poolError('request_cancelled', 'Request was cancelled')
       throw error
+    } finally {
+      releaseTurn()
     }
   }
 

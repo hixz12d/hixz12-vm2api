@@ -19,7 +19,6 @@
  */
 import crypto from 'node:crypto'
 import { formatMetadataUserId } from './vm-identity.mjs'
-import { isSessionTitleRequest } from '../protocol/session-title.mjs'
 
 export const IDENTITY_REPLACE = Object.freeze([
   'device_id',
@@ -158,22 +157,16 @@ function headerValue(headers, key) {
  * Caller session, in official order: metadata.user_id → sticky headers → body keys.
  */
 export function extractCallerSession({ inbound = {}, body = {}, headers = {} } = {}) {
-  const src = inbound && typeof inbound === 'object' && Object.keys(inbound).length ? inbound : body
-  // The SDK reuses its parent session for naming. Give that independent task
-  // a stable child session in BOTH the pool queue and the native CLI, so it
-  // neither waits behind a long tool turn nor mutates the parent's CLI state.
-  const scoped = isSessionTitleRequest(src)
-    ? (value) => uuidFromSeed(`kin-session-title:${value}`)
-    : (value) => String(value)
   const raw = inbound?.metadata?.user_id || body?.metadata?.user_id
   const parsed = parseUserId(raw) || {}
-  if (parsed.session_id) return scoped(parsed.session_id)
+  if (parsed.session_id) return String(parsed.session_id)
   for (const key of CALLER_SESSION_HEADER_KEYS) {
     const v = headerValue(headers, key)
-    if (v) return scoped(v)
+    if (v) return v
   }
+  const src = inbound && typeof inbound === 'object' && Object.keys(inbound).length ? inbound : body
   for (const key of CALLER_SESSION_BODY_KEYS) {
-    if (src?.[key]) return scoped(src[key])
+    if (src?.[key]) return String(src[key])
   }
   return ''
 }
