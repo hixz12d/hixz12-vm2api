@@ -118,6 +118,11 @@ import {
 } from './anthropic-policy.mjs'
 import { materializeRemoteImageSources } from './images.mjs'
 
+export function healthDecisionForGroup(decision, groupScope) {
+  if (decision && groupScope && !groupScope.allowsVm(decision.snapshot?.vm_id || '')) return null
+  return decision
+}
+
 export function createHandleProtocol(deps) {
   const json = (...args) => deps.json(...args)
   const writeSSEHeaders = (...args) => deps.writeSSEHeaders(...args)
@@ -366,7 +371,7 @@ export function createHandleProtocol(deps) {
     logBag.has_tools = Array.isArray(inbound?.tools) && inbound.tools.length > 0
 
     const fp = fingerprintRequest(req, inbound)
-    const healthDecision = getHealthMonitor()?.decide?.(req.headers, inbound)
+    const healthDecision = healthDecisionForGroup(getHealthMonitor()?.decide?.(req.headers, inbound), req.groupScope)
     if (healthDecision?.action === 'fail') {
       stats.requests++
       stats.by_route[protocol] = (stats.by_route[protocol] || 0) + 1

@@ -9,6 +9,7 @@ import { FailoverRunner } from '../../src/lib/pool/failover-runner.mjs'
 import { handleGroups } from '../../src/lib/admin/panel-groups.mjs'
 import { authorizePanelRoute } from '../../src/lib/admin/panel-acl.mjs'
 import { pickCodexCandidates } from '../../src/lib/protocol/handle-codex.mjs'
+import { healthDecisionForGroup } from '../../src/lib/protocol/handle-protocol.mjs'
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-group-routing-'))
@@ -53,6 +54,19 @@ function fixture(t) {
   })
   return { root, store, groups, pro, max, key, scope, pool }
 }
+
+test('shared health cache and failure snapshots never cross group boundaries', (t) => {
+  const { scope, groups, pro } = fixture(t)
+  for (const action of ['cache', 'fail']) {
+    const own = { action, snapshot: { vm_id: 'vm-01' } }
+    assert.equal(healthDecisionForGroup(own, scope), own)
+    assert.equal(healthDecisionForGroup({ action, snapshot: { vm_id: 'vm-03' } }, scope), null)
+    assert.equal(healthDecisionForGroup({ action, snapshot: {} }, scope), null)
+    assert.equal(healthDecisionForGroup(own, null), own)
+  }
+  groups.update(pro.id, { vm_ids: [] })
+  assert.equal(healthDecisionForGroup({ action: 'cache', snapshot: { vm_id: 'vm-01' } }, scope), null)
+})
 
 test('group writes validate members atomically and reject conflicting edits', (t) => {
   const { groups, pro } = fixture(t)
