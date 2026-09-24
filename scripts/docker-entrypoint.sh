@@ -77,6 +77,18 @@ if [ -d /opt/vm2api/image-wrap-cli ]; then
   fi
 fi
 
+if [ -f /opt/vm2api/image-crag/kin-kernel ]; then
+  mkdir -p "$ROOT/share/crag"
+  src="/opt/vm2api/image-crag/kin-kernel"
+  dest="$ROOT/share/crag/kin-kernel"
+  if [ ! -f "$dest" ] || ! cmp -s "$src" "$dest"; then
+    cp "$src" "$dest.new"
+    chmod 755 "$dest.new"
+    mv -f "$dest.new" "$dest"
+    WRAP_CHANGED=1
+  fi
+fi
+
 if [ ! -S /var/run/docker.sock ]; then
   echo "vm2api: /var/run/docker.sock not mounted; slot create/start will fail." >&2
 elif [ -f /opt/vm2api/docker/kin-os/build.mjs ]; then

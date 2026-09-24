@@ -31,6 +31,7 @@ import { SlotIdentity } from '@/components/platform-chip'
 import { StatusMark } from '@/components/status-mark'
 import { CodexKernelHealthFields } from '@/features/vm/codex-kernel-health-card'
 import { ConcRpmEditor } from '@/features/vm/conc-rpm-editor'
+import { dataplaneLabel } from '@/features/vm/dataplane-contract'
 import {
   Field,
   Meter,
@@ -42,6 +43,7 @@ import { OpenaiPlanBadge } from '@/features/vm/openai-plan-badge'
 import { OpenaiQuotaPanel } from '@/features/vm/openai-quota-panel'
 import { proxyHealthOf } from '@/features/vm/proxy-health'
 import { SessionSlotsEditor } from '@/features/vm/session-slots-editor'
+import { telemetryStatusLabel } from './telemetry-status'
 
 type Props = {
   vm: Vm
@@ -133,7 +135,7 @@ function slotVerdict(
 
 function workerLabel(value: unknown) {
   const raw = String(value || '').trim()
-  if (raw === 'go' || raw === 'rust') return 'Rust · Claude Code cli-hop'
+  if (raw === 'go' || raw === 'rust') return 'Rust · cli-hop'
   return raw || '—'
 }
 
@@ -380,14 +382,15 @@ export function VmStatusBoard(props: Props) {
                 <Field label='cli-hop' compact>
                   {rust}
                 </Field>
+                <Field label='内核' compact>
+                  {isCodexVm(vm) ? '—' : dataplaneLabel(vm.resolved_dataplane)}
+                </Field>
                 <Field label='拓扑' compact>
                   {topologyLabel(topology)}
                   {topology?.go_telemetry ? ' · Go telemetry' : ''}
                 </Field>
                 <Field label='遥测' compact>
-                  {telemetry?.enabled
-                    ? `运行中${telemetry.read_only ? ' · 只读' : ''}`
-                    : '未启用'}
+                  {telemetryStatusLabel(telemetry)}
                 </Field>
               </>
             )}

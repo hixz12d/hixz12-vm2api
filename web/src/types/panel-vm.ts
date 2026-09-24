@@ -73,7 +73,8 @@ export type VmKernelSnapshot = {
   credential_state?: string | null
   proxy_state?: string | null
   telemetry?: {
-    enabled?: boolean
+    enabled?: boolean | null
+    running?: boolean | null
     process?: string | null
     read_only?: boolean
   } | null
@@ -175,6 +176,8 @@ export type Vm = {
   resolved_inference_engine?: 'go' | 'rust' | null
   persona_preset?: string | null
   resolved_persona_preset?: string | null
+  dataplane?: 'wrap' | 'crag' | null
+  resolved_dataplane?: 'wrap' | 'crag' | null
   kernel?: string
   region?: string
   /** 槽位环境时区（容器 `TZ` + persona `# Environment`）。 */
@@ -226,6 +229,14 @@ export type Vm = {
     transport?: boolean
     rate_limited?: boolean
   }
+  last_probe_check?: {
+    at?: string
+    ok?: boolean
+    source?: string
+    via?: string
+    error?: string | null
+    data_at?: string | null
+  } | null
   probe_source?: string
   /** 最近一次刷票失败的原因。与 `last_probe.error` 是两条独立的失效来源。 */
   refresh_error?: string
@@ -315,6 +326,10 @@ export type OfficialCcStatus = {
   hello_ok?: boolean
   usage_ok?: boolean
   account_tier?: string
+  /** `profile` = 官方 /api/oauth/profile；`usage` = /usage 推断兜底。 */
+  account_tier_source?: string
+  /** 槽内 GET /v1/models 返回的模型 id。 */
+  available_models?: string[]
   exit_code?: number | null
   resident?: boolean
   resident_ok?: boolean

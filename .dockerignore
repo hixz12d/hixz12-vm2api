@@ -12,6 +12,8 @@ bin/*
 share/*
 !share/wrap-cli
 !share/wrap-cli/**
+!share/crag
+!share/crag/**
 vms
 data
 .env

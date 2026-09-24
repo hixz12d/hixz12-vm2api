@@ -23,6 +23,7 @@ COPY docker/kin-os ./docker/kin-os
 COPY --from=web /web/dist ./web/dist
 COPY bin/kin-kernel bin/kin-egress bin/kin-worker bin/kin-codex-kernel bin/kin-cookie-auth /opt/vm2api/image-bin/
 COPY share/wrap-cli /opt/vm2api/image-wrap-cli
+COPY share/crag /opt/vm2api/image-crag
 COPY scripts/docker-entrypoint.sh /usr/local/bin/vm2api-entrypoint
 RUN chmod 755 /usr/local/bin/vm2api-entrypoint /opt/vm2api/image-bin/* \
   && cp -a /opt/vm2api/src/config /opt/vm2api/image-config \
