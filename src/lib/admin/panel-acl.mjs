@@ -128,7 +128,9 @@ function isSuperVmRead(path) {
 function isSuperSchedule(method, path) {
   if (method !== 'POST') return false
   return (
-    /^\/api\/panel\/vms\/[^/]+\/schedulable$/.test(path) || /^\/api\/panel\/vms\/[^/]+\/cooldown\/clear$/.test(path)
+    /^\/api\/panel\/vms\/[^/]+\/schedulable$/.test(path) ||
+    /^\/api\/panel\/vms\/[^/]+\/cooldown\/clear$/.test(path) ||
+    /^\/api\/panel\/vms\/[^/]+\/circuit\/reset$/.test(path)
   )
 }
 
@@ -158,6 +160,7 @@ function userVmPathAllowed(method, path) {
     return (
       rest === 'schedulable' ||
       rest === 'cooldown/clear' ||
+      rest === 'circuit/reset' ||
       rest === 'probe' ||
       rest === 'test-chat' ||
       rest === 'count-tokens' ||

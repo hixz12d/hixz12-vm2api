@@ -172,6 +172,41 @@ test('real failover scheduler tries both Pro accounts and never reaches Max', as
   assert.deepEqual([...new Set(seen)].sort(), ['vm-01', 'vm-02'])
 })
 
+test('incomplete hops exhaust only the key group and preserve its 503 error', async (t) => {
+  const { pool, scope } = fixture(t)
+  const runner = new FailoverRunner({ scheduler: pool, config: { same_account_retry_delay_ms: 0 } })
+  const seen = []
+  const result = await runner.run({
+    model: 'claude-sonnet-5',
+    canonicalBody: { model: 'claude-sonnet-5' },
+    stickyKey: 'group-incomplete',
+    stickyKeys: ['group-incomplete', 'group-alias'],
+    groupScope: scope,
+    callAttempt: async ({ candidate }) => {
+      seen.push(candidate.vmId)
+      return {
+        ok: false,
+        status: 200,
+        committed: false,
+        terminalState: 'incomplete',
+        body: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'thinking', thinking: 'draft', signature: 'sig' }],
+          stop_reason: null,
+        },
+      }
+    },
+  })
+  assert.equal(result.status, 503)
+  assert.equal(result.body.error.code, 'group_no_eligible_accounts')
+  assert.equal(result.body.error.details.last_reason, 'incomplete_assistant')
+  assert.deepEqual([...new Set(seen)].sort(), ['vm-01', 'vm-02'])
+  assert.equal(Object.keys(pool.snapshot().inflight).length, 0)
+  assert.equal(pool.usedSlotCount('vm-01'), 0)
+  assert.equal(pool.usedSlotCount('vm-02'), 0)
+})
+
 test('group management denies ordinary users and sanitizes read responses', async (t) => {
   const { groups, root } = fixture(t)
   assert.equal(authorizePanelRoute('PATCH', '/api/panel/groups/3', 'user').ok, false)

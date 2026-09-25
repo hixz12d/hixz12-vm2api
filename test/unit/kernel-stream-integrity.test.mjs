@@ -141,14 +141,30 @@ unixTest('thinking-only output is incomplete even with a terminal marker', async
   assert.equal(recycled, 1)
 })
 
-unixTest('an upstream error survives message assembly without exposing a partial stream', async () => {
+unixTest('a generic uncommitted error follows upstream empty-hop handling without a false 502', async () => {
   const { result, recycled, lines } = await runStream([
     start,
     { type: 'error', error: { type: 'api_error', message: 'Connection error' } },
   ])
   assert.equal(result.ok, false)
-  assert.equal(result.body.error.message, 'Connection error')
+  assert.equal(result.status, 200)
+  assert.equal(result.terminalState, 'incomplete')
+  assert.equal(result.body.error.code, 'empty_response')
   assert.equal(result.committed, false)
   assert.deepEqual(lines, [])
   assert.equal(recycled, 1)
+})
+
+unixTest('a provider rate limit survives assembly without exposing a partial stream or recycling', async () => {
+  const { result, recycled, lines } = await runStream([
+    start,
+    { type: 'error', error: { type: 'rate_limit_error', message: 'Rate limit reached' } },
+  ])
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 429)
+  assert.equal(result.terminalState, 'rejected')
+  assert.equal(result.body.error.message, 'Rate limit reached')
+  assert.equal(result.committed, false)
+  assert.deepEqual(lines, [])
+  assert.equal(recycled, 0)
 })
