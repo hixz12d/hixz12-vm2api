@@ -19,6 +19,7 @@
  */
 import crypto from 'node:crypto'
 import { formatMetadataUserId } from './vm-identity.mjs'
+import { specialistTaskFingerprint } from './specialist-session.mjs'
 
 export const IDENTITY_REPLACE = Object.freeze([
   'device_id',
@@ -157,16 +158,19 @@ function headerValue(headers, key) {
  * Caller session, in official order: metadata.user_id → sticky headers → body keys.
  */
 export function extractCallerSession({ inbound = {}, body = {}, headers = {} } = {}) {
+  const task = specialistTaskFingerprint(inbound?.system ? inbound : body)
+  const scope = (value) =>
+    task ? uuidFromSeed(JSON.stringify(['kin-specialist-v1', String(value), task])) : String(value)
   const raw = inbound?.metadata?.user_id || body?.metadata?.user_id
   const parsed = parseUserId(raw) || {}
-  if (parsed.session_id) return String(parsed.session_id)
+  if (parsed.session_id) return scope(parsed.session_id)
   for (const key of CALLER_SESSION_HEADER_KEYS) {
     const v = headerValue(headers, key)
-    if (v) return v
+    if (v) return scope(v)
   }
   const src = inbound && typeof inbound === 'object' && Object.keys(inbound).length ? inbound : body
   for (const key of CALLER_SESSION_BODY_KEYS) {
-    if (src?.[key]) return String(src[key])
+    if (src?.[key]) return scope(src[key])
   }
   return ''
 }
