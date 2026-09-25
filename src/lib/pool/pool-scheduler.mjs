@@ -35,7 +35,14 @@ import { splitBlocksModel } from './weekly-split.mjs'
 import { slotAllowsModel } from './slot-model-gate.mjs'
 import { isCodexVm } from '../vm/vm-kind.mjs'
 import { detectInboundPlatform } from '../protocol/platform-detect.mjs'
-import { resolveCredentialScheduleLevel } from './credential-weight.mjs'
+import { manualScheduleLevelOf, resolveCredentialScheduleLevel } from './credential-weight.mjs'
+import {
+  chooseByScore,
+  formatSmartReason,
+  normalizeScores,
+  normalizeSmartConfig,
+  scoreFactors,
+} from './smart-score.mjs'
 import { PLATFORM_SCOPE, vmMatchesOwnerScope } from '../admin/resource-owner.mjs'
 import { rustKernelBusy, rustKernelProcessUp, rustKernelReachable } from '../transport/rust-kernel-client.mjs'
 import { resolveSessionSlots } from '../vm/slot-engine.mjs'
@@ -148,6 +155,12 @@ function vmTierOf(vm) {
 
 function priorityOf(vm, account, now) {
   return resolveCredentialScheduleLevel({ vm, unified: account?.unified || {}, now }).level
+}
+
+/** Smart mode: manual levels still form strict tiers; automatic day buckets are replaced by the score. */
+function smartTierOf(candidate) {
+  const manual = manualScheduleLevelOf(candidate?.vm)
+  return manual == null ? 0 : manual
 }
 
 function weightOf(vm, state) {
@@ -432,6 +445,7 @@ export class PoolScheduler {
         model: normalizeModel(model),
         priority: priorityOf(vm, eligibility.account, now),
         weight: weightOf(vm, state),
+        account: eligibility.account || null,
         inflight,
         maxConcurrency,
         sessionSlots: sessionSlotsOf(vm, this.config.default_session_slots),
@@ -814,13 +828,14 @@ export class PoolScheduler {
       }
     }
     if (!candidates.length) return null
+    const strategy = String(this.config.strategy || 'weighted-round-robin')
+    if (strategy === 'smart') return this.smartRank(candidates)
     const highestPriority = Math.max(...candidates.map((candidate) => candidate.priority))
     let pool = candidates.filter((candidate) => candidate.priority === highestPriority)
     const minLoad = Math.min(...pool.map((candidate) => candidate.loadRatio))
     pool = pool.filter((candidate) => candidate.loadRatio === minLoad)
     if (pool.length === 1) return { ...pool[0], selectionReason: 'priority-load' }
 
-    const strategy = String(this.config.strategy || 'weighted-round-robin')
     if (strategy === 'lru' || strategy === 'fill-first') {
       pool.sort((left, right) => left.lastUsedAt - right.lastUsedAt || left.accountId.localeCompare(right.accountId))
       return { ...pool[0], selectionReason: strategy }
@@ -838,12 +853,60 @@ export class PoolScheduler {
 
   peekRank(candidates = []) {
     if (!candidates.length) return null
+    if (String(this.config.strategy || '') === 'smart') {
+      const ranked = this.smartRank(candidates)
+      return ranked ? { ...ranked, selectionReason: 'peek' } : null
+    }
     const highestPriority = Math.max(...candidates.map((candidate) => candidate.priority))
     let pool = candidates.filter((candidate) => candidate.priority === highestPriority)
     const minLoad = Math.min(...pool.map((candidate) => candidate.loadRatio))
     pool = pool.filter((candidate) => candidate.loadRatio === minLoad)
     pool.sort((left, right) => left.lastUsedAt - right.lastUsedAt || left.accountId.localeCompare(right.accountId))
     return { ...pool[0], selectionReason: pool.length === 1 ? 'priority-load' : 'peek' }
+  }
+
+  /** Sessions active in the smart window. Session-less requests fall back to inflight. */
+  smartSessions(candidate, now = Date.now()) {
+    const cfg = normalizeSmartConfig(this.config.smart)
+    let active = 0
+    try {
+      active =
+        Number(this.accountQuota?.sessions?.activeCount?.(candidate.accountId, cfg.active_window_min * 60_000, now)) ||
+        0
+    } catch {}
+    return Math.max(active, Number(candidate.inflight) || 0)
+  }
+
+  /** Pure ranking: manual level tier, then weighted least-sessions by quota value. No state is mutated. */
+  smartRank(candidates = [], now = Date.now()) {
+    if (!candidates.length) return null
+    const top = Math.max(...candidates.map(smartTierOf))
+    let pool = candidates.filter((candidate) => smartTierOf(candidate) === top)
+    const weighted = pool.filter((candidate) => candidate.weight > 0)
+    if (weighted.length) pool = weighted
+    const smartCfg = this.config.smart
+    const factors = normalizeScores(
+      pool.map((candidate) =>
+        scoreFactors({
+          account: candidate.account,
+          tier: vmTierOf(candidate.vm),
+          policy: this.accountQuota?.policyFor?.(candidate.account, { tier: vmTierOf(candidate.vm) }) || null,
+          config: smartCfg,
+          now,
+        }),
+      ),
+      smartCfg,
+    )
+    const items = pool.map((candidate, index) => ({
+      key: candidate.accountId,
+      candidate,
+      factors: factors[index],
+      value: factors[index].value * (candidate.weight > 0 ? candidate.weight : 1),
+      sessions: this.smartSessions(candidate, now),
+    }))
+    const best = chooseByScore(items, smartCfg)
+    if (!best) return null
+    return { ...best.candidate, smartScore: best.value, selectionReason: formatSmartReason(best) }
   }
 
   /** Read-only current account. Never bind, unbind, reserve, or mutate WRR. */

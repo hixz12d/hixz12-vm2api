@@ -30,7 +30,7 @@ export function PoolPane(props: PoolPaneProps) {
       <CardContent className='divide-y'>
         <SettingRow
           label='策略'
-          desc='只作用于 Claude VM。同优先级里先取最低负载，再按这里的方式挑选。'
+          desc='只作用于 Claude VM，已绑定的会话不受影响。智能评分：综合周额度临近作废程度、5h 余量和最近 5 分钟活跃会话数分配新会话，手动调度等级仍优先；其他方式：同优先级里先取最低负载，再按这里的方式挑选。'
         >
           <Select
             value={String(pool.strategy || 'weighted-round-robin')}
@@ -40,6 +40,7 @@ export function PoolPane(props: PoolPaneProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value='smart'>智能评分</SelectItem>
               <SelectItem value='weighted-round-robin'>平滑 WRR</SelectItem>
               <SelectItem value='round-robin'>轮询</SelectItem>
               <SelectItem value='lru'>LRU</SelectItem>

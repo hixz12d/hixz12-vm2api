@@ -7,6 +7,9 @@
  * release() drops inflight refs but keeps the key until idle prune.
  */
 
+/** Longest session_idle_min (clampIdleMin caps at 1440 minutes). */
+const MAX_IDLE_MS = 24 * 60 * 60 * 1000
+
 function lastSeenOf(entry) {
   if (entry == null) return 0
   if (typeof entry === 'object') return Number(entry.lastSeen) || 0
@@ -89,6 +92,26 @@ export class SessionLimitRegistry {
       }
     }
     return { ok: true, existing: false, detail: snap }
+  }
+
+  /**
+   * Sessions seen inside `windowMs`. Only drops entries idle past the longest
+   * max_sessions window (24h), so it never changes a session-cap decision.
+   */
+  activeCount(accountId, windowMs, now = Date.now()) {
+    const id = String(accountId || '')
+    const bag = this.byAccount.get(id)
+    if (!bag) return 0
+    const cutoff = now - Math.max(0, Number(windowMs) || 0)
+    const stale = now - MAX_IDLE_MS
+    let n = 0
+    for (const [key, entry] of bag) {
+      const seen = lastSeenOf(entry)
+      if (seen < stale) bag.delete(key)
+      else if (seen >= cutoff) n++
+    }
+    if (!bag.size) this.byAccount.delete(id)
+    return n
   }
 
   touch(accountId, sessionKey, now = Date.now()) {
