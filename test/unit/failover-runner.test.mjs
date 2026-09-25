@@ -509,7 +509,7 @@ test('thinking-only hop retries same account and returns the later text', async 
   assert.equal(result.body.stop_reason, 'end_turn')
 })
 
-test('repeated incomplete hop parks the slot then switches accounts', async () => {
+test('repeated incomplete hop switches accounts without parking the shared slot', async () => {
   const scheduler = new Scheduler([candidate(1), candidate(2)])
   const parked = []
   const runner = new FailoverRunner({
@@ -541,7 +541,7 @@ test('repeated incomplete hop parks the slot then switches accounts', async () =
   assert.equal(result.ok, true)
   assert.equal(result.vmId, 'vm-02')
   assert.deepEqual(seen, ['vm-01', 'vm-01', 'vm-02'])
-  assert.deepEqual(parked, [{ accountId: 'account-1', vmId: 'vm-01' }])
+  assert.deepEqual(parked, [])
 })
 
 test('pinned incomplete hop still stops on the pinned VM', async () => {

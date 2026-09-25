@@ -14,6 +14,7 @@ import { hasRefreshPresence, readWorkerCredentialFile } from '../oauth/oauth-cre
 import { ensureWorkerCredential } from '../transport/go-worker-client.mjs'
 import { resolveOfficialCcInference } from '../vm/slot-engine.mjs'
 import { AttemptCoordinator } from './unit-decision.mjs'
+import { EmptyResponseBackoff } from './empty-response-backoff.mjs'
 
 const DEFAULTS = {
   max_account_switches: 10,
@@ -24,6 +25,7 @@ const DEFAULTS = {
   same_account_retry_delay_ms: 500,
   same_account_retry_max_hop_ms: 10_000,
   signature_repair: false,
+  empty_response_backoff_ms: 60_000,
 }
 
 function clone(value) {
@@ -231,8 +233,8 @@ function isCredentialDeath(policy) {
 }
 
 /**
- * Same-account budget spent on an empty / thinking-only hop: park the slot
- * briefly and switch (sub2api TempUnscheduleRetryableError → tempUnscheduleEmptyResponse).
+ * Retry an empty / thinking-only hop on the same account, then exclude it for
+ * this request. It does not establish that other sessions on that account are broken.
  */
 function isRetryableEmptyHop(policy) {
   return policy?.reason === 'incomplete_assistant' || policy?.reason === 'empty_response'
@@ -306,6 +308,7 @@ export class FailoverRunner {
     this.onFablePlanDenied = onFablePlanDenied
     this.onFableSuccess = onFableSuccess
     this.sessionTails = new Map()
+    this.emptyResponseBackoff = new EmptyResponseBackoff()
   }
 
   noteUnitHealth(selected, policy, result) {
@@ -360,7 +363,9 @@ export class FailoverRunner {
   async run(args = {}) {
     const sessionKey = String(args.stickyKey || '')
     if (!sessionKey) return this.runOnce(args)
+    const backoffKey = JSON.stringify([sessionKey, args.groupScope?.id ?? null])
     const previous = this.sessionTails.get(sessionKey) || Promise.resolve()
+    const queuedAt = Date.now()
     let releaseTurn
     const turn = new Promise((resolve) => {
       releaseTurn = resolve
@@ -373,7 +378,25 @@ export class FailoverRunner {
     })
     try {
       await waitForSessionTurn(previous, args.signal)
-      return await this.runOnce(args)
+      const sessionQueueMs = Date.now() - queuedAt
+      if (!args.pinVmId) {
+        const retryAfterMs = this.emptyResponseBackoff.remaining(backoffKey, args.canonicalBody)
+        if (retryAfterMs > 0) {
+          return poolError(
+            'request_empty_response_backoff',
+            'This request repeatedly returned no complete response. Retry later or start a new session.',
+            {
+              retry_after_ms: retryAfterMs,
+            },
+          )
+        }
+      }
+      const result = await this.runOnce(args)
+      const reason = result?.policy?.reason || result?.body?.error?.details?.last_reason
+      if (!args.pinVmId && !result?.committed && !result?.ok && isRetryableEmptyHop({ reason })) {
+        this.emptyResponseBackoff.record(backoffKey, args.canonicalBody, this.config.empty_response_backoff_ms)
+      }
+      return { ...result, sessionQueueMs }
     } catch (error) {
       if (error?.code === 'request_cancelled') return poolError('request_cancelled', 'Request was cancelled')
       throw error
@@ -686,9 +709,8 @@ export class FailoverRunner {
           }
           continue
         }
-        // Same-account budget spent on an empty / thinking-only hop: park this
-        // slot briefly and move on (sub2api tempUnscheduleEmptyResponse). Pinned
-        // diagnostics keep the old stop so a master pin never hops.
+        // Exhausted empty-hop retries exclude this account only for this request.
+        // A shared account may still be streaming successfully for other callers.
         if (isRetryableEmptyHop(policy)) {
           if (pinVmId) {
             return {
@@ -701,9 +723,6 @@ export class FailoverRunner {
               policy,
             }
           }
-          try {
-            this.rateLimitService?.tempUnschedule?.({ accountId: selected.accountId, vmId: selected.vmId })
-          } catch {}
         }
 
         const switchesExhausted = budget.noteSwitch(selected.accountId, selected.vmId, {

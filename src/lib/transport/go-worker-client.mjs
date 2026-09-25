@@ -19,6 +19,7 @@ import {
 import { isApiKeyMode } from '../oauth/credential-mode.mjs'
 import { runSlotOauth } from './slot-oauth.mjs'
 import { applyClaudeSSELineToMessage, createClaudeMessageAssembler } from '../protocol/convert.mjs'
+import { createStreamProgress } from '../protocol/stream-progress.mjs'
 import { isCompleteAssistantMessage, isWrapConnectionError } from '../core/errors.mjs'
 import { extraHeadersFromLimitError, isPlanLimitMessage } from '../pool/quota-window.mjs'
 
@@ -287,6 +288,14 @@ function unfinishedEmptyHop(result) {
     ...result,
     ok: false,
     terminalState: 'incomplete',
+    // Keep the original failure for debug logging before replacing the client-facing body.
+    upstreamError: result.body?.error
+      ? {
+          type: String(result.body.error.type || '').slice(0, 100),
+          code: String(result.body.error.code || '').slice(0, 100),
+          message: String(result.body.error.message || '').slice(0, 1024),
+        }
+      : null,
     body: {
       type: 'error',
       error: {
@@ -392,6 +401,21 @@ function mockScenario(exec) {
   }
 }
 
+function cancelledHop(via, committed = false, ttftMs = null) {
+  return {
+    ok: false,
+    status: 0,
+    via,
+    body: { type: 'error', error: { type: 'api_error', code: 'request_cancelled', message: 'Request was cancelled' } },
+    headers: {},
+    committed,
+    ttftMs,
+    terminalState: 'cancelled',
+    // Caller cancellation must not trigger a transport retry or recycle a shared kernel.
+    transportError: false,
+  }
+}
+
 export async function callGoWorker({
   exec,
   body,
@@ -455,6 +479,7 @@ export async function callGoWorker({
       transportError: false,
     })
   } catch (error) {
+    if (signal?.aborted || error?.code === 'ABORT_ERR') return cancelledHop('go-worker')
     return {
       ok: false,
       status: 0,
@@ -562,6 +587,7 @@ export async function streamGoWorker({
   let committed = false
   const startedAt = Date.now()
   let ttftMs = null
+  const progress = createStreamProgress(startedAt)
   try {
     const response = await workerRequest(exec, {
       method: 'POST',
@@ -635,6 +661,7 @@ export async function streamGoWorker({
     }
     const observeSseEvent = (event) => {
       if (!event) return event
+      progress.observe(event)
       if (event.type === 'kin_response_headers' && event.headers && typeof event.headers === 'object') {
         sseRateHeaders = { ...sseRateHeaders, ...event.headers }
       }
@@ -725,6 +752,7 @@ export async function streamGoWorker({
         model: meta.model || sseModel || assembled?.model || null,
         stopReason,
         ttftMs,
+        streamProgress: progress.snapshot(),
         committed,
         terminalState,
         transportError: false,
@@ -733,6 +761,9 @@ export async function streamGoWorker({
       if (idleTimer) clearInterval(idleTimer)
     }
   } catch (error) {
+    if (signal?.aborted || error?.code === 'ABORT_ERR') {
+      return { ...cancelledHop('go-worker-stream', committed, ttftMs), streamProgress: progress.snapshot() }
+    }
     return {
       ok: false,
       status: 0,
@@ -747,6 +778,7 @@ export async function streamGoWorker({
       },
       headers: {},
       ttftMs,
+      streamProgress: progress.snapshot(),
       committed,
       terminalState: committed ? 'incomplete' : 'transport_error',
       transportError: true,

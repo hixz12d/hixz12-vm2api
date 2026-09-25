@@ -89,6 +89,7 @@ import {
   personaModeFromRoutingFile,
 } from '../identity/crs-persona.mjs'
 import { createDownstreamKeepalive } from './stream-keepalive.mjs'
+import { createClientAbort } from '../http/client-abort.mjs'
 import {
   hidePersonaUsageInSseLine,
   hidePersonaUsageOnMessage,
@@ -645,11 +646,7 @@ export function createHandleProtocol(deps) {
           )
         }
       }
-      const abortController = new AbortController()
-      const onAborted = () => {
-        if (!abortController.signal.aborted) abortController.abort(new Error('client_aborted'))
-      }
-      req.once('aborted', onAborted)
+      const { abortController, detachClientAbort } = createClientAbort(req, res)
       const clientStream = isClientStream(inbound, req.headers)
       const requestedDelivery = String(
         req.headers['x-kin-delivery'] || getRouting()?.failover?.delivery_mode || 'realtime',
@@ -689,7 +686,7 @@ export function createHandleProtocol(deps) {
           },
         })
       } finally {
-        req.off('aborted', onAborted)
+        detachClientAbort()
         if (managedKey) {
           try {
             apiKeyStore.release(managedKey)
@@ -758,11 +755,7 @@ export function createHandleProtocol(deps) {
       }
     }
 
-    const abortController = new AbortController()
-    const onAborted = () => {
-      if (!abortController.signal.aborted) abortController.abort(new Error('client_aborted'))
-    }
-    req.once('aborted', onAborted)
+    const { abortController, detachClientAbort } = createClientAbort(req, res)
 
     const clientStream = isClientStream(inbound, req.headers)
     const upstreamStream = true
@@ -802,6 +795,19 @@ export function createHandleProtocol(deps) {
         stream: upstreamStream,
         deliveryMode,
         signal: abortController.signal,
+        onAttempt: ({ selected, result, policy }) => {
+          if (policy.scope === 'success') return
+          const error = result?.upstreamError || result?.body?.error
+          logBag.upstream_error = {
+            vm_id: selected.vmId,
+            status: result?.status ?? null,
+            terminal_state: result?.terminalState || null,
+            reason: policy.reason || null,
+            type: String(error?.type || '').slice(0, 100),
+            code: String(error?.code || '').slice(0, 100),
+            message: String(error?.message || '').slice(0, 1024),
+          }
+        },
         applyAttempt: async (body, selected, extra = {}) => {
           try {
             touchTelemetrySession(cfg.paths.project, selected.vmId)
@@ -1016,7 +1022,7 @@ export function createHandleProtocol(deps) {
         },
       })
     } finally {
-      req.off('aborted', onAborted)
+      detachClientAbort()
       if (managedKey) {
         try {
           apiKeyStore.release(managedKey)
@@ -1037,6 +1043,8 @@ export function createHandleProtocol(deps) {
     if (logBag.usage && wantsFastMode(ctx.body)) logBag.usage = { ...logBag.usage, requested_speed: 'fast' }
     logBag.upstream_model = result?.body?.model || result?.model || null
     logBag.first_token_ms = result?.ttftMs ?? null
+    logBag.session_queue_ms = result?.sessionQueueMs ?? 0
+    logBag.stream_progress = result?.streamProgress || null
     logBag.stop_reason = result?.body?.stop_reason || result?.stopReason || null
     logBag.via = result?.via || 'go-worker-pool'
     if (result?.finalState === 'content_filter' || logBag.stop_reason === 'refusal') {
