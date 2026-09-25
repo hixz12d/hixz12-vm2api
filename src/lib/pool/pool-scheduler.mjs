@@ -235,6 +235,7 @@ export class PoolScheduler {
     deadline = null,
     allowWait = true,
     pinVmId = null,
+    retryAccountId = null,
     ownerScope = PLATFORM_SCOPE,
     groupScope = null,
     stickyKeys = null,
@@ -278,6 +279,7 @@ export class PoolScheduler {
         excluded: blocked,
         signal,
         pinVmId,
+        retryAccountId,
         sessionKey: stickyKey,
         ownerScope,
         groupScope,
@@ -381,6 +383,7 @@ export class PoolScheduler {
     excluded = new Set(),
     signal,
     pinVmId = null,
+    retryAccountId = null,
     sessionKey = null,
     ownerScope = PLATFORM_SCOPE,
     groupScope = null,
@@ -400,6 +403,8 @@ export class PoolScheduler {
       if (groupScope && !groupScope.allowsVm(vm.id)) continue
       const accountId = accountIdOf(vm, this.projectRoot)
       if (!accountId || excluded.has(accountId) || excluded.has(vm.id)) continue
+      // Retry affinity only narrows candidates; it never enables diagnostic-pin bypasses.
+      if (retryAccountId && accountId !== retryAccountId) continue
       const state = this.runtimeRepo?.get?.(accountId) || null
       const eligibility = await this.checkEligibility({
         vm,

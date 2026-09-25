@@ -172,7 +172,7 @@ test('real failover scheduler tries both Pro accounts and never reaches Max', as
   assert.deepEqual([...new Set(seen)].sort(), ['vm-01', 'vm-02'])
 })
 
-test('incomplete hops exhaust only the key group and preserve its 503 error', async (t) => {
+test('incomplete hops retry within the key group then return 502 without walking accounts', async (t) => {
   const { pool, scope } = fixture(t)
   const runner = new FailoverRunner({ scheduler: pool, config: { same_account_retry_delay_ms: 0 } })
   const seen = []
@@ -198,13 +198,36 @@ test('incomplete hops exhaust only the key group and preserve its 503 error', as
       }
     },
   })
-  assert.equal(result.status, 503)
-  assert.equal(result.body.error.code, 'group_no_eligible_accounts')
-  assert.equal(result.body.error.details.last_reason, 'incomplete_assistant')
-  assert.deepEqual([...new Set(seen)].sort(), ['vm-01', 'vm-02'])
+  assert.equal(result.status, 502)
+  assert.equal(result.body.error.code, 'incomplete_response')
+  assert.equal(seen.length, 2)
+  assert.equal(seen[0], seen[1])
+  assert.ok(['vm-01', 'vm-02'].includes(seen[0]))
   assert.equal(Object.keys(pool.snapshot().inflight).length, 0)
   assert.equal(pool.usedSlotCount('vm-01'), 0)
   assert.equal(pool.usedSlotCount('vm-02'), 0)
+})
+
+test('empty-hop retry affinity keeps group, quota and concurrency checks', async (t) => {
+  const { pool, scope } = fixture(t)
+  const args = { model: 'claude-sonnet-5', groupScope: scope, allowWait: false, retryAccountId: 'a1' }
+  assert.equal((await pool.selectAndReserve({ ...args, retryAccountId: 'a3' })).ok, false)
+  pool.accountQuota.canAccept = () => ({ ok: false, reason: 'quota_exhausted' })
+  assert.equal((await pool.selectAndReserve(args)).ok, false)
+  pool.accountQuota.canAccept = () => ({ ok: true })
+  const held = []
+  try {
+    for (let i = 0; i < 4; i++) {
+      const selected = await pool.selectAndReserve(args)
+      assert.equal(selected.ok, true)
+      assert.equal(selected.accountId, 'a1')
+      held.push(selected)
+    }
+    assert.equal((await pool.selectAndReserve(args)).ok, false, 'must not spill to the free second account')
+  } finally {
+    for (const selected of held) selected.release()
+  }
+  assert.equal(Object.keys(pool.snapshot().inflight).length, 0)
 })
 
 test('group management denies ordinary users and sanitizes read responses', async (t) => {

@@ -232,12 +232,14 @@ function isCredentialDeath(policy) {
   return policy?.action === 'disable' || policy?.reason === 'oauth_no_refresh' || policy?.reason === 'oauth_revoked'
 }
 
-/**
- * Retry an empty / thinking-only hop on the same account, then exclude it for
- * this request. It does not establish that other sessions on that account are broken.
- */
+/** Empty / thinking-only hop. Same-account retry only; never a reason to walk the pool. */
 function isRetryableEmptyHop(policy) {
   return policy?.reason === 'incomplete_assistant' || policy?.reason === 'empty_response'
+}
+
+function unfinishedExhausted(result, policy, fallback, extras = {}) {
+  if (!isUnfinishedLastResult(result, policy)) return null
+  return { ...fallback, ...extras }
 }
 
 function dropIncompleteSession(scheduler, selected, bindKeys, result, policy) {
@@ -460,6 +462,7 @@ export class FailoverRunner {
     let lastPolicy = null
     let pinnedSlot = null
     let repaired = false
+    let retryAccountId = null
     let requestBody = clone(canonicalBody)
 
     for (let attemptNo = 1; attemptNo <= this.config.max_total_attempts; attemptNo++) {
@@ -489,6 +492,7 @@ export class FailoverRunner {
           deadline,
           allowWait: true,
           pinVmId,
+          retryAccountId,
           ownerScope,
           groupScope,
         })
@@ -537,6 +541,7 @@ export class FailoverRunner {
         return preferLastResult(lastResult, lastPolicy, exhausted, { attemptCount: attemptNo - 1 })
       }
       pinnedSlot = selected.slotIndex ?? null
+      retryAccountId = null
       bindAll(
         {
           accountId: selected.accountId,
@@ -702,6 +707,7 @@ export class FailoverRunner {
         const hopMs = Date.now() - attemptStarted
         if (budget.allowSameUnit(selected.accountId, policy, hopMs, this.config.same_account_retry_max_hop_ms)) {
           budget.noteSameUnit(selected.accountId)
+          if (isRetryableEmptyHop(policy)) retryAccountId = selected.accountId
           try {
             await sleepWithSignal(this.config.same_account_retry_delay_ms, signal)
           } catch {
@@ -709,19 +715,18 @@ export class FailoverRunner {
           }
           continue
         }
-        // Exhausted empty-hop retries exclude this account only for this request.
-        // A shared account may still be streaming successfully for other callers.
+        // Same-account empty-hop retries are exhausted: return 502 without walking
+        // the pool. Keep failures scoped to the request/session backoff; another
+        // caller can still use this shared account successfully.
         if (isRetryableEmptyHop(policy)) {
-          if (pinVmId) {
-            return {
-              ...incompleteAssistantClientError(result),
-              via: result?.via || 'pool-failover',
-              accountId: selected.accountId,
-              vmId: selected.vmId,
-              attemptCount: attemptNo,
-              finalState: 'incomplete',
-              policy,
-            }
+          return {
+            ...incompleteAssistantClientError(result),
+            via: result?.via || 'pool-failover',
+            accountId: selected.accountId,
+            vmId: selected.vmId,
+            attemptCount: attemptNo,
+            finalState: 'incomplete',
+            policy,
           }
         }
 
@@ -729,19 +734,21 @@ export class FailoverRunner {
           spill: policy.reason === 'slot_busy',
         })
         if (switchesExhausted) {
-          return preferLastResult(
-            result,
-            policy,
-            poolError('max_account_switches_exceeded', 'Maximum account switches exceeded', {
-              attempt_count: attemptNo,
-              last_scope: policy.scope,
-            }),
-            {
-              accountId: selected.accountId,
-              vmId: selected.vmId,
-              attemptCount: attemptNo,
-            },
-          )
+          const exhausted = poolError('max_account_switches_exceeded', 'Maximum account switches exceeded', {
+            attempt_count: attemptNo,
+            last_scope: policy.scope,
+          })
+          const unfinished = unfinishedExhausted(result, policy, exhausted, {
+            accountId: selected.accountId,
+            vmId: selected.vmId,
+            attemptCount: attemptNo,
+          })
+          if (unfinished) return unfinished
+          return preferLastResult(result, policy, exhausted, {
+            accountId: selected.accountId,
+            vmId: selected.vmId,
+            attemptCount: attemptNo,
+          })
         }
       } catch (error) {
         result = {
@@ -816,12 +823,11 @@ export class FailoverRunner {
         selected.release?.()
       }
     }
-    return preferLastResult(
-      lastResult,
-      lastPolicy,
-      poolError('attempts_exhausted', 'Maximum account attempts exhausted', {
-        max_attempts: this.config.max_total_attempts,
-      }),
-    )
+    const attemptsExhausted = poolError('attempts_exhausted', 'Maximum account attempts exhausted', {
+      max_attempts: this.config.max_total_attempts,
+    })
+    const unfinished = unfinishedExhausted(lastResult, lastPolicy, attemptsExhausted)
+    if (unfinished) return unfinished
+    return preferLastResult(lastResult, lastPolicy, attemptsExhausted)
   }
 }

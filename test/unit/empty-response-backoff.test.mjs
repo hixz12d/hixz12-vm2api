@@ -42,6 +42,9 @@ function fixture() {
     scheduler,
     config: { same_account_retry_delay_ms: 0 },
     rateLimitService: {
+      noteDistinctEmptyHop: () => {
+        state.parked = true
+      },
       tempUnschedule: () => {
         state.parked = true
       },
@@ -69,8 +72,9 @@ test('one failing conversation cannot park an account serving another conversati
   await started
   try {
     const failed = await request('key:bad-session', empty)
-    assert.equal(failed.status, 503)
-    assert.equal(failed.body.error.details.last_reason, 'empty_response')
+    assert.equal(failed.status, 502)
+    assert.equal(failed.body.error.code, 'incomplete_response')
+    assert.equal((await request('key:second-bad-session', empty)).status, 502)
     assert.equal(state.parked, false)
     assert.deepEqual(state.cooldowns, [])
     assert.equal(state.inflight, 1, 'the unrelated live request keeps its reservation')
@@ -121,7 +125,7 @@ test('already queued duplicate requests recheck backoff after the failed predece
   const second = request('key:queued-session', call)
   finish()
   const [a, b] = await Promise.all([first, second])
-  assert.equal(a.status, 503)
+  assert.equal(a.status, 502)
   assert.equal(b.body.error.code, 'request_empty_response_backoff')
   assert.equal(attempts, 2, 'only the original request and its one same-account retry run')
 })
