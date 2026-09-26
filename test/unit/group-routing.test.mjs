@@ -281,3 +281,75 @@ test('Codex candidates and stale sticky bindings obey the same key group', (t) =
   assert.ok(result.ids.length > 0)
   assert.equal(result.ids.includes('vm-03'), false)
 })
+
+function verifiedHop() {
+  return {
+    ok: true,
+    status: 200,
+    terminalState: 'verified',
+    body: { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn' },
+  }
+}
+
+test('family relock releases the first reservation before retrying on the family VM', async (t) => {
+  const { pool, scope } = fixture(t)
+  let family = null
+  pool.stickyRouter = {
+    resolve: (key) => (key === 'family:parent' ? family : null),
+    bind() {},
+    unbind() {},
+  }
+  // Race: this request reserves vm-01, then another family member wins the bind on vm-02.
+  const select = pool.selectAndReserve.bind(pool)
+  let calls = 0
+  pool.selectAndReserve = async (args) => {
+    calls++
+    if (calls > 1) return select(args)
+    const held = await select({ ...args, familyVmId: 'vm-01' })
+    family = { vmId: 'vm-02', accountId: 'a2' }
+    return held
+  }
+  const runner = new FailoverRunner({ scheduler: pool, stickyRouter: pool.stickyRouter })
+  const seen = []
+  const result = await runner.run({
+    model: 'claude-sonnet-5',
+    canonicalBody: { model: 'claude-sonnet-5' },
+    groupScope: scope,
+    familyKey: 'family:parent',
+    callAttempt: async ({ candidate }) => {
+      seen.push(candidate.vmId)
+      return verifiedHop()
+    },
+  })
+  assert.equal(result.ok, true)
+  assert.equal(calls, 2)
+  assert.deepEqual(seen, ['vm-02'])
+  assert.equal(Object.keys(pool.snapshot().inflight).length, 0)
+  assert.equal(pool.usedSlotCount('vm-01'), 0)
+  assert.equal(pool.usedSlotCount('vm-02'), 0)
+})
+
+test('family lock never pulls a request outside its key group', async (t) => {
+  const { pool, scope } = fixture(t)
+  pool.stickyRouter = {
+    resolve: (key) => (key === 'family:parent' ? { vmId: 'vm-03', accountId: 'a3' } : null),
+    bind() {},
+    unbind() {},
+  }
+  const runner = new FailoverRunner({ scheduler: pool, stickyRouter: pool.stickyRouter })
+  const seen = []
+  const result = await runner.run({
+    model: 'claude-sonnet-5',
+    canonicalBody: { model: 'claude-sonnet-5' },
+    groupScope: scope,
+    familyKey: 'family:parent',
+    callAttempt: async ({ candidate }) => {
+      seen.push(candidate.vmId)
+      return verifiedHop()
+    },
+  })
+  assert.equal(result.ok, true)
+  assert.equal(seen.length, 1)
+  assert.ok(['vm-01', 'vm-02'].includes(seen[0]))
+  assert.equal(Object.keys(pool.snapshot().inflight).length, 0)
+})

@@ -103,21 +103,23 @@ unixTest('tool-only streams preserve complete tool input and do not recycle', as
   assert.equal(recycled, 0)
 })
 
-unixTest('an empty stream labelled verified is incomplete and recycles before returning', async () => {
+// v1.3.53: a hop without visible output is not a leaked CLI. Recycling it
+// SIGKILLed the supervisor child right before the same-account retry.
+unixTest('an empty stream labelled verified is incomplete and does not recycle the kernel', async () => {
   const { result, recycled, commits } = await runStream([start])
   assert.equal(result.ok, false)
   assert.equal(result.terminalState, 'incomplete')
   assert.equal(result.committed, false)
   assert.equal(commits, 0)
-  assert.equal(recycled, 1)
+  assert.equal(recycled, 0)
 })
 
-unixTest('a partial committed response keeps its commit flag and recycles', async () => {
+unixTest('a partial committed response keeps its commit flag without recycling', async () => {
   const { result, recycled } = await runStream(text)
   assert.equal(result.ok, false)
   assert.equal(result.terminalState, 'incomplete')
   assert.equal(result.committed, true)
-  assert.equal(recycled, 1)
+  assert.equal(recycled, 0)
 })
 
 unixTest('visible output with a stop reason follows upstream completion without message_stop', async () => {
@@ -129,16 +131,28 @@ unixTest('visible output with a stop reason follows upstream completion without 
   assert.equal(recycled, 0)
 })
 
-unixTest('thinking-only output is incomplete even with a terminal marker', async () => {
+// v1.3.54 (sub2api): message_stop ends the hop even without visible text.
+unixTest('thinking-only output with message_stop is complete', async () => {
   const { result, recycled } = await runStream([
     start,
     { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: 'thinking' } },
     ...end,
   ])
+  assert.equal(result.ok, true)
+  assert.equal(result.terminalState, 'verified')
+  assert.equal(result.sawMessageStop, true)
+  assert.equal(recycled, 0)
+})
+
+unixTest('thinking-only output with a stop reason but no message_stop stays incomplete', async () => {
+  const { result, recycled } = await runStream([
+    start,
+    { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: 'thinking' } },
+    end[0],
+  ])
   assert.equal(result.ok, false)
   assert.equal(result.terminalState, 'incomplete')
-  assert.equal(result.committed, true)
-  assert.equal(recycled, 1)
+  assert.equal(recycled, 0)
 })
 
 unixTest('a generic uncommitted error follows upstream empty-hop handling without a false 502', async () => {
@@ -152,6 +166,17 @@ unixTest('a generic uncommitted error follows upstream empty-hop handling withou
   assert.equal(result.body.error.code, 'empty_response')
   assert.equal(result.committed, false)
   assert.deepEqual(lines, [])
+  // A provider-side SSE error is an empty hop, not a dead CLI (v1.3.53).
+  assert.equal(recycled, 0)
+})
+
+unixTest('a kernel wrap connection error still recycles the CLI', async () => {
+  const { result, recycled } = await runStream([
+    start,
+    { type: 'error', error: { type: 'api_error', message: 'provider error: Connection error' } },
+  ])
+  assert.equal(result.ok, false)
+  assert.equal(result.terminalState, 'incomplete')
   assert.equal(recycled, 1)
 })
 

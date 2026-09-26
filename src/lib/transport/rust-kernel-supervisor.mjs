@@ -86,6 +86,15 @@ export function readExistingKernelConfig(configPath) {
   }
 }
 
+/** crag and cc run cc-node. Restarting that slot SIGKILLs the worker. */
+export function dataplaneUsesCcNode(exec) {
+  const configPath = rustKernelPaths(exec).configPath
+  if (!configPath) return false
+  const plane = String(readExistingKernelConfig(configPath).dataplane || '')
+    .trim()
+    .toLowerCase()
+  return plane === 'crag' || plane === 'cc' || plane === 'cc-node'
+}
 function projectRootFromExec(exec = {}) {
   if (exec?.projectRoot) return exec.projectRoot
   const home = String(exec?.homeDir || '')
@@ -255,7 +264,7 @@ async function killWrapDataplane(container, runDockerExec) {
         'for d in /proc/[0-9]*; do',
         '  exe=$(readlink "$d/exe" 2>/dev/null || true)',
         '  case "$exe" in',
-        '    */.kin/cc-node*|*/.kin/cli-node*|*/.kin/kin-kernel*|*/.kin/glibc239/ld-linux*)',
+        '    */.kin/cli-node*|*/.kin/kin-kernel*|*/.kin/glibc239/ld-linux*)',
         '      kill -KILL "${d#/proc/}" 2>/dev/null || true',
         '  esac',
         'done',
@@ -272,7 +281,7 @@ export function wrapNewerThanKernel(exec) {
   if (!home) return false
   const kin = path.join(home, '.kin')
   let wrapM = 0
-  for (const name of ['kin-kernel', 'kin-kernel.bin', 'cc-node', 'cli-node']) {
+  for (const name of ['kin-kernel', 'kin-kernel.bin', 'cli-node']) {
     try {
       wrapM = Math.max(wrapM, fs.statSync(path.join(kin, name)).mtimeMs)
     } catch {}
@@ -394,6 +403,7 @@ export function scheduleWrapRecycle(
 ) {
   const id = wrapVmId(exec)
   if (!id) return { ok: false, skipped: true, reason: 'missing_vm' }
+  if (dataplaneUsesCcNode(exec)) return { ok: true, skipped: true, reason: 'cc_node' }
   const prev = wrapRecycleAt.get(id)
   if (prev != null && now - prev < cooldownMs) return { ok: true, skipped: true, reason: 'cooldown' }
   wrapRecycleAt.set(id, now)

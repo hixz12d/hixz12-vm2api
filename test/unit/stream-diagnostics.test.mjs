@@ -35,11 +35,22 @@ test('empty-hop normalization retains the original error for diagnostics', () =>
     ok: false,
     status: 200,
     committed: false,
-    body: { type: 'error', error: { type: 'api_error', code: 'original_code', message: 'original failure' } },
+    body: { type: 'error', error: { type: 'api_error', message: 'original failure' } },
   })
   assert.equal(result.body.error.code, 'empty_response')
-  assert.equal(result.upstreamError.code, 'original_code')
+  assert.equal(result.upstreamError.type, 'api_error')
   assert.equal(result.upstreamError.message, 'original failure')
+})
+
+test('a coded uncommitted stream error keeps its upstream code', () => {
+  const result = restoreUncommittedHop({
+    ok: false,
+    status: 200,
+    committed: false,
+    body: { type: 'error', error: { type: 'api_error', code: 'original_code', message: 'original failure' } },
+  })
+  assert.equal(result.body.error.code, 'original_code')
+  assert.equal(result.body.error.message, 'original failure')
 })
 
 test('debug logs persist separate queue/stream timing and redact original upstream errors', () => {

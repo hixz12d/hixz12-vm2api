@@ -1,8 +1,8 @@
 # Fork 运行兼容性
 
-## 当前策略：优先采用上游 v1.3.52
+## 当前策略：优先采用上游 v1.3.55
 
-以 `dofastted/vm2api` 的 `5b4af18`（已包含 v1.3.52）为基线。此前 `f4ba59e` 合并时保留的整套缓存、标题会话、流式检查、会话队列和 watchdog 定制已重新评估。当前以本节为准，后续合并不再默认保留这些旧补丁。
+以 `dofastted/vm2api` 的 `c4ee5bb`（已包含 v1.3.55）为基线。此前 `f4ba59e` 合并时保留的整套缓存、标题会话、流式检查、会话队列和 watchdog 定制已重新评估。当前以本节为准，后续合并不再默认保留这些旧补丁。
 
 ### CLI 缓存
 
@@ -76,7 +76,25 @@ debug 日志增加 `session_queue_ms`、`stream_progress` 和脱敏后的 `upstr
 
 未修改 Go、前端、数据库迁移、原生二进制或生产配置。本次只合并源码，未部署。
 
+## v1.3.55 合并范围
+
+同步 v1.3.53–v1.3.55：空跳不再 SIGKILL CLI、`message_stop` 作为流终止事件、`tool_choice.name` 顶层化、流式缓存计费、VM 计费窗口展示，以及 Claude family（父/子会话同 VM、各占独立席位）。原生 `kin-kernel`、`cli-node` 随上游更新；未新增数据库迁移。
+
+取消统一采用上游 `clientCancelledResult`（`client_cancelled`，499），删除 fork 的 `cancelledHop`/`request_cancelled` 返回；判定只看请求自己的 AbortSignal，不再把 `ABORT_ERR`、`ECONNRESET` 文本当作取消。保留 fork 的 `createClientAbort`（`res.close` 仅在未正常结束时取消，已断开的响应立即取消），不采用上游 `bindClientAbort`。保留 session tail 清理修复、响应收尾一致性（显式传输失败或非 verified terminal 不被正文改成成功）和 debug `stream_progress`/`upstream_error`。
+
+空跳采用上游独立分支（`emptyHopReleased` 检查后同号重试一次，否则 502），在其中继续设置 `retryAccountId`，保证重试仍落在原账号并走分组、额度和并发检查。上游已删除 `noteDistinctEmptyHop`，与 fork 的共享账号保护一致。
+
+family 与分组隔离的补充：
+- 请求入口发现 family 绑定的 VM 不在当前 API Key 分组内时解除该 family 绑定，本次按分组正常选号。
+- 调度后检查 family 锁定时，仅当锁定 VM 属于分组才改到该 VM；诊断 `pinVmId` 不受 family 影响。
+- 修复上游在 family 锁定改选前未释放已预留席位与 native slot 的泄漏；同一 family VM 重选后仍冲突时返回 `family_vm_unavailable`，不再循环消耗尝试次数。
+- 组内耗尽仍返回 `group_no_eligible_accounts`（503），不被上一跳不完整结果改写成 502；取消结果优先。
+
+v1.3.56（Fable 权益探测标记 Max）只在上游分支 `cursor/fix-supervisor-sigkill`，尚未进入上游 `main`，本次未合并。本次只合并源码，未部署。
+
 ## 同步历史
+
+- `c4ee5bb`：同步至 v1.3.55；取消统一为 `client_cancelled`，family 限定在分组内并修复锁定改选的席位泄漏。
 
 - `5b4af18`：同步至 v1.3.52；空响应在原账号结束，保留会话级退避及共享账号隔离，补齐真实调度器重试账号约束。
 

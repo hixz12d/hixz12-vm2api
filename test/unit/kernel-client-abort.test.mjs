@@ -57,7 +57,7 @@ for (const committed of [false, true]) {
         timeoutMs: 2000,
       })
       await closed
-      assert.equal(result.body.error.code, 'request_cancelled')
+      assert.equal(result.body.error.code, 'client_cancelled')
       assert.equal(result.terminalState, 'cancelled')
       assert.equal(result.committed, committed)
       assert.equal(result.transportError, false)
