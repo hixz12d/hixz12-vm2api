@@ -8,11 +8,55 @@
 - 手动调度等级仍然严格优先；无周额度数据的号取中性分。请求日志「选择原因」记录评分、活跃会话与 5h/7d 用量。
 - 默认策略不变，需在设置 → 号池策略中手动切换；改回原策略即回退。
 
+## 1.3.60（fork 合并）— 2026-09-26
+
+- 同步上游 v1.3.56–v1.3.60。v1.3.57 的 session/family/设备 sticky key 不再带 API Key；fork 的分组隔离继续生效：候选先按 API Key 分组过滤，落在分组外的 session 绑定按原逻辑解除，family 绑定在入口检查分组，设备亲和只在组内候选中优先。
+- 设备亲和优先于号池策略（含智能评分）：同设备的新 session 优先落到该设备所在 VM，该 VM 不可预留时再按策略（智能评分等）选号。
+
 ## 1.3.55（fork 合并）— 2026-09-26
 
 - 同步上游 v1.3.53–v1.3.55。family 绑定只在 API Key 分组内生效：分组变更后旧 family VM 不再强制本次请求，锁定检查也不会把请求带出分组。
 - 修复上游 family 锁定重选时未释放已预留席位和 native slot 的问题；同一 family VM 重选仍失败时返回 `family_vm_unavailable`，不再循环。
 - 取消统一为上游 `client_cancelled`（499），fork 的响应断开检测（`res.close` 且未正常结束）继续生效。空跳同号重试保留 `retryAccountId` 约束。
+
+## 1.3.60 — 2026-09-26
+
+- 槽不存在时，kernel 健康检查不再对 `null` 读 `codex_kernel`。`isCodexVm(null)` 按 Claude 处理，面板不再抛 TypeError。
+
+已部署机升级：只覆盖控制面并重启 Node 一次。二进制未变，不必 `wrap-cli/sync`。不要 `docker rm` 槽。
+
+## 1.3.59 — 2026-09-26
+
+- 换票回填 `email` / `account_uuid` / `org_uuid`：先展平 helper/token 里的 `oauth_account`，缺了再经槽 SOCKS5 打 bootstrap。不跑官方初装，不 PATCH Grove。
+- Setup Token 与完整 OAuth 一样可以 hop 官方 `/api/oauth/usage`。面板额度仍只读 Extra；官方结果只用来校准 Extra。从未采样的槽 hop 一次。
+- 计费 5h/7d 按该账号 Extra `reset` 切窗；没有 reset 时才退回墙钟回看。舰队 5h/7d 是各账号 Extra 窗之和。
+- GPT/Codex 缓存命中按 `cache_read / input`（input 已含 cached）。Claude 仍是 `read / (input + read + write)`。
+
+已部署机升级：只覆盖控制面和前端并重启 Node 一次。二进制未变，不必 `wrap-cli/sync`。不要 `docker rm` 槽。
+
+## 1.3.58 — 2026-09-26
+
+- 默认地址不再指向 `ccmax20.cc`，改用本项目后端。通知里的控制台链接默认留空，留空时用后端自己的 `base_url`；手动填的地址仍然优先。
+- 控制台前端没保存 API Base 时连当前页面所在的后端。部署在 vercel、netlify、github.io、grok.me 上的前端不再自动连 `ccmax20.cc`，需要在登录页填后端地址。`ccmax20.cc` 不再算同源面板。
+- `docs/API.md` 示例改用 `http://127.0.0.1:8787`。
+
+已部署机升级：只覆盖控制面和前端并重启 Node 一次。二进制未变，不必 `wrap-cli/sync`。不要 `docker rm` 槽。线上 routing.json 里已存的 `console_url` 不会被改写，要改用后端地址就在通知设置里清空。
+
+## 1.3.57 — 2026-09-26
+
+- cli-hop 的组织访问权限拒绝不再被改写成空响应：SSE 与非流式 provider error 均恢复为 403，保留原始错误并进入现有 permission-denied 冷却/换号策略。此修复不改变 session 识别或探测占席规则。
+- Claude 选槽按入站 `metadata.user_id` 识别身份，读取发生在出站清洗之前，没有 metadata 时退到显式 `device_id`。session、family 和设备亲和的 key 都不再带 API key：同一 session 换 API key 仍命中原绑定；共用一个 API key 的不同设备互相隔离。同设备的新 session 优先放到该设备所在 VM，每个 session 各占一个槽；满了就溢出到别的 VM，已有绑定不动。短 Haiku routing probe 留在设备所在 VM，但不占 session 槽。
+- 旧的按 API key 隔离的 sticky 行不做批量删除：请求命中时复制一份到新 key，旧行原样保留。没有可信 session_id 的请求继续用旧规则。出站身份替换和协议转换没有改。
+
+已部署机升级：只覆盖控制面并重启 Node 一次。二进制未变，不必 `wrap-cli/sync`。不要 `docker rm` 槽。旧 sticky 行保留，回滚代码后仍可读。
+
+## 1.3.56 — 2026-09-26
+
+- 账号探测会用 Fable 消息确认套餐：当前模型 `claude-fable-5-1` 能通就是 Max，两个 Fable 模型都 403 才是 Pro。429 和传输失败不改等级。
+- Setup Token 没有官方 `/usage`，探测不再只读响应头然后把号留在 Pro。探测成功后控制台标成 Max。
+- 还没有套餐证据的 Claude 槽不再一律显示 Pro。
+
+已部署机升级：只覆盖控制面和前端并重启 Node 一次。二进制未变，不必 `wrap-cli/sync`。不要 `docker rm` 槽。
 
 ## 1.3.55 — 2026-09-26
 

@@ -496,8 +496,8 @@ export class RequestLogStore {
     return this.repo.totals()
   }
 
-  billingStats() {
-    return this.repo.billingStats()
+  billingStats(opts = {}) {
+    return this.repo.billingStats(opts)
   }
 
   ownerBilling(opts = {}) {

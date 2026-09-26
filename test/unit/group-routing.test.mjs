@@ -353,3 +353,34 @@ test('family lock never pulls a request outside its key group', async (t) => {
   assert.ok(['vm-01', 'vm-02'].includes(seen[0]))
   assert.equal(Object.keys(pool.snapshot().inflight).length, 0)
 })
+
+test('key-less device affinity never pulls a request outside its key group', async (t) => {
+  const { pool, scope } = fixture(t)
+  const deviceBinds = []
+  pool.stickyRouter = {
+    // The device's home VM was learned through a Max key; this request uses a Pro key.
+    resolve: (key) => (key === 'dev2:shared-device' ? { vmId: 'vm-03', accountId: 'a3' } : null),
+    bind() {},
+    bindDeviceAffinity: (key, payload) => deviceBinds.push({ key, ...payload }),
+    unbind() {},
+  }
+  const runner = new FailoverRunner({ scheduler: pool, stickyRouter: pool.stickyRouter })
+  const seen = []
+  const result = await runner.run({
+    model: 'claude-sonnet-5',
+    canonicalBody: { model: 'claude-sonnet-5' },
+    groupScope: scope,
+    deviceKey: 'dev2:shared-device',
+    stickyDeviceId: 'shared-device',
+    callAttempt: async ({ candidate }) => {
+      seen.push(candidate.vmId)
+      return verifiedHop()
+    },
+  })
+  assert.equal(result.ok, true)
+  assert.equal(seen.length, 1)
+  assert.ok(['vm-01', 'vm-02'].includes(seen[0]))
+  // The out-of-group home VM is left alone rather than moved to the Pro VM.
+  assert.deepEqual(deviceBinds, [])
+  assert.equal(Object.keys(pool.snapshot().inflight).length, 0)
+})

@@ -158,6 +158,38 @@ function headerValue(headers, key) {
   return ''
 }
 
+function cleanIdentityValue(value) {
+  return String(value || '').trim()
+}
+
+/**
+ * Trusted inbound identity for pool routing. Priority:
+ * metadata.user_id.session_id/device_id > explicit inbound device_id field/header.
+ * Never falls back to API key, IP, UA, or content fingerprint.
+ * @returns {{ sessionId: string, deviceId: string, source: 'metadata'|'explicit-device'|'none' }}
+ */
+export function resolveInboundIdentity({ inbound = {}, body = {}, headers = {} } = {}) {
+  let sessionId = ''
+  let deviceId = ''
+  for (const raw of [inbound?.metadata?.user_id, body?.metadata?.user_id]) {
+    const parsed = parseUserId(raw)
+    if (!parsed) continue
+    if (!sessionId) sessionId = cleanIdentityValue(parsed.session_id)
+    if (!deviceId) deviceId = cleanIdentityValue(parsed.device_id)
+    if (sessionId && deviceId) break
+  }
+  if (deviceId) return { sessionId, deviceId, source: 'metadata' }
+
+  const explicitDevice =
+    cleanIdentityValue(inbound?.device_id) ||
+    cleanIdentityValue(body?.device_id) ||
+    headerValue(headers, 'x-kin-device-id').trim()
+  if (explicitDevice) return { sessionId, deviceId: explicitDevice, source: 'explicit-device' }
+  // A metadata session_id without any device still pins its own session.
+  if (sessionId) return { sessionId, deviceId: '', source: 'metadata' }
+  return { sessionId: '', deviceId: '', source: 'none' }
+}
+
 /**
  * Caller session, in official order: metadata.user_id → sticky headers → body keys.
  */

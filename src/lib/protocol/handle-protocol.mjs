@@ -74,11 +74,16 @@ import { touchTelemetrySession } from '../vm/worker-telemetry.mjs'
 import {
   applyCrsIdentityReplace,
   extractCallerSession,
-  parseUserId,
+  resolveInboundIdentity,
   resolveOutboundSessionId,
   sessionContextDiscriminator,
 } from '../identity/identity-rewrite.mjs'
-import { clientIp, childDeclaredWithoutParent, explicitParentSessionId } from '../pool/sticky-router.mjs'
+import {
+  clientIp,
+  childDeclaredWithoutParent,
+  explicitParentSessionId,
+  isParentSessionCompanion,
+} from '../pool/sticky-router.mjs'
 import {
   applyCrsUnofficialPersona,
   detectProxiedOfficialCcFromRoutingFile,
@@ -595,8 +600,10 @@ export function createHandleProtocol(deps) {
       clientDiscriminator,
       firstUserText,
     }
-    // device_id points a Haiku companion at this turn's session. API key does not.
-    const stickyDeviceId = String(parseUserId(inbound?.metadata?.user_id)?.device_id || '').trim()
+    // Pool identity comes from inbound metadata.user_id (or an explicit device_id),
+    // read before outbound cleaning. API key never scopes it.
+    const inboundIdentity = resolveInboundIdentity({ inbound, body: ctx.body, headers: req.headers })
+    const stickyDeviceId = inboundIdentity.deviceId
     if (childDeclaredWithoutParent(inbound, req.headers)) {
       stats.errors++
       logBag.error_code = 'family_relation_required'
@@ -612,11 +619,29 @@ export function createHandleProtocol(deps) {
         }).body,
       )
     }
-    const stickyKey = stickyRouter?.extractPoolKey?.(req, inbound, { platform: 'anthropic' }) || null
-    const stickyKeys = stickyRouter?.collectPoolKeys?.(req, inbound, { platform: 'anthropic' }) || []
+    const isProbe = isParentSessionCompanion(inbound) || isParentSessionCompanion(ctx.body)
+    const sessionKeys = stickyRouter?.sessionPoolKeys
+      ? stickyRouter.sessionPoolKeys(req, inbound, {
+          sessionId: inboundIdentity.sessionId,
+          deviceId: stickyDeviceId,
+          migrate: !isProbe,
+        })
+      : {
+          stickyKey: stickyRouter?.extractPoolKey?.(req, inbound, { platform: 'anthropic' }) || null,
+          stickyKeys: stickyRouter?.collectPoolKeys?.(req, inbound, { platform: 'anthropic' }) || [],
+        }
+    const stickyKey = sessionKeys.stickyKey || null
+    const stickyKeys = sessionKeys.stickyKeys || []
+    const deviceKey = stickyDeviceId ? stickyRouter?.canonicalDeviceKey?.(stickyDeviceId) || null : null
     const parentSession = explicitParentSessionId(inbound, req.headers)
     const familySession = parentSession || callerSession
-    const familyKey = familySession ? stickyRouter?.familyKey?.(req, familySession, 'anthropic') || null : null
+    const familyTrusted =
+      !!parentSession || (!!inboundIdentity.sessionId && familySession === inboundIdentity.sessionId)
+    const familyKey = !familySession
+      ? null
+      : stickyRouter?.familyPoolKey
+        ? stickyRouter.familyPoolKey(req, familySession, { trusted: familyTrusted })
+        : stickyRouter?.familyKey?.(req, familySession, 'anthropic') || null
     let familyVmId = familyKey ? stickyRouter?.resolve?.(familyKey)?.vmId || null : null
     // A family bound before the key's group changed must not pin the request outside the group.
     if (familyVmId && req.groupScope && !req.groupScope.allowsVm(familyVmId)) {
@@ -826,9 +851,11 @@ export function createHandleProtocol(deps) {
         requestId: logCtx.request_id,
         canonicalBody,
         model: canonicalBody.model,
-        stickyKey,
-        stickyKeys,
+        stickyKey: isProbe ? null : stickyKey,
+        stickyKeys: isProbe ? [] : stickyKeys,
         stickyDeviceId,
+        deviceKey,
+        skipSessionSeat: isProbe,
         familyKey,
         familyVmId,
         pinVmId,
