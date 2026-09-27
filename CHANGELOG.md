@@ -18,6 +18,15 @@
 - 同步上游 v1.3.53–v1.3.55。family 绑定只在 API Key 分组内生效：分组变更后旧 family VM 不再强制本次请求，锁定检查也不会把请求带出分组。
 - 修复上游 family 锁定重选时未释放已预留席位和 native slot 的问题；同一 family VM 重选仍失败时返回 `family_vm_unavailable`，不再循环。
 - 取消统一为上游 `client_cancelled`（499），fork 的响应断开检测（`res.close` 且未正常结束）继续生效。空跳同号重试保留 `retryAccountId` 约束。
+
+## 1.3.65 — 2026-09-27
+
+- 修复官方 Claude Code 客户端工具 `WebSearch` 被改写成服务端 `web_search`：ToolSearch 加载 `WebSearch` 后必定 502 `incomplete_response`（#134）。现在带 `input_schema` 的 `WebSearch` 原样转发，模型调用的是客户端 `WebSearch`；请求里已有它时不再额外注入服务端搜索。
+- 自定义工具保留 `defer_loading: true`，Claude Code 延迟加载的工具不再每次全量发送。
+- 提示词触发注入的服务端搜索与 Claude Code 自身定义对齐：`web_search_20250305` / `web_search` / `max_uses: 8`。调用方自带的 `web_search` 保留原参数。
+
+已部署机升级：只覆盖控制面并重启 Node 一次。二进制未变，不必 `wrap-cli/sync`。不要 `docker rm` 槽。
+
 ## 1.3.64 — 2026-09-27
 
 - 更新 OAuth 换票：完整 scope、Setup Token 运行模式、二进制换票服务与 VM SOCKS5 出口。
