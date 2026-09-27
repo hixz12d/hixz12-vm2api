@@ -1,8 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
+import childProcess from 'node:child_process'
+import { EventEmitter } from 'node:events'
+import { syncBuiltinESMExports } from 'node:module'
+import { PassThrough } from 'node:stream'
+import { fileURLToPath } from 'node:url'
 import {
   sessionKeyToOAuth,
   exchangeTokenViaCookieAuth,
@@ -12,218 +14,180 @@ import {
   buildSetupTokenAuthorizeURL,
   extractOAuthCodeFromRedirect,
 } from '../../src/lib/oauth/cookie-auth.mjs'
+import { FULL_OAUTH_SCOPE, REDIRECT_URI } from '../../src/lib/oauth/oauth-contract.mjs'
 
-function writeHelper(script) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-cookie-auth-'))
-  const bin = path.join(dir, 'kin-cookie-auth')
-  fs.writeFileSync(bin, script, { mode: 0o755 })
-  return bin
+// auth.js is private upstream source and is not distributed. Exercise the production
+// JSON subprocess boundary instead of a separate, unavailable JavaScript implementation.
+function mockService(t, respond) {
+  const previous = process.env.KIN_OAUTH_AUTH_BIN
+  const binary = fileURLToPath(import.meta.url)
+  process.env.KIN_OAUTH_AUTH_BIN = binary
+  const mocked = t.mock.method(childProcess, 'spawn', (command, args, options) => {
+    assert.equal(command, binary)
+    assert.deepEqual(args, [])
+    assert.deepEqual(options.stdio, ['pipe', 'pipe', 'pipe'])
+    const child = new EventEmitter()
+    child.stdin = new PassThrough()
+    child.stdout = new PassThrough()
+    child.stderr = new PassThrough()
+    let input = ''
+    child.stdin.on('data', (chunk) => {
+      input += chunk
+    })
+    child.stdin.on('finish', () => {
+      queueMicrotask(() => {
+        const result = respond(JSON.parse(input))
+        if (result.spawnError) {
+          child.emit('error', new Error(result.spawnError))
+          return
+        }
+        child.stdout.end(result.raw ?? `${JSON.stringify(result)}\n`)
+        child.stderr.end()
+        child.emit('close', result.ok ? 0 : 1)
+      })
+    })
+    return child
+  })
+  syncBuiltinESMExports()
+  t.after(() => {
+    mocked.mock.restore()
+    syncBuiltinESMExports()
+    if (previous === undefined) delete process.env.KIN_OAUTH_AUTH_BIN
+    else process.env.KIN_OAUTH_AUTH_BIN = previous
+  })
 }
 
-test('KIN_FAKE_SESSION_OAUTH returns deterministic creds without network', async () => {
+const credential = {
+  access_token: 'sk-ant-oat01-fixture',
+  refresh_token: 'sk-ant-ort01-fixture',
+  email: 'fixture@example.com',
+  scope: FULL_OAUTH_SCOPE,
+}
+
+test('fake credentials preserve full scopes and setup-token runtime mode', async () => {
+  const previous = process.env.KIN_FAKE_SESSION_OAUTH
   process.env.KIN_FAKE_SESSION_OAUTH = '1'
-  const cred = await sessionKeyToOAuth('sk-ant-sid-test-aaaaaaaa')
-  assert.equal(cred.source, 'KIN_FAKE_SESSION_OAUTH')
-  assert.equal(cred.email, 'fake-oauth@kin.test')
-  assert.match(cred.access_token, /^sk-ant-oat01-FAKE/)
-  assert.ok(cred.expires_at > Math.floor(Date.now() / 1000))
-  delete process.env.KIN_FAKE_SESSION_OAUTH
+  try {
+    const full = await sessionKeyToOAuth('sk-ant-sid-fixture')
+    assert.equal(full.source, 'KIN_FAKE_SESSION_OAUTH')
+    assert.equal(full.type, 'oauth')
+    assert.ok(full.expires_at > Date.now() / 1000)
+    const setup = await sessionKeyToOAuth('sk-ant-sid-fixture', { scope: 'inference' })
+    assert.equal(setup.type, 'setup-token')
+    assert.equal(setup.mode, 'setup-token')
+    assert.equal(setup.scope, FULL_OAUTH_SCOPE)
+    await assert.rejects(() => sessionKeyToOAuth('invalid'), /sk-ant-sid/)
+  } finally {
+    if (previous === undefined) delete process.env.KIN_FAKE_SESSION_OAUTH
+    else process.env.KIN_FAKE_SESSION_OAUTH = previous
+  }
 })
 
-test('fake inference scope is setup-token', async () => {
-  process.env.KIN_FAKE_SESSION_OAUTH = '1'
-  const cred = await sessionKeyToOAuth('sk-ant-sid-test-aaaaaaaa', { scope: 'inference' })
-  assert.equal(cred.type, 'setup-token')
-  assert.equal(cred.mode, 'setup-token')
-  delete process.env.KIN_FAKE_SESSION_OAUTH
+test('session import sends full scopes and the selected VM proxy to the binary', async (t) => {
+  mockService(t, (payload) => {
+    assert.deepEqual(payload, {
+      operation: 'session_key',
+      session_key: 'sk-ant-sid-fixture',
+      scope: FULL_OAUTH_SCOPE,
+      runtime_mode: 'setup-token',
+      proxy_url: 'socks5://127.0.0.1:1080',
+      timeout_ms: 12000,
+    })
+    return { ok: true, credential }
+  })
+  const result = await sessionKeyToOAuth(' "sk-ant-sid-fixture" ', {
+    scope: 'inference',
+    proxyUrl: 'socks5://127.0.0.1:1080',
+    timeoutMs: 12000,
+  })
+  assert.equal(result.type, 'setup-token')
+  assert.equal(result.scope, FULL_OAUTH_SCOPE)
+  assert.equal(result.email, credential.email)
 })
 
-test('fake branch still rejects non-sid keys', async () => {
-  process.env.KIN_FAKE_SESSION_OAUTH = '1'
-  await assert.rejects(() => sessionKeyToOAuth('not-a-sid'), /sk-ant-sid/)
-  delete process.env.KIN_FAKE_SESSION_OAUTH
+test('code exchange preserves callback state, verifier, redirect and proxy', async (t) => {
+  mockService(t, (payload) => {
+    assert.deepEqual(payload, {
+      operation: 'exchange_code',
+      code: 'abc',
+      state: 'state-1',
+      code_verifier: 'verifier',
+      redirect_uri: REDIRECT_URI,
+      proxy_url: 'socks5h://127.0.0.1:1080',
+      timeout_ms: 15000,
+    })
+    return { ok: true, credential }
+  })
+  assert.deepEqual(
+    await exchangeTokenViaCookieAuth({
+      code: 'abc#state-1',
+      codeVerifier: 'verifier',
+      proxyUrl: 'socks5h://127.0.0.1:1080',
+    }),
+    credential,
+  )
 })
 
-test('sessionKeyToOAuth requires SOCKS5', async () => {
+test('session import propagates binary proxy validation errors', async (t) => {
+  mockService(t, () => ({ ok: false, error: { code: 'proxy_required', message: 'VM SOCKS5 required' } }))
   await assert.rejects(
-    () => sessionKeyToOAuth('sk-ant-sid01-testaaaaaaaa'),
+    () => sessionKeyToOAuth('sk-ant-sid-fixture', { proxyUrl: '' }),
     (e) => e.code === 'proxy_required',
   )
 })
 
-function skipBootstrap() {
-  return async () => ({ ok: false, status: 404, json: async () => ({}) })
-}
-
-test('sessionKeyToOAuth on local egress hops without PROXY_URL', async () => {
-  const bin = writeHelper(`#!/bin/sh
-if [ -n "$PROXY_URL" ]; then echo fail >&2; exit 2; fi
-echo '{"access_token":"sk-ant-oat01-direct","source":"direct"}'
-`)
-  process.env.KIN_COOKIE_AUTH_BIN = bin
-  try {
-    const cred = await sessionKeyToOAuth('sk-ant-sid01-testaaaaaaaa', {
-      proxyUrl: '',
-      fetchImpl: skipBootstrap(),
-    })
-    assert.equal(cred.access_token, 'sk-ant-oat01-direct')
-  } finally {
-    delete process.env.KIN_COOKIE_AUTH_BIN
-  }
+test('session import redacts token bodies and retains helper error codes', async (t) => {
+  mockService(t, () => ({ ok: false, error: { code: 'token_rejected', message: 'bad sk-ant-oat01-SECRET' } }))
+  await assert.rejects(
+    () => sessionKeyToOAuth('sk-ant-sid-fixture'),
+    (e) => {
+      assert.equal(e.code, 'token_rejected')
+      assert.match(e.message, /\[redacted-token\]/)
+      assert.doesNotMatch(e.message, /SECRET/)
+      return true
+    },
+  )
 })
 
-test('sessionKeyToOAuth reads JSON from helper stdout', async () => {
-  const bin = writeHelper(`#!/bin/sh
-echo '{"access_token":"sk-ant-oat01-helper","refresh_token":"sk-ant-ort01-helper","source":"test-helper"}'
-`)
-  process.env.KIN_COOKIE_AUTH_BIN = bin
-  try {
-    const cred = await sessionKeyToOAuth('sk-ant-sid01-testaaaaaaaa', {
-      proxyUrl: 'socks5://127.0.0.1:1080',
-      fetchImpl: skipBootstrap(),
-    })
-    assert.equal(cred.access_token, 'sk-ant-oat01-helper')
-    assert.equal(cred.source, 'test-helper')
-  } finally {
-    delete process.env.KIN_COOKIE_AUTH_BIN
-  }
+test('code exchange rejects malformed binary output', async (t) => {
+  mockService(t, () => ({ raw: 'not JSON\n' }))
+  await assert.rejects(
+    () => exchangeTokenViaCookieAuth({ code: 'fixture' }),
+    (e) => e.code === 'oauth_auth_output_invalid',
+  )
 })
 
-const unixTest = process.platform === 'win32' ? test.skip : test
-
-unixTest('sessionKeyToOAuth fills identity from bootstrap after helper tokens', async () => {
-  const bin = writeHelper(`#!/bin/sh
-echo '{"access_token":"sk-ant-oat01-need","refresh_token":"sk-ant-ort01-need","source":"test-helper"}'
-`)
-  process.env.KIN_COOKIE_AUTH_BIN = bin
-  try {
-    const cred = await sessionKeyToOAuth('sk-ant-sid01-testaaaaaaaa', {
-      proxyUrl: 'socks5h://127.0.0.1:1',
-      scope: 'inference',
-      fetchImpl: async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          oauth_account: {
-            account_uuid: 'acct-sk',
-            account_email: 'sk@example.com',
-            organization_uuid: 'org-sk',
-          },
-        }),
-      }),
-    })
-    assert.equal(cred.type, 'setup-token')
-    assert.equal(cred.email, 'sk@example.com')
-    assert.equal(cred.account_uuid, 'acct-sk')
-    assert.equal(cred.org_uuid, 'org-sk')
-    assert.equal(cred.refresh_token, 'sk-ant-ort01-need')
-  } finally {
-    delete process.env.KIN_COOKIE_AUTH_BIN
-  }
+test('code exchange reports a binary startup failure', async (t) => {
+  mockService(t, () => ({ spawnError: 'exec format error' }))
+  await assert.rejects(
+    () => exchangeTokenViaCookieAuth({ code: 'fixture' }),
+    (e) => e.code === 'oauth_auth_spawn_failed',
+  )
 })
 
-test('sessionKeyToOAuth maps helper stale stderr', async () => {
-  const bin = writeHelper(`#!/bin/sh
-echo 'Session is not fresh enough to authorize' >&2
-exit 2
-`)
-  process.env.KIN_COOKIE_AUTH_BIN = bin
-  try {
-    await assert.rejects(
-      () => sessionKeyToOAuth('sk-ant-sid01-testaaaaaaaa', { proxyUrl: 'socks5h://127.0.0.1:1' }),
-      (e) => e.code === 'session_stale_relogin',
-    )
-  } finally {
-    delete process.env.KIN_COOKIE_AUTH_BIN
-  }
+test('authorize freshness and proxy failures retain actionable public errors', () => {
+  assert.equal(classifyImportHelperOutput('403 Session is not fresh enough'), 'session_stale_relogin')
+  assert.match(publicImportError('Session is not fresh enough'), /不够新/)
+  assert.doesNotMatch(publicImportError('Session is not fresh enough'), /Cloudflare/)
+  const proxy = panelImportErrorPayload({ message: 'User was rejected by the SOCKS5 server' })
+  assert.equal(proxy.status, 400)
+  assert.equal(proxy.error.code, 'proxy_auth_rejected')
+  assert.match(proxy.error.message, /SOCKS5 拒绝了用户名或密码/)
+  const missing = panelImportErrorPayload({ code: 'authorize_no_code', message: 'authorize_no_code' })
+  assert.equal(missing.status, 400)
+  assert.match(missing.error.message, /CAI 授权页/)
 })
 
-test('exchangeTokenViaCookieAuth sets IMPORT_MODE', async () => {
-  const bin = writeHelper(`#!/bin/sh
-if [ "$IMPORT_MODE" != "token_exchange" ]; then echo fail >&2; exit 2; fi
-echo '{"access_token":"sk-ant-oat01-ex","refresh_token":"rt"}'
-`)
-  process.env.KIN_COOKIE_AUTH_BIN = bin
-  try {
-    const tok = await exchangeTokenViaCookieAuth({
-      code: 'abc',
-      codeVerifier: 'ver',
-      proxyUrl: 'socks5h://127.0.0.1:1',
-    })
-    assert.equal(tok.access_token, 'sk-ant-oat01-ex')
-  } finally {
-    delete process.env.KIN_COOKIE_AUTH_BIN
-  }
+test('setup-token authorize URL requests full OAuth scopes', () => {
+  const url = new URL(buildSetupTokenAuthorizeURL('state', 'challenge'))
+  assert.equal(url.origin, 'https://claude.com')
+  assert.equal(url.searchParams.get('scope'), FULL_OAUTH_SCOPE)
+  assert.equal(url.searchParams.get('state'), 'state')
+  assert.equal(url.searchParams.get('code_challenge'), 'challenge')
 })
 
-test('exchangeTokenViaCookieAuth allows empty proxyUrl as direct', async () => {
-  const bin = writeHelper(`#!/bin/sh
-if [ -n "$PROXY_URL" ]; then echo fail >&2; exit 2; fi
-echo '{"access_token":"sk-ant-oat01-direct","refresh_token":"rt"}'
-`)
-  process.env.KIN_COOKIE_AUTH_BIN = bin
-  try {
-    const tok = await exchangeTokenViaCookieAuth({
-      code: 'abc',
-      codeVerifier: 'ver',
-      proxyUrl: '',
-    })
-    assert.equal(tok.access_token, 'sk-ant-oat01-direct')
-  } finally {
-    delete process.env.KIN_COOKIE_AUTH_BIN
-  }
-})
-
-test('authorize 403 session freshness is not reported as Cloudflare', () => {
-  const raw = 'authorize failed: 403 Session is not fresh enough to authorize'
-  assert.equal(classifyImportHelperOutput(raw), 'session_stale_relogin')
-  assert.match(publicImportError(raw), /不够新/)
-  assert.doesNotMatch(publicImportError(raw), /Cloudflare|Just a moment/)
-})
-
-test('SOCKS5 user rejection is a proxy auth error, not a sessionKey failure', () => {
-  const raw =
-    '[1/5] GET /api/organizations impersonate=chrome146 orgs request failed: ProxyError: Failed to perform, curl: (97) User was rejected by the SOCKS5 server (1 1).. See https://curl.se/libcurl/c/libcurl-errors.html first for more details.'
-  assert.equal(classifyImportHelperOutput(raw), 'proxy_auth_rejected')
-  const payload = panelImportErrorPayload({ message: raw })
-  assert.equal(payload.status, 400)
-  assert.equal(payload.error.code, 'proxy_auth_rejected')
-  assert.match(payload.error.message, /SOCKS5 拒绝了用户名或密码/)
-  assert.doesNotMatch(payload.error.message, /sessionKey 不够新|Cloudflare/)
-})
-
-test('panel import catch maps helper codes without leaking ReferenceError', () => {
-  const stale = panelImportErrorPayload({
-    message: 'Session is not fresh enough to authorize',
-  })
-  assert.equal(stale.status, 400)
-  assert.equal(stale.error.code, 'session_stale_relogin')
-  assert.match(stale.error.message, /不够新/)
-
-  const coded = panelImportErrorPayload({ code: 'session_stale_relogin', message: 'Session is not fresh enough' })
-  assert.equal(coded.status, 400)
-})
-
-test('setup-token CAI URL helper stays inference-only', () => {
-  const url = buildSetupTokenAuthorizeURL('st', 'ch')
-  assert.match(url, /^https:\/\/claude\.com\/cai\/oauth\/authorize\?code=true/)
-  assert.match(url, /client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e/)
-  assert.match(url, /scope=user%3Ainference/)
-  assert.ok(!url.includes('user:profile'))
-})
-
-test('extractOAuthCodeFromRedirect reads callback query', () => {
-  const got = extractOAuthCodeFromRedirect('https://platform.claude.com/oauth/code/callback?code=abc123&state=xyz')
-  assert.equal(got.code, 'abc123')
-  assert.equal(got.state, 'xyz')
-  assert.equal(extractOAuthCodeFromRedirect({ redirect_uri: 'https://x.test/?code=tok#state=s' }).code, 'tok')
-  assert.equal(extractOAuthCodeFromRedirect('https://x.test/nope'), null)
-})
-
-test('authorize_no_code is a 400 not Cloudflare', () => {
-  assert.equal(classifyImportHelperOutput('authorize_no_code login_redirect'), 'authorize_no_code')
-  assert.match(publicImportError('authorize_no_code login_redirect'), /CAI 授权页/)
-  const payload = panelImportErrorPayload({ code: 'authorize_no_code', message: 'authorize_no_code' })
-  assert.equal(payload.status, 400)
-  assert.equal(payload.error.code, 'authorize_no_code')
+test('callback parsing accepts query and fragment forms', () => {
+  assert.deepEqual(extractOAuthCodeFromRedirect(`${REDIRECT_URI}?code=abc&state=xyz`), { code: 'abc', state: 'xyz' })
+  assert.equal(extractOAuthCodeFromRedirect({ redirect_uri: 'https://example.test/#code=tok&state=s' }).code, 'tok')
+  assert.equal(extractOAuthCodeFromRedirect('https://example.test/nope'), null)
 })

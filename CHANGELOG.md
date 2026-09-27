@@ -18,6 +18,35 @@
 - 同步上游 v1.3.53–v1.3.55。family 绑定只在 API Key 分组内生效：分组变更后旧 family VM 不再强制本次请求，锁定检查也不会把请求带出分组。
 - 修复上游 family 锁定重选时未释放已预留席位和 native slot 的问题；同一 family VM 重选仍失败时返回 `family_vm_unavailable`，不再循环。
 - 取消统一为上游 `client_cancelled`（499），fork 的响应断开检测（`res.close` 且未正常结束）继续生效。空跳同号重试保留 `retryAccountId` 约束。
+## 1.3.64 — 2026-09-27
+
+- 更新 OAuth 换票：完整 scope、Setup Token 运行模式、二进制换票服务与 VM SOCKS5 出口。
+- 更新 usage 用量获取：完整 OAuth 正常采集 5h / 7d 官方用量。
+- 更新套餐获取：按官方 usage / Fable 结果判定 Pro / Max。
+
+## 1.3.63 — 2026-09-27
+
+- 修复 GPT 槽 5h / 7d 额度在 Web 上显示为 0%、无重置时间：落盘的 usage 视图读回时被当成原始 extra 二次解析而全部清空；现从 `codex.extra` 重建，并兼容已存视图。
+- GPT 槽额度查询时持久化上游 `plan_type`，Web 套餐标识按 codex-proxy-rs 映射显示（如 team → Business）；内部 tier key 仍为 `codex`。
+
+已部署机升级：覆盖控制面与前端并重启 Node；额度数值立即恢复，套餐标识需点一次「查询」后出现。
+
+## 1.3.62 — 2026-09-26
+
+- 修复带 `type: setup-token` 标签但实际包含 `user:profile` / `user:sessions:claude_code` 的完整 OAuth 导入被错误降级为 inference-only。现在以实际 scope 集合为准，保留 profile 权限并允许官方 `/profile` / `/usage`。
+
+
+## 1.3.61 — 2026-09-26
+
+- 修复 native CLI 被 OOM 杀死或管道关闭后，Rust 内核仍宣告槽可用并持续返回 `native stdin: Broken pipe`：退出统一清理在途任务与调度状态，健康清零后由 watchdog 恢复，不重放推理。
+- 原生槽默认内存由 `500m` 调整为 `1g`，保留 `KIN_VM_MEMORY` 显式覆盖；已有容器需单独调整限制。
+- 完整成功的官方 usage 按 Fable 7d 判 Max，否则默认 Pro；修复额度探测旧参数、失败结果传递、旧 Max 窗口覆盖新 Pro，以及未确认套餐显示。
+- 修复 OAuth / Setup Token 授权码导入的 `Assignment to constant variable`，并让 revoke / 无效凭证自动关闭调度、在 Web 显示准确状态。
+- 修复 Web 手动调度开关刷新后回弹；新增相关 Node/Web/Rust 回归覆盖。
+
+已部署机升级：覆盖控制面、前端与 kernel 并重启 Node 一次；同步 Claude 槽内 kernel，不 `docker rm` 槽。
+
+
 
 ## 1.3.60 — 2026-09-26
 

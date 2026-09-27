@@ -7,7 +7,7 @@ RUN pnpm install --frozen-lockfile
 COPY web/ ./
 RUN pnpm build
 
-# The prebuilt cookie-auth helper requires GLIBC_2.38; Bookworm only has 2.36.
+# Keep the newer glibc required by the prebuilt OAuth helpers.
 FROM node:22-trixie-slim
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates iptables iproute2 python3 \
@@ -21,16 +21,17 @@ COPY scripts ./scripts
 COPY VERSION CHANGELOG.md ./
 COPY docker/kin-os ./docker/kin-os
 COPY --from=web /web/dist ./web/dist
-COPY bin/kin-kernel bin/kin-egress bin/kin-worker bin/kin-codex-kernel bin/kin-cookie-auth /opt/vm2api/image-bin/
+COPY bin/kin-kernel bin/kin-egress bin/kin-worker bin/kin-codex-kernel bin/kin-oauth-auth /opt/vm2api/image-bin/
 COPY share/wrap-cli /opt/vm2api/image-wrap-cli
 COPY share/crag /opt/vm2api/image-crag
 COPY scripts/docker-entrypoint.sh /usr/local/bin/vm2api-entrypoint
 RUN chmod 755 /usr/local/bin/vm2api-entrypoint /opt/vm2api/image-bin/* \
+  && rm -f /opt/vm2api/src/lib/oauth/auth.js \
   && cp -a /opt/vm2api/src/config /opt/vm2api/image-config \
   && mkdir -p /opt/vm2api/vms /opt/vm2api/data /opt/vm2api/bin /opt/vm2api/share
-# With no credentials, the helper must reach its input validator, not fail in ld.so.
-RUN output="$(/opt/vm2api/image-bin/kin-cookie-auth 2>&1)"; \
-    code=$?; test "$code" -eq 2 && printf '%s\n' "$output" | grep -Fq 'expected sk-ant-sid* sessionKey'
+# Without credentials or network, require a structured validation error from the helper.
+RUN printf '{}\n' | /opt/vm2api/image-bin/kin-oauth-auth \
+    | node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; const r=JSON.parse(fs.readFileSync(0,'utf8').trim()); assert.equal(r.ok,false); assert.ok(r.error?.code);"
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=8787 \
@@ -40,6 +41,6 @@ ENV NODE_ENV=production \
     KIN_EGRESS_BIN=/opt/vm2api/bin/kin-egress \
     KIN_WORKER_BIN=/opt/vm2api/bin/kin-worker \
     KIN_CODEX_KERNEL_BIN=/opt/vm2api/bin/kin-codex-kernel \
-    KIN_COOKIE_AUTH_BIN=/opt/vm2api/bin/kin-cookie-auth
+    KIN_OAUTH_AUTH_BIN=/opt/vm2api/bin/kin-oauth-auth
 EXPOSE 8787
 ENTRYPOINT ["/usr/local/bin/vm2api-entrypoint"]

@@ -4,6 +4,7 @@ import {
   accountStatus,
   accountUsable,
   claudeTier,
+  openaiPlanLabel,
   credentialStatus,
   fleetCounts,
   fleetGroup,
@@ -216,9 +217,9 @@ describe('health probe must not paint a live ticket unavailable', () => {
     })
     expect(accountStatus(vm)).toMatchObject({
       key: 'revoke',
-      text: '无效凭证',
+      text: '已吊销',
     })
-    expect(poolStatus(vm).text).toBe('无效凭证')
+    expect(poolStatus(vm).text).toBe('已吊销')
   })
 })
 
@@ -258,9 +259,9 @@ describe('claudeTier follows usage Fable presence', () => {
     ).toBe('pro')
   })
 
-  it('does not paint an unclassified account as Pro', () => {
-    expect(claudeTier(liveVm({ account_tier: 'unknown' })).key).toBe('none')
-    expect(claudeTier(liveVm({})).key).toBe('none')
+  it('defaults token accounts to Pro until Max evidence appears', () => {
+    expect(claudeTier(liveVm({ account_tier: 'unknown' })).key).toBe('pro')
+    expect(claudeTier(liveVm({})).key).toBe('pro')
     expect(claudeTier(liveVm({ account_tier: 'max' })).key).toBe('max')
   })
 
@@ -486,5 +487,27 @@ describe('unit circuit', () => {
       }),
     })
     expect(poolStatus(vm).key).toBe('off')
+  })
+})
+
+describe('GPT plan label follows OpenAI plan_type', () => {
+  it('maps plan_type like codex-proxy-rs', () => {
+    expect(openaiPlanLabel('team')).toBe('Business')
+    expect(openaiPlanLabel('plus')).toBe('Plus')
+    expect(openaiPlanLabel('prolite')).toBe('Pro')
+    expect(openaiPlanLabel(null)).toBe('GPT')
+    expect(openaiPlanLabel('future_plan')).toBe('future_plan')
+  })
+  it('keeps codex tier key and shows the plan label', () => {
+    const tone = claudeTier(
+      liveVm({
+        platform: 'openai',
+        family: 'codex',
+        codex_kernel: true,
+        plan_type: 'team',
+      })
+    )
+    expect(tone.key).toBe('codex')
+    expect(tone.label).toBe('Business')
   })
 })
