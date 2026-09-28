@@ -63,6 +63,40 @@ function success(text = 'ok') {
   }
 }
 
+test('policy refusal stops without retry or account cooldown and unrelated requests still work', async () => {
+  const scheduler = new Scheduler([candidate(1), candidate(2)])
+  const runner = new FailoverRunner({ scheduler })
+  let calls = 0
+  const refused = await runner.run({
+    requestId: 'refused',
+    canonicalBody: { model: 'claude-opus-test' },
+    model: 'claude-opus-test',
+    callAttempt: () => {
+      calls++
+      return {
+        ok: false,
+        status: 502,
+        terminalState: 'incomplete',
+        body: { error: { message: 'This request appears to violate our Usage Policy.' } },
+      }
+    },
+  })
+  assert.equal(refused.ok, false)
+  assert.equal(calls, 1)
+  assert.equal(scheduler.selectCalls, 1)
+  assert.deepEqual(scheduler.cooldowns, [])
+  assert.equal(refused.policy.rememberRefusal, true)
+  assert.equal(refused.policy.refusalTtlMs, 3600_000)
+  const next = await runner.run({
+    requestId: 'unrelated',
+    canonicalBody: { model: 'claude-opus-test' },
+    model: 'claude-opus-test',
+    callAttempt: () => success(),
+  })
+  assert.equal(next.ok, true)
+  assert.equal(next.accountId, 'account-1')
+})
+
 test('account1 quota exhausted rotates to account2 and commits final sticky', async () => {
   const scheduler = new Scheduler([candidate(1), candidate(2)])
   const attempts = new Attempts()
