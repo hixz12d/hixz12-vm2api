@@ -384,3 +384,47 @@ test('key-less device affinity never pulls a request outside its key group', asy
   assert.deepEqual(deviceBinds, [])
   assert.equal(Object.keys(pool.snapshot().inflight).length, 0)
 })
+
+for (const remainingPro of [true, false]) {
+  test(`gated family reselects within its group (remaining Pro: ${remainingPro})`, async (t) => {
+    const { pool, scope } = fixture(t)
+    let family = { vmId: 'vm-01', accountId: 'a1' }
+    const unbound = []
+    pool.accountQuota.canAccept = (accountId) =>
+      accountId === 'a1' || (accountId === 'a2' && !remainingPro)
+        ? { ok: false, reason: 'quota_exhausted' }
+        : { ok: true }
+    pool.stickyRouter = {
+      resolve: (key) => (key === 'family:parent' ? family : null),
+      bind() {},
+      unbind(key) {
+        unbound.push(key)
+        if (key === 'family:parent') family = null
+      },
+    }
+    const runner = new FailoverRunner({ scheduler: pool, stickyRouter: pool.stickyRouter })
+    const seen = []
+    const result = await runner.run({
+      model: 'claude-sonnet-5',
+      canonicalBody: { model: 'claude-sonnet-5' },
+      groupScope: scope,
+      familyKey: 'family:parent',
+      familyVmId: 'vm-01',
+      callAttempt: async ({ candidate }) => {
+        seen.push(candidate.vmId)
+        return verifiedHop()
+      },
+    })
+    assert.ok(unbound.includes('family:parent'))
+    if (remainingPro) {
+      assert.equal(result.ok, true)
+      assert.deepEqual(seen, ['vm-02'])
+    } else {
+      assert.equal(result.status, 503)
+      assert.equal(result.body.error.code, 'group_no_eligible_accounts')
+      assert.deepEqual(seen, [])
+    }
+    assert.equal(Object.keys(pool.snapshot().inflight).length, 0)
+    for (const vm of ['vm-01', 'vm-02', 'vm-03']) assert.equal(pool.usedSlotCount(vm), 0)
+  })
+}

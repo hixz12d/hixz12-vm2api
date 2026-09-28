@@ -74,6 +74,7 @@ import { touchTelemetrySession } from '../vm/worker-telemetry.mjs'
 import {
   applyCrsIdentityReplace,
   extractCallerSession,
+  outboundSessionMode,
   resolveInboundIdentity,
   resolveOutboundSessionId,
   sessionContextDiscriminator,
@@ -83,6 +84,7 @@ import {
   childDeclaredWithoutParent,
   explicitParentSessionId,
   isParentSessionCompanion,
+  isShortProbeRequest,
 } from '../pool/sticky-router.mjs'
 import {
   applyCrsUnofficialPersona,
@@ -124,6 +126,8 @@ import {
   wantsFastMode,
 } from './anthropic-policy.mjs'
 import { materializeRemoteImageSources } from './images.mjs'
+import { applyMinMaxTokens } from './min-max-tokens.mjs'
+import { detectWarmupIntercept, formatWarmupSse, warmupMockMessage } from './warmup-intercept.mjs'
 
 export function healthDecisionForGroup(decision, groupScope) {
   if (decision && groupScope && !groupScope.allowsVm(decision.snapshot?.vm_id || '')) return null
@@ -393,7 +397,10 @@ export function createHandleProtocol(deps) {
     logBag.has_tools = Array.isArray(inbound?.tools) && inbound.tools.length > 0
 
     const fp = fingerprintRequest(req, inbound)
-    const healthDecision = healthDecisionForGroup(getHealthMonitor()?.decide?.(req.headers, inbound), req.groupScope)
+    const healthDecision = healthDecisionForGroup(
+      getHealthMonitor()?.decide?.(req.headers, inbound, protocol),
+      req.groupScope,
+    )
     if (healthDecision?.action === 'fail') {
       stats.requests++
       stats.by_route[protocol] = (stats.by_route[protocol] || 0) + 1
@@ -480,6 +487,29 @@ export function createHandleProtocol(deps) {
     }
     // Codex returns before conversion. Distill does not apply to OpenAI platform models.
     // Refusal still scans here so a cached refusal never reaches a slot.
+    if (
+      platform.platform !== 'openai' &&
+      protocol === 'anthropic.messages' &&
+      getHealthMonitor()?.getConfig?.()?.intercept_warmup === true
+    ) {
+      const warmupKind = detectWarmupIntercept(inbound, { userAgent: req.headers['user-agent'] || '' })
+      if (warmupKind) {
+        stats.requests++
+        stats.by_route[protocol] = (stats.by_route[protocol] || 0) + 1
+        const mock = warmupMockMessage(warmupKind, inbound?.model)
+        logBag.via = 'warmup-intercept'
+        logBag.attempt_count = 0
+        logBag.usage = mock.usage
+        logBag.stop_reason = mock.stop_reason
+        logBag.final_state = 'warmup-intercept'
+        if (isClientStream(inbound, req.headers)) {
+          writeSSEHeaders(res)
+          res.write(formatWarmupSse(warmupKind, inbound?.model))
+          return res.end()
+        }
+        return json(res, 200, mock)
+      }
+    }
     if (applyDistillGuard({ req, inbound, body: ctx.body, fp, logBag, requestId: logCtx.request_id, res })) {
       return
     }
@@ -577,6 +607,7 @@ export function createHandleProtocol(deps) {
     else stats.convert++
 
     ctx = applyIntercept(cfg.intercept.rules, 'before_upstream', { ...ctx, body: converted.claude })
+    ctx.body = applyMinMaxTokens(ctx.body, getRouting()?.compatibility?.min_max_tokens)
 
     if (applyDistillGuard({ req, inbound, body: ctx.body, fp, logBag, requestId: logCtx.request_id, res })) {
       return
@@ -595,10 +626,13 @@ export function createHandleProtocol(deps) {
       userAgent: req.headers['user-agent'] || '',
       apiKeyId: req.apiKeyRecord?.id ?? '',
     })
+    const sessionMode = outboundSessionMode(getRouting())
     const sessionContext = {
       officialClient: officialTraffic,
       clientDiscriminator,
       firstUserText,
+      mode: sessionMode,
+      routing: getRouting(),
     }
     // Pool identity comes from inbound metadata.user_id (or an explicit device_id),
     // read before outbound cleaning. API key never scopes it.
@@ -620,6 +654,9 @@ export function createHandleProtocol(deps) {
       )
     }
     const isProbe = isParentSessionCompanion(inbound) || isParentSessionCompanion(ctx.body)
+    // One-shot test calls (sub2api account test, new-api channel test) keep their
+    // sticky identity but never hold a session seat the main conversation needs.
+    const seatless = isProbe || isShortProbeRequest(inbound)
     const sessionKeys = stickyRouter?.sessionPoolKeys
       ? stickyRouter.sessionPoolKeys(req, inbound, {
           sessionId: inboundIdentity.sessionId,
@@ -655,9 +692,12 @@ export function createHandleProtocol(deps) {
       accountId: stickyBound?.accountId || '',
       boundSessionId: stickyBound?.sessionId || '',
       boundAccountId: stickyBound?.accountId || '',
+      boundVmId: stickyBound?.vmId || '',
+      vmId: stickyBound?.vmId || '',
+      epoch: 'pending',
     })
     const requestedCacheTtl = pinConversationCacheTtl(
-      outboundSessionId,
+      stickyKey || callerSession || outboundSessionId,
       resolveCacheTtl({ headers: req.headers, body: inbound, routingFile: routingConfigPath }),
     )
     let cacheTtl = requestedCacheTtl
@@ -855,7 +895,7 @@ export function createHandleProtocol(deps) {
         stickyKeys: isProbe ? [] : stickyKeys,
         stickyDeviceId,
         deviceKey,
-        skipSessionSeat: isProbe,
+        skipSessionSeat: seatless,
         familyKey,
         familyVmId,
         pinVmId,
@@ -883,12 +923,17 @@ export function createHandleProtocol(deps) {
             touchTelemetrySession(cfg.paths.project, selected.vmId)
           } catch {}
           const identity = loadVmIdentity(selected.exec)
+          const attemptStartedAt = extra.attemptStartedAt ?? Date.now()
           const attemptSessionId = resolveOutboundSessionId(callerSession, {
             ...sessionContext,
             accountId: selected.accountId,
             boundSessionId: stickyBound?.sessionId || '',
             boundAccountId: stickyBound?.accountId || '',
+            boundVmId: stickyBound?.vmId || '',
+            vmId: selected.vmId,
+            epoch: `${attemptStartedAt}:${selected.vmId || extra.attemptNo || ''}`,
           })
+          if (identity && attemptSessionId) identity.callerSessionId = attemptSessionId
           const credMode = credentialModeFromOauth(selected.vm?.claude || {})
           const modeOverride = slotPersonaModeOverride(selected.vm)
           const routingNow = getRouting()
@@ -920,9 +965,13 @@ export function createHandleProtocol(deps) {
               hopBody = applyCrsIdentityReplace(hopBody, identity, inbound, req.headers, {
                 officialClient: officialTraffic,
                 sessionId: attemptSessionId,
+                mode: sessionMode,
                 accountId: selected.accountId,
                 boundSessionId: stickyBound?.sessionId || '',
                 boundAccountId: stickyBound?.accountId || '',
+                boundVmId: stickyBound?.vmId || '',
+                vmId: selected.vmId,
+                epoch: attemptStartedAt,
               })
             }
             if (getRouting()?.logging?.mode === 'debug') logBag.outbound_body = hopBody
@@ -978,6 +1027,10 @@ export function createHandleProtocol(deps) {
             accountId: selected.accountId,
             boundSessionId: stickyBound?.sessionId || '',
             boundAccountId: stickyBound?.accountId || '',
+            boundVmId: stickyBound?.vmId || '',
+            vmId: selected.vmId,
+            epoch: attemptStartedAt,
+            mode: sessionMode,
             clientDiscriminator,
             firstUserText,
             apiKeyId: req.apiKeyRecord?.id ?? '',

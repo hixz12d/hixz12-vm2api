@@ -34,7 +34,7 @@ const success = () => ({
   body: { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn' },
 })
 
-test('parent keeps its original session; distinct specialist histories get stable native session ids', () => {
+test('specialist branches stay isolated with rebuilt and passthrough outbound sessions', () => {
   const main = body('Main task', false)
   const a = body('Inspect materials')
   const b = body('Inspect navigation')
@@ -42,7 +42,12 @@ test('parent keeps its original session; distinct specialist histories get stabl
   assert.notEqual(session(a), parent)
   assert.notEqual(session(a), session(b))
   assert.match(session(a), /^[0-9a-f-]{36}$/)
-  assert.equal(resolveOutboundSessionId(session(a), { officialClient: true }), session(a))
+  assert.equal(resolveOutboundSessionId(session(a), { officialClient: true, mode: 'passthrough' }), session(a))
+  const opts = { officialClient: true, vmId: 'vm-01', epoch: 'first-bind' }
+  const rebuilt = resolveOutboundSessionId(session(a), opts)
+  assert.notEqual(rebuilt, session(a))
+  assert.notEqual(rebuilt, resolveOutboundSessionId(session(main), opts))
+  assert.notEqual(rebuilt, resolveOutboundSessionId(session(b), opts))
   const next = structuredClone(a)
   next.messages.push(
     { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Read', input: {} }] },
@@ -51,6 +56,11 @@ test('parent keeps its original session; distinct specialist histories get stabl
   next.system[0].text = 'x-anthropic-billing-header: cc_version=2.1.282; cc_entrypoint=claude-desktop'
   next.tools = [{ name: 'AnotherTool' }]
   assert.equal(session(next), session(a), 'history, billing changes, and tool loading must not rotate the session')
+  assert.equal(resolveOutboundSessionId(session(next), opts), rebuilt)
+  assert.equal(
+    resolveOutboundSessionId(session(next), { ...opts, boundVmId: 'vm-01', boundSessionId: rebuilt, epoch: 'later' }),
+    rebuilt,
+  )
 })
 
 test('header and body session fallbacks use the same branch mapping; separate parents remain isolated', () => {
