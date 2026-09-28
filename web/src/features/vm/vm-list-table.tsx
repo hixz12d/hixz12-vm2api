@@ -258,7 +258,7 @@ function CountPill({ tone, n }: { tone: 'ok' | 'bad'; n: number }) {
 
 function StatusCell({ vm, show }: { vm: Vm; show: StatusBarShow }) {
   const tone = poolStatus(vm)
-  const inflight = Number(vm.inflight) || Number(vm.session_active) || 0
+  const inflight = Number(vm.inflight ?? vm.session_active) || 0
   const health = healthModel(vm)
   const showInflight =
     inflight > 0 &&

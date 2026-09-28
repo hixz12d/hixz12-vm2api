@@ -252,7 +252,9 @@ export class UsageLogsRepo {
     this._getDebug = db.prepare('SELECT record_json FROM request_log_debug WHERE request_id = ?')
     this._listDebug = db.prepare('SELECT record_json FROM request_log_debug ORDER BY ts DESC LIMIT ?')
     this._getByRequestId = db.prepare('SELECT * FROM usage_logs WHERE request_id = ?')
-    this._debugBytes = db.prepare('SELECT COALESCE(SUM(LENGTH(record_json)), 0) AS n FROM request_log_debug')
+    // octet_length reads SQLite's stored byte length without loading multi-MB TEXT overflow pages.
+    // LENGTH(TEXT) decodes every character and can block the gateway for minutes during cleanup.
+    this._debugBytes = db.prepare('SELECT COALESCE(SUM(octet_length(record_json)), 0) AS n FROM request_log_debug')
     this._debugCount = db.prepare('SELECT COUNT(*) AS n FROM request_log_debug')
     this._deleteOldUsage = db.prepare('DELETE FROM usage_logs WHERE created_at < ?')
     this._deleteOldDebug = db.prepare('DELETE FROM request_log_debug WHERE ts < ?')
@@ -1138,7 +1140,7 @@ export class UsageLogsRepo {
     return Number(this._debugCount.get().n || 0)
   }
 
-  /** Delete oldest debug rows until SUM(LENGTH(record_json)) <= maxBytes. */
+  /** Delete oldest debug rows until their stored UTF-8 bytes fit maxBytes. */
   trimDebugToMaxBytes(maxBytes) {
     const cap = Math.max(0, Number(maxBytes) || 0)
     if (cap <= 0) return 0

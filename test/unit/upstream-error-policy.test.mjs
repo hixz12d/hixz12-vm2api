@@ -505,8 +505,7 @@ test('200 refusal with empty visible output is content_filter, not success', () 
   assert.equal(policy.reason, 'content_filter_refusal')
 })
 
-test('502 pauses the account for one hour and is not a content-filter refusal', () => {
-  const before = Date.now()
+test('502 usage-policy refusal stops only this request and remembers it without account cooldown', () => {
   const policy = classifyUpstreamResult({
     ok: false,
     status: 502,
@@ -520,11 +519,15 @@ test('502 pauses the account for one hour and is not a content-filter refusal', 
       },
     },
   })
-  assert.equal(policy.action, 'pause')
-  assert.equal(policy.reason, 'provider_pause')
+  assert.equal(policy.action, 'stop')
+  assert.equal(policy.scope, 'request')
+  assert.equal(policy.reason, 'provider_refusal')
+  assert.equal(policy.retrySameAccount, false)
+  assert.equal(policy.decision.scope, 'request')
+  assert.equal(policy.decision.action, 'return')
   assert.equal(policy.rememberRefusal, true)
   assert.equal(policy.refusalTtlMs, 60 * 60 * 1000)
-  assert.ok(policy.cooldownUntil >= before + 60 * 60 * 1000)
+  assert.equal(policy.cooldownUntil, null)
   assert.equal(shouldContinue(policy), false)
   assert.notEqual(policy.reason, 'content_filter_refusal')
 })

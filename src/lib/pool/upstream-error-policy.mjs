@@ -546,11 +546,13 @@ function classifyUpstreamResultRaw(
       })
     }
     if (isUsagePolicyMessage(message)) {
+      // A refusal belongs to this request. Stop it and remember its fingerprint;
+      // do not disable an otherwise healthy account for unrelated requests.
       return {
-        scope: 'account',
-        action: 'pause',
-        reason: 'provider_pause',
-        cooldownUntil: now + PROVIDER_PAUSE_MS,
+        scope: 'request',
+        action: 'stop',
+        reason: 'provider_refusal',
+        cooldownUntil: null,
         retrySameAccount: false,
         rememberRefusal: true,
         refusalTtlMs: PROVIDER_PAUSE_MS,
