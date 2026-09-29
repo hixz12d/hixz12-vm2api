@@ -127,7 +127,7 @@ test('already queued duplicate requests recheck backoff after the failed predece
   const [a, b] = await Promise.all([first, second])
   assert.equal(a.status, 502)
   assert.equal(b.body.error.code, 'request_empty_response_backoff')
-  assert.equal(attempts, 2, 'only the original request and its one same-account retry run')
+  assert.equal(attempts, 3, 'only the original request uses the per-VM execution budget; its duplicate stays blocked')
 })
 
 test('anonymous empty responses also cannot cool down a shared account', async () => {

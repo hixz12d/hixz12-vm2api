@@ -200,9 +200,9 @@ test('incomplete hops retry within the key group then return 502 without walking
   })
   assert.equal(result.status, 502)
   assert.equal(result.body.error.code, 'incomplete_response')
-  assert.equal(seen.length, 2)
-  assert.equal(seen[0], seen[1])
-  assert.ok(['vm-01', 'vm-02'].includes(seen[0]))
+  assert.ok(seen.length >= 2 && seen.length <= 6)
+  assert.deepEqual(new Set(seen), new Set(['vm-01', 'vm-02']))
+  for (const vmId of new Set(seen)) assert.ok(seen.filter((id) => id === vmId).length <= 3)
   assert.equal(Object.keys(pool.snapshot().inflight).length, 0)
   assert.equal(pool.usedSlotCount('vm-01'), 0)
   assert.equal(pool.usedSlotCount('vm-02'), 0)
@@ -291,7 +291,7 @@ function verifiedHop() {
   }
 }
 
-test('family relock releases the first reservation before retrying on the family VM', async (t) => {
+test('a concurrent family bind does not discard an already reserved in-group seat', async (t) => {
   const { pool, scope } = fixture(t)
   let family = null
   pool.stickyRouter = {
@@ -322,8 +322,8 @@ test('family relock releases the first reservation before retrying on the family
     },
   })
   assert.equal(result.ok, true)
-  assert.equal(calls, 2)
-  assert.deepEqual(seen, ['vm-02'])
+  assert.equal(calls, 1)
+  assert.deepEqual(seen, ['vm-01'])
   assert.equal(Object.keys(pool.snapshot().inflight).length, 0)
   assert.equal(pool.usedSlotCount('vm-01'), 0)
   assert.equal(pool.usedSlotCount('vm-02'), 0)

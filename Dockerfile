@@ -1,11 +1,4 @@
-# Control plane. linux amd64 bins and wrap-cli ELFs ship in git. Slot guests run on the host engine.
-FROM node:22-bookworm-slim AS web
-WORKDIR /web
-RUN corepack enable && corepack prepare pnpm@10.18.2 --activate
-COPY web/package.json web/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
-COPY web/ ./
-RUN pnpm build
+# Control plane. linux amd64 bins, wrap-cli ELFs, and web/dist ship in git. The image does not compile the console.
 
 # Keep the newer glibc required by the prebuilt OAuth helpers.
 FROM node:22-trixie-slim
@@ -20,7 +13,7 @@ COPY src ./src
 COPY scripts ./scripts
 COPY VERSION CHANGELOG.md ./
 COPY docker/kin-os ./docker/kin-os
-COPY --from=web /web/dist ./web/dist
+COPY web/dist ./web/dist
 COPY bin/kin-kernel bin/kin-egress bin/kin-worker bin/kin-codex-kernel bin/kin-oauth-auth /opt/vm2api/image-bin/
 COPY share/wrap-cli /opt/vm2api/image-wrap-cli
 COPY share/crag /opt/vm2api/image-crag

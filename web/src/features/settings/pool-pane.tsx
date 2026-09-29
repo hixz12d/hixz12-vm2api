@@ -48,8 +48,8 @@ export function PoolPane(props: PoolPaneProps) {
           </Select>
         </SettingRow>
         <SettingRow
-          label='换账号前先原地重试几次'
-          desc='返回空内容或可以重试的错误时，先在同一个账号上再试几次'
+          label='同一个账号重试几次'
+          desc='优先尝试其他空闲账号，没有时再回原账号重试；空响应单独处理，每个请求在同一账号最多执行 3 次'
         >
           <Input
             className='w-24'
@@ -115,8 +115,8 @@ export function PoolPane(props: PoolPaneProps) {
           />
         </SettingRow>
         <SettingRow
-          label='一个请求最多换几个账号'
-          desc='请求失败时，最多换几个账号去重试'
+          label='换账号的重试预算'
+          desc='预算用完后，只尝试这个请求还没试过的账号，直到总时限'
         >
           <Input
             className='w-24'
@@ -131,8 +131,8 @@ export function PoolPane(props: PoolPaneProps) {
           />
         </SettingRow>
         <SettingRow
-          label='最多尝试几次'
-          desc='一个请求连重试在内总共最多试几次'
+          label='总尝试预算'
+          desc='预算用完后不再重复尝试同一账号，只尝试还没试过的账号，直到总时限'
         >
           <Input
             className='w-24'

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { prepareOutboundHeaders } from '../protocol/outbound-attempt.mjs'
 import { sanitizeAnthropicBodyForBetaTokens } from '../protocol/anthropic-policy.mjs'
 import { sealClaudeCodeCch } from '../identity/cch.mjs'
+import { preserveClientToolEnvironment } from '../identity/client-tool-environment.mjs'
 import { credentialModeFromOauth } from '../oauth/credential-mode.mjs'
 import { isCrsMock, writeCrsTrace, mockCrsPayload, emitMockSse } from './crs-mock.mjs'
 import {
@@ -383,7 +384,7 @@ export function finalizeWorkerPayload({ body, reqHeaders, exec, identity, want1m
     want1m: want1m === true,
   })
   const gated = cliHop ? body : sanitizeAnthropicBodyForBetaTokens(body, headers?.['anthropic-beta'] || '')
-  return { headers, body: sealClaudeCodeCch(gated) }
+  return { headers, body: sealClaudeCodeCch(preserveClientToolEnvironment(gated)) }
 }
 
 function workerEnvelope({

@@ -191,3 +191,120 @@ test('callback parsing accepts query and fragment forms', () => {
   assert.equal(extractOAuthCodeFromRedirect({ redirect_uri: 'https://example.test/#code=tok&state=s' }).code, 'tok')
   assert.equal(extractOAuthCodeFromRedirect('https://example.test/nope'), null)
 })
+
+test('extractOAuthCodeFromRedirect reads callback query', () => {
+  const got = extractOAuthCodeFromRedirect('https://platform.claude.com/oauth/code/callback?code=abc123&state=xyz')
+  assert.equal(got.code, 'abc123')
+  assert.equal(got.state, 'xyz')
+  assert.equal(extractOAuthCodeFromRedirect({ redirect_uri: 'https://x.test/?code=tok#state=s' }).code, 'tok')
+  assert.equal(extractOAuthCodeFromRedirect('https://x.test/nope'), null)
+})
+
+test('authorize_no_code is a 400 not Cloudflare', () => {
+  assert.equal(classifyImportHelperOutput('authorize_no_code login_redirect'), 'authorize_no_code')
+  assert.match(publicImportError('authorize_no_code login_redirect'), /CAI 授权页/)
+  const payload = panelImportErrorPayload({ code: 'authorize_no_code', message: 'authorize_no_code' })
+  assert.equal(payload.status, 400)
+  assert.equal(payload.error.code, 'authorize_no_code')
+})
+
+function response(status, body, stream = false) {
+  const text = JSON.stringify(body)
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    ...(stream
+      ? {
+          body: (async function* () {
+            yield Buffer.from(text)
+          })(),
+        }
+      : { text: async () => text }),
+  }
+}
+
+function makeStrictOAuthFetch(seen, opts = {}) {
+  return async (url, init = {}) => {
+    const headers = init.headers || {}
+    if (url === 'https://claude.ai/api/organizations') {
+      seen.push({ stage: 'orgs' })
+      assert.equal(init.method, 'GET')
+      assert.match(headers.cookie || headers.Cookie || '', /sessionKey=sk-ant-sid01-testaaaaaaaa/)
+      assert.match(headers['user-agent'] || headers['User-Agent'] || '', /Chrome\/146\.0\.0\.0/)
+      return response(200, [{ uuid: 'org-sk', name: 'Team', raven_type: 'team' }])
+    }
+    if (url === 'https://platform.claude.com/v1/oauth/org-sk/authorize') {
+      seen.push({ stage: 'authorize' })
+      const body = JSON.parse(init.body)
+      assert.equal(init.method, 'POST')
+      assert.equal(headers['content-type'], 'application/json')
+      assert.match(headers.cookie || headers.Cookie || '', /sessionKey=sk-ant-sid01-testaaaaaaaa/)
+      assert.match(headers['user-agent'] || headers['User-Agent'] || '', /Chrome\/146\.0\.0\.0/)
+      assert.equal(body.response_type, 'code')
+      assert.equal(body.client_id, '9d1c250a-e61b-44d9-88ed-5944d1962f5e')
+      assert.equal(body.redirect_uri, REDIRECT_URI)
+      assert.equal(body.scope, FULL_OAUTH_SCOPE)
+      assert.equal(body.code_challenge_method, 'S256')
+      assert.ok(body.code_challenge)
+      assert.ok(body.state)
+      assert.equal(Object.prototype.hasOwnProperty.call(body, 'organization_uuid'), false)
+      const status = opts.authorizeStatus || 200
+      if (status >= 400) return response(status, opts.authorizeBody || { error: 'authorize failed' })
+      return response(200, { redirect_uri: `${REDIRECT_URI}?code=auth-code&state=${body.state}` })
+    }
+    if (url === TOKEN_URL) {
+      seen.push({ stage: 'token' })
+      const body = JSON.parse(init.body)
+      assert.equal(init.method, 'POST')
+      assert.equal(headers['user-agent'] || headers['User-Agent'], 'claude-cli/2.1.284 (external, sdk-cli)')
+      assert.equal(headers['x-app'], 'cli')
+      assert.equal(body.grant_type, 'authorization_code')
+      assert.equal(body.redirect_uri, REDIRECT_URI)
+      assert.equal(body.client_id, '9d1c250a-e61b-44d9-88ed-5944d1962f5e')
+      assert.ok(body.code_verifier)
+      assert.equal(Object.prototype.hasOwnProperty.call(body, 'expires_in'), false)
+      const status = opts.tokenStatus || 200
+      if (status >= 400) return response(status, opts.tokenBody || { error: 'bad token' })
+      return response(
+        200,
+        {
+          access_token: 'sk-ant-oat01-token',
+          refresh_token: 'sk-ant-ort01-token',
+          expires_in: 3600,
+          scope: FULL_OAUTH_SCOPE,
+        },
+        opts.tokenStream === true,
+      )
+    }
+    if (url === 'https://api.anthropic.com/api/claude_cli/bootstrap?entrypoint=claude-vscode&model=claude-opus-5') {
+      seen.push({ stage: 'bootstrap' })
+      assert.equal(init.method, 'GET')
+      assert.equal(headers['user-agent'], 'claude-cli/2.1.284 (external, sdk-cli)')
+      assert.equal(headers['x-app'], 'cli')
+      assert.equal(headers['anthropic-beta'], 'oauth-2025-04-20')
+      assert.equal(headers.authorization, 'Bearer sk-ant-oat01-token')
+      return response(200, {
+        oauth_account: {
+          account_uuid: 'acct-sk',
+          account_email: 'sk@example.com',
+          organization_uuid: 'org-sk',
+        },
+      })
+    }
+    if (url === 'https://platform.claude.com/api/oauth/account/settings') {
+      seen.push({ stage: 'grove' })
+      assert.equal(init.method, 'PATCH')
+      assert.equal(headers['user-agent'], 'claude-cli/2.1.284 (external, sdk-cli)')
+      assert.deepEqual(JSON.parse(init.body), { grove_enabled: true })
+      if (opts.groveStatus) return response(opts.groveStatus, { error: 'unsupported path' })
+      return response(200, { ok: true })
+    }
+    if (url === 'https://api.anthropic.com/api/oauth/account/settings') {
+      seen.push({ stage: 'grove_fallback' })
+      assert.equal(init.method, 'PATCH')
+      assert.deepEqual(JSON.parse(init.body), { grove_enabled: true })
+      return response(200, { ok: true })
+    }
+    throw new Error(`unexpected fetch ${url}`)
+  }
+}

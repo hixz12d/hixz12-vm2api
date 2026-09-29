@@ -5,10 +5,14 @@
  *
  * Occupancy is a conversation window: PoolScheduler.reserve() touches,
  * release() drops inflight refs but keeps the key until idle prune.
+ * A window with live refs is never idle: a long stream must not lose its
+ * window mid-flight. Every touch hands back a generation; drop() retires it
+ * so a late release from the old placement cannot decrement a new one.
  */
 
 /** Longest session_idle_min (clampIdleMin caps at 1440 minutes). */
 const MAX_IDLE_MS = 24 * 60 * 60 * 1000
+let generationSeq = 0
 
 function lastSeenOf(entry) {
   if (entry == null) return 0
@@ -46,6 +50,7 @@ export class SessionLimitRegistry {
     if (!bag) return 0
     const cutoff = now - Math.max(0, Number(idleMs) || 0)
     for (const [key, entry] of bag) {
+      if (refsOf(entry) > 0) continue
       if (lastSeenOf(entry) < cutoff) bag.delete(key)
     }
     if (!bag.size) this.byAccount.delete(String(accountId))
@@ -107,24 +112,26 @@ export class SessionLimitRegistry {
     let n = 0
     for (const [key, entry] of bag) {
       const seen = lastSeenOf(entry)
-      if (seen < stale) bag.delete(key)
+      if (refsOf(entry) > 0) n++
+      else if (seen < stale) bag.delete(key)
       else if (seen >= cutoff) n++
     }
     if (!bag.size) this.byAccount.delete(id)
     return n
   }
 
+  /** @returns {number|null} generation the caller passes back to release(). */
   touch(accountId, sessionKey, now = Date.now()) {
     const key = String(sessionKey || '')
     if (!accountId || !key) return null
     const bag = this._bucket(accountId)
     const prev = bag.get(key)
-    const refs = prev == null ? 1 : refsOf(prev) + 1
-    bag.set(key, { lastSeen: now, refs })
-    return bag.size
+    const gen = prev?.gen ?? ++generationSeq
+    bag.set(key, { lastSeen: now, refs: prev == null ? 1 : refsOf(prev) + 1, gen })
+    return gen
   }
 
-  /** When the oldest occupied session goes idle and its slot can be reused. */
+  /** When the oldest idle session frees its window. Live windows never do. */
   nextIdleAt(accountId, { idleMin = 5, now = Date.now() } = {}) {
     const idleMs = Math.max(1, Number(idleMin) || 5) * 60_000
     this.prune(accountId, idleMs, now)
@@ -132,12 +139,19 @@ export class SessionLimitRegistry {
     if (!bag || !bag.size) return now
     let soonest = null
     for (const entry of bag.values()) {
+      if (refsOf(entry) > 0) continue
       const freeAt = lastSeenOf(entry) + idleMs
       if (soonest == null || freeAt < soonest) soonest = freeAt
     }
-    return soonest || now
+    return soonest || null
   }
-  release(accountId, sessionKey) {
+
+  /**
+   * Drop one inflight ref. The key stays until idle prune: max_sessions is a
+   * conversation cap, not a concurrent-request cap. The idle clock starts
+   * when the last ref leaves, not when the first request arrived.
+   */
+  release(accountId, sessionKey, { gen = null, now = Date.now() } = {}) {
     const id = String(accountId || '')
     const key = String(sessionKey || '')
     if (!id || !key) return 0
@@ -145,9 +159,8 @@ export class SessionLimitRegistry {
     if (!bag) return 0
     const prev = bag.get(key)
     if (prev == null) return bag.size
-    // Drop inflight refs but keep the key until idle prune. max_sessions is a
-    // conversation cap, not a concurrent-request cap.
-    bag.set(key, { lastSeen: lastSeenOf(prev) || Date.now(), refs: Math.max(0, refsOf(prev) - 1) })
+    if (gen != null && prev.gen != null && prev.gen !== gen) return bag.size
+    bag.set(key, { lastSeen: Math.max(lastSeenOf(prev), now), refs: Math.max(0, refsOf(prev) - 1), gen: prev.gen })
     return bag.size
   }
 

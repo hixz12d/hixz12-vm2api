@@ -35,7 +35,7 @@ import { filterVmsForPanel } from './resource-owner.mjs'
 import { computeWeeklySplit, publicWeeklySplit, weeklySplitConfig } from '../pool/weekly-split.mjs'
 import { accountTierKey, isNearLimit, normalizeTiers, resolveTierPolicy } from '../pool/quota-tiers.mjs'
 import { inferClaudeTier } from '../pool/claude-tier.mjs'
-import { listQuotaFromHeaders } from '../pool/quota-window.mjs'
+import { listQuotaFromHeaders, isOfficialWindowLimited } from '../pool/quota-window.mjs'
 import { hardBlockOf } from '../pool/rate-limit-service.mjs'
 import { unitCircuit } from '../pool/unit-circuit.mjs'
 import { accountIdOf } from '../pool/pool-scheduler.mjs'
@@ -64,6 +64,8 @@ import { publicNotifyConfig, summarizePoolAvailability } from './notify.mjs'
 import { cacheHitStats } from './cache-metrics.mjs'
 import { shanghaiDayStartIso } from './pricing.mjs'
 import {
+  AGENT_STANDING_MAX,
+  PRESET_FLAG_FIELDS,
   OVERLAY_PRESETS,
   PERSONA_PRESETS,
   parsePersonaHides,
@@ -305,6 +307,28 @@ export function validatePersonaRoutingPatch(body = {}) {
   }
   if (compat.persona_standing != null && String(compat.persona_standing).length > PERSONA_STANDING_MAX) {
     problems.push(`persona_standing 超过 ${PERSONA_STANDING_MAX} 字符`)
+  }
+  if (compat.agent_standing != null) {
+    if (typeof compat.agent_standing !== 'string') {
+      problems.push('agent_standing 必须是字符串')
+    } else if (compat.agent_standing.length > AGENT_STANDING_MAX) {
+      problems.push(`agent_standing 超过 ${AGENT_STANDING_MAX} 字符`)
+    }
+  }
+  for (const field of PRESET_FLAG_FIELDS) {
+    const map = compat[field]
+    if (map == null) continue
+    if (typeof map !== 'object' || Array.isArray(map)) {
+      problems.push(`${field} 必须是对象`)
+      continue
+    }
+    for (const [key, on] of Object.entries(map)) {
+      if (!PERSONA_PRESETS.includes(key)) {
+        problems.push(`${field}.${key} 不是已知方案（${PERSONA_PRESETS.join(' / ')}）`)
+      } else if (typeof on !== 'boolean') {
+        problems.push(`${field}.${key} 必须是布尔`)
+      }
+    }
   }
   if (compat.cache_ttl != null && !['5m', '1h'].includes(String(compat.cache_ttl).trim())) {
     problems.push(`cache_ttl 必须是 5m / 1h，收到 ${compat.cache_ttl}`)
@@ -1200,7 +1224,7 @@ function hostStats() {
   }
 }
 
-function quotaFromAccount(acc, quotaConfig) {
+export function quotaFromAccount(acc, quotaConfig) {
   const u = acc?.unified || {}
   const listed = listQuotaFromHeaders(u)
   const sonnet = u.seven_day_sonnet || {}
@@ -1210,18 +1234,38 @@ function quotaFromAccount(acc, quotaConfig) {
       : u['7d_oi'] || {}
   const fable = u.fable || null
   const extra = u.extra_usage || null
+  const o5 = u.official?.['5h'] || u['5h'] || {}
+  const o7 = u.official?.['7d'] || u['7d'] || {}
+  const o5Limited = isOfficialWindowLimited(o5)
+  const o7Limited = isOfficialWindowLimited(o7)
+  const effectiveU5 = o5Limited
+    ? 1.0
+    : listed.utilization_5h != null
+      ? listed.utilization_5h
+      : o5.utilization != null
+        ? Number(o5.utilization)
+        : null
+  const effectiveU7 = o7Limited
+    ? 1.0
+    : listed.utilization_7d != null
+      ? listed.utilization_7d
+      : o7.utilization != null
+        ? Number(o7.utilization)
+        : null
+  const effectiveStatus5 = o5Limited ? 'rejected' : listed.status_5h || o5.status || null
+  const effectiveStatus7 = o7Limited ? 'rejected' : listed.status_7d || o7.status || null
   const q = {
-    utilization_5h: listed.utilization_5h,
-    utilization_7d: listed.utilization_7d,
+    utilization_5h: effectiveU5,
+    utilization_7d: effectiveU7,
     utilization_7d_sonnet: sonnet.utilization != null ? Number(sonnet.utilization) : null,
     utilization_7d_oi:
       oi.utilization != null ? Number(oi.utilization) : fable?.utilization != null ? Number(fable.utilization) : null,
-    reset_5h: listed.reset_5h || u.official?.['5h']?.reset || u['5h']?.reset || null,
-    reset_7d: listed.reset_7d || u.official?.['7d']?.reset || u['7d']?.reset || null,
+    reset_5h: listed.reset_5h || o5.reset || null,
+    reset_7d: listed.reset_7d || o7.reset || null,
     reset_7d_sonnet: sonnet.reset || null,
     reset_7d_oi: oi.reset || listed.reset_7d_oi || null,
-    status_5h: listed.status_5h || null,
-    status_7d: listed.status_7d || null,
+    status_5h: effectiveStatus5,
+    status_7d: effectiveStatus7,
     status_7d_sonnet: sonnet.status || null,
     status_7d_oi: oi.status || listed.status_7d_oi || null,
     extra_usage: extra,

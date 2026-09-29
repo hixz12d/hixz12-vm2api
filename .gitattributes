@@ -13,3 +13,4 @@ share/wrap-cli/cc-node binary
 share/wrap-cli/kin-kernel.bin binary
 share/crag/kin-kernel binary
 share/wrap-cli/glibc239/** binary
+web/dist/** linguist-generated=true

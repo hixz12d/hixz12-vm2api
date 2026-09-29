@@ -552,8 +552,8 @@ test('repo routing.json and the Vite console expose init telemetry sync', () => 
   assert.match(pane, /id=\{`occ-\$\{key\}`\}/)
   assert.match(pane, /id='occ-resident'/)
   assert.match(pane, /sync_telemetry/)
-  assert.match(pane, /同步遥测/)
-  assert.match(pane, /hello 后常驻/)
+  assert.match(pane, /安装后照官方方式上报统计/)
+  assert.match(pane, /打完招呼后不退出/)
   assert.match(pane, /500 MB（推荐）/)
 
   const nav = fs.readFileSync(path.join(gw, 'web/src/config/nav.ts'), 'utf8')

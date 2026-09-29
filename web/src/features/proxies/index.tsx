@@ -1,48 +1,81 @@
-import { useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useDeferredValue, useMemo, useState } from 'react'
+import { useMutation, useMutationState, useQuery } from '@tanstack/react-query'
 import { VIEW_TITLES } from '@/config/nav'
-import type { Vm } from '@/types/panel-vm'
+import type { Vm, VmProxySnap } from '@/types/panel-vm'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { PageHeader } from '@/components/page-header'
-import {
-  CardGridSkeleton,
-  SectionSkeleton,
-  TableSkeleton,
-} from '@/components/page-skeletons'
+import { SectionSkeleton } from '@/components/page-skeletons'
 import { QueryGate } from '@/components/query-gate'
 import { dashboardQueryOptions } from '@/features/overview/queries'
-import { ProxyPoolControls } from '@/features/proxies/proxy-pool-controls'
-import { ProxySummary } from '@/features/proxies/proxy-summary'
-import { ProxyTable } from '@/features/proxies/proxy-table'
-import { proxiesQueryOptions } from '@/features/proxies/queries'
 import { ProxyEditDialog } from './proxy-edit-dialog'
+import { createProxyHover } from './proxy-hover'
+import { ProxyImportPanel } from './proxy-import-panel'
+import { ProxyList } from './proxy-list'
+import { ProxyManagePanel } from './proxy-manage-panel'
+import { ProxyOverview } from './proxy-overview'
+import type { ProxyRowActions } from './proxy-row'
 import {
+  PROXY_SORT_DEFAULT_DIR,
+  type ProxyFilter,
   type ProxySortKey,
   proxyBoundIds,
+  proxyHostText,
+  proxyInFilter,
+  proxyIsLocal,
+  proxyMatchesQuery,
   readPositive,
   sortedProxies,
 } from './proxy-sort'
+import { proxiesQueryOptions, useRefreshProxies } from './queries'
+
+const PROBE_KEY = ['panel', 'proxies', 'probe'] as const
+const GEO_KEY = ['panel', 'proxies', 'geo'] as const
+const COPY_KEY = ['panel', 'proxies', 'reveal'] as const
+const TOGGLE_KEY = ['panel', 'proxies', 'toggle'] as const
+
+/** 某类单条操作当前在哪些代理上进行中。支持多行同时转圈。 */
+function usePendingIds(mutationKey: readonly string[]): Set<string> {
+  const ids = useMutationState({
+    filters: { mutationKey, status: 'pending' },
+    select: (m) => {
+      const v = m.state.variables
+      if (typeof v === 'string') return v
+      if (v && typeof v === 'object' && 'id' in v) return String(v.id)
+      return ''
+    },
+  })
+  return new Set(ids)
+}
+
+function firstOf(set: Set<string>): string {
+  for (const id of set) return id
+  return ''
+}
 
 export function ProxiesPage() {
   const px = useQuery(proxiesQueryOptions())
   const dash = useQuery(dashboardQueryOptions())
-  const qc = useQueryClient()
-  const [raw, setRaw] = useState('')
+  const refresh = useRefreshProxies()
+  const [hover] = useState(createProxyHover)
   const [sortKey, setSortKey] = useState<ProxySortKey>('status')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [filter, setFilter] = useState<ProxyFilter>('all')
+  const [query, setQuery] = useState('')
+  const [dragVm, setDragVm] = useState('')
   const [delId, setDelId] = useState('')
   const [editId, setEditId] = useState('')
   const [unbindTarget, setUnbindTarget] = useState<{
     id: string
     vmId: string
   } | null>(null)
-  const list = px.data?.proxies || []
+  const deferredQuery = useDeferredValue(query.trim().toLowerCase())
+
+  const list = useMemo(() => px.data?.proxies || [], [px.data?.proxies])
   const tot = px.data?.totals || {}
   const cfg = px.data?.config || {}
-  const vms: Vm[] = dash.data?.vms || []
+  const vms: Vm[] = useMemo(() => dash.data?.vms || [], [dash.data?.vms])
   // 回落序对齐 index.html:7756 的 proxyBindLimit()：totals 先于 config。
   const bindLimit = readPositive(
     tot,
@@ -53,94 +86,48 @@ export function ProxiesPage() {
   const total = Number(tot.total ?? list.length)
   const slotsUsed = Number(tot.slots_used ?? tot.bound ?? 0)
   const slotsCap = Number(tot.slots_cap ?? total * bindLimit)
-  const rows = useMemo(
+
+  const sorted = useMemo(
     () => sortedProxies(list, sortKey, sortDir),
     [list, sortKey, sortDir]
   )
-  const deleting = rows.find((p) => p.id === delId)
+  const vmById = useMemo(() => new Map(vms.map((v) => [v.id, v])), [vms])
+  const ownerOf = useMemo(() => {
+    const out = new Map<string, VmProxySnap>()
+    for (const p of list) for (const id of proxyBoundIds(p)) out.set(id, p)
+    return out
+  }, [list])
+  const rows = useMemo(
+    () =>
+      sorted.filter(
+        (p) =>
+          proxyInFilter(p, filter, bindLimit) &&
+          proxyMatchesQuery(
+            p,
+            deferredQuery,
+            (id) => vmById.get(id)?.name || ''
+          )
+      ),
+    [sorted, filter, bindLimit, deferredQuery, vmById]
+  )
+  const deleting = list.find((p) => p.id === delId)
   const delBound = proxyBoundIds(deleting).length
-  const editing = rows.find((p) => p.id === editId) || null
+  const editing = list.find((p) => p.id === editId) || null
 
-  const refresh = () =>
-    Promise.all([
-      qc.invalidateQueries({ queryKey: proxiesQueryOptions().queryKey }),
-      qc.invalidateQueries({ queryKey: dashboardQueryOptions().queryKey }),
-    ])
-
-  const addLocal = useMutation({
-    mutationFn: () =>
-      api<Record<string, unknown>>('/api/panel/proxies/local', {
-        method: 'POST',
-        body: JSON.stringify({}),
-      }),
-    onSuccess: async (data) => {
-      toast.success(data.created ? '已添加本机直连' : '本机直连已经有了')
-      await refresh()
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
-  const importPx = useMutation({
-    mutationFn: () =>
-      api<Record<string, unknown>>('/api/panel/proxies/import', {
-        method: 'POST',
-        body: JSON.stringify({ text: raw }),
-      }),
-    onSuccess: async (data) => {
-      toast.success(
-        `新增 ${data.added ?? 0} 条，跳过 ${data.skipped ?? 0} 条（重复或格式不对）`
-      )
-      setRaw('')
-      await refresh()
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
-  const probeAll = useMutation({
-    mutationFn: () => api('/api/panel/proxies/probe', { method: 'POST' }),
-    onSuccess: async () => {
-      toast.success('已检查所有代理能不能连上')
-      await refresh()
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
-  const saveConfig = useMutation({
-    mutationFn: (patch: Record<string, unknown>) =>
-      api<{
-        egress?: { proxy_id: string; ok: boolean; error?: string | null }[]
-      }>('/api/panel/proxies/config', {
-        method: 'PUT',
-        body: JSON.stringify(patch),
-      }),
-    onSuccess: async (data, patch) => {
-      const failed = (data.egress || []).filter((entry) => !entry.ok)
-      if (failed.length) {
-        toast.warning(
-          `DNS 已保存，但 ${failed.length} 个出口重载失败：${failed.map((entry) => entry.proxy_id).join('、')}`
-        )
-      } else if (patch.dns_primary != null) {
-        toast.success('DNS 设置已保存，已同步到正在用的代理')
-      } else if (patch.bind_limit != null) {
-        toast.success(`每条代理最多给 ${String(patch.bind_limit)} 个账号用`)
-      } else if (patch.probe_interval_min != null) {
-        toast.success(`每 ${String(patch.probe_interval_min)} 分钟自动检查一次`)
-      } else {
-        toast.success('已保存')
-      }
-      await refresh()
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
   const probeOne = useMutation({
+    mutationKey: PROBE_KEY,
     mutationFn: (id: string) =>
       api(`/api/panel/proxies/${encodeURIComponent(id)}/probe`, {
         method: 'POST',
       }),
     onSuccess: async () => {
-      toast.success('检查完成')
+      toast.success('探测完成')
       await refresh()
     },
     onError: (error: Error) => toast.error(error.message),
   })
   const geoOne = useMutation({
+    mutationKey: GEO_KEY,
     mutationFn: (id: string) =>
       api<{ geo?: { timezone?: string | null; country?: string | null } }>(
         `/api/panel/proxies/${encodeURIComponent(id)}/geo`,
@@ -150,21 +137,7 @@ export function ProxiesPage() {
       const where = [data.geo?.country, data.geo?.timezone]
         .filter(Boolean)
         .join(' · ')
-      toast.success(where ? `出口在 ${where}` : '已查过位置')
-      await refresh()
-    },
-    onError: (error: Error) => toast.error(error.message),
-  })
-  const geoAll = useMutation({
-    mutationFn: () =>
-      api<{ results?: { ok?: boolean }[] }>('/api/panel/proxies/geo', {
-        method: 'POST',
-        body: JSON.stringify({ force: true }),
-      }),
-    onSuccess: async (data) => {
-      const rows = data.results || []
-      const ok = rows.filter((r) => r.ok).length
-      toast.success(`位置查询完成（${ok}/${rows.length}）`)
+      toast.success(where ? `出口位置 ${where}` : '已检测')
       await refresh()
     },
     onError: (error: Error) => toast.error(error.message),
@@ -175,20 +148,21 @@ export function ProxiesPage() {
         method: 'DELETE',
       }),
     onSuccess: async () => {
-      toast.success('代理已删除')
+      toast.success('已删除')
       setDelId('')
       await refresh()
     },
     onError: (error: Error) => toast.error(error.message),
   })
   const setEnabled = useMutation({
+    mutationKey: TOGGLE_KEY,
     mutationFn: ({ id, on }: { id: string; on: boolean }) =>
       api(
         `/api/panel/proxies/${encodeURIComponent(id)}/${on ? 'enable' : 'disable'}`,
         { method: 'POST' }
       ),
     onSuccess: async (_data, { on }) => {
-      toast.success(on ? '代理已启用' : '代理已停用')
+      toast.success(on ? '已启用' : '已禁用')
       await refresh()
     },
     onError: (error: Error) => toast.error(error.message),
@@ -199,8 +173,15 @@ export function ProxiesPage() {
         method: 'POST',
         body: JSON.stringify({ vm_id: vmId }),
       }),
-    onSuccess: async () => {
-      toast.success('已绑到账号')
+    onSuccess: async (_data, { id, vmId }) => {
+      const to = list.find((p) => p.id === id)
+      const from = ownerOf.get(vmId)
+      const name = vmById.get(vmId)?.name || vmId
+      toast.success(
+        from && from.id !== id
+          ? `${name} 已从 ${proxyHostText(from)} 换绑到 ${to ? proxyHostText(to) : id}`
+          : `${name} 已绑定`
+      )
       await refresh()
     },
     onError: (error: Error) => toast.error(error.message),
@@ -212,7 +193,7 @@ export function ProxiesPage() {
         body: JSON.stringify({ vm_id: vmId }),
       }),
     onSuccess: async () => {
-      toast.success('已解除绑定')
+      toast.success('已解绑')
       setUnbindTarget(null)
       await refresh()
     },
@@ -225,6 +206,7 @@ export function ProxiesPage() {
    * 是两个风险级别，后者会进 DOM、DevTools 和截图。见 api-contract.md。
    */
   const copyUri = useMutation({
+    mutationKey: COPY_KEY,
     mutationFn: (id: string) =>
       api<{ uri?: string }>(
         `/api/panel/proxies/${encodeURIComponent(id)}/reveal`,
@@ -238,7 +220,7 @@ export function ProxiesPage() {
       }
       try {
         await navigator.clipboard.writeText(uri)
-        toast.success('已复制完整代理地址（含账号密码），注意不要泄露')
+        toast.success('已复制 SOCKS5 地址（含账密）')
       } catch {
         // 剪贴板 API 需要安全上下文（HTTPS 或 localhost），失败要说明白，
         // 而不是静默什么都没发生。这里也不把 uri 兜底渲染出来。
@@ -248,127 +230,131 @@ export function ProxiesPage() {
     onError: (error: Error) => toast.error(error.message),
   })
 
-  const busy =
-    probeOne.isPending ||
-    geoOne.isPending ||
-    remove.isPending ||
-    saveConfig.isPending ||
-    setEnabled.isPending ||
-    bind.isPending ||
-    unbind.isPending
+  const probing = usePendingIds(PROBE_KEY)
+  const geoing = usePendingIds(GEO_KEY)
+  const copying = usePendingIds(COPY_KEY)
+  const toggling = usePendingIds(TOGGLE_KEY)
 
-  function toggleSort(next: ProxySortKey) {
-    if (sortKey === next) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
-      return
-    }
+  const actions: ProxyRowActions = {
+    onProbe: (id) => probeOne.mutate(id),
+    onGeo: (id) => geoOne.mutate(id),
+    onCopy: (id) => copyUri.mutate(id),
+    onEdit: setEditId,
+    onToggleEnabled: (item) => {
+      if (!item.id) return
+      setEnabled.mutate({ id: item.id, on: item.enabled === false })
+    },
+    onDelete: setDelId,
+    onBind: (id, vmId) => bind.mutate({ id, vmId }),
+    onUnbind: (id, vmId) => setUnbindTarget({ id, vmId }),
+    onVmDragChange: setDragVm,
+  }
+
+  function changeSortKey(next: ProxySortKey) {
     setSortKey(next)
-    // 换列时落 desc，对齐 index.html:2444 的 sortDir()。
-    setSortDir('desc')
+    setSortDir(PROXY_SORT_DEFAULT_DIR[next])
+  }
+
+  function locate(id: string) {
+    // 目标被筛掉时先放开筛选，否则「点列定位」会落空。
+    const target = list.find((p) => p.id === id)
+    if (target && !rows.some((p) => p.id === id)) {
+      setFilter('all')
+      setQuery('')
+    }
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`proxy-row-${id}`)
+      if (!el) return
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)')
+      el.scrollIntoView({
+        block: 'center',
+        behavior: reduce.matches ? 'auto' : 'smooth',
+      })
+      hover.set(id)
+    })
   }
 
   return (
-    <PageHeader
-      title={VIEW_TITLES.proxies}
-      extra={
-        <>
-          <Button
-            variant='outline'
-            title='通过每条代理查一下出口 IP 在哪个国家、城市、时区'
-            onClick={() => geoAll.mutate()}
-            disabled={geoAll.isPending}
-            loading={geoAll.isPending}
-          >
-            查所有位置
-          </Button>
-          <Button
-            variant='outline'
-            title='只检查能不能连上代理，不会访问官方'
-            onClick={() => probeAll.mutate()}
-            disabled={probeAll.isPending}
-            loading={probeAll.isPending}
-          >
-            检查全部连通
-          </Button>
-        </>
-      }
-    >
+    <PageHeader title={VIEW_TITLES.proxies}>
       <QueryGate
         loading={px.isLoading}
         error={px.error || (px.data?.error ? new Error(px.data.error) : null)}
         skeleton={
-          <div>
-            <CardGridSkeleton
-              cards={4}
-              className='mb-4 grid gap-3 sm:grid-cols-4'
-            />
+          <div className='grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)]'>
+            <div className='space-y-4'>
+              <SectionSkeleton
+                titleWidth='w-16'
+                showDescription={false}
+                rows={3}
+              />
+              <SectionSkeleton
+                titleWidth='w-20'
+                showDescription={false}
+                rows={2}
+              />
+            </div>
             <SectionSkeleton
-              className='mb-4'
-              titleWidth='w-28'
+              titleWidth='w-40'
               showDescription={false}
-              rows={2}
+              rows={8}
             />
-            <TableSkeleton rows={8} columns={4} />
           </div>
         }
       >
-        <ProxySummary
-          total={total}
-          totals={tot}
-          slotsUsed={slotsUsed}
-          slotsCap={slotsCap}
-        />
-        <ProxyPoolControls
-          bindLimit={bindLimit}
-          probeMin={probeMin}
-          raw={raw}
-          importing={importPx.isPending}
-          onBindLimitChange={(value) =>
-            saveConfig.mutate({ bind_limit: value })
-          }
-          onProbeMinChange={(value) =>
-            saveConfig.mutate({ probe_interval_min: value })
-          }
-          dnsPrimary={String(cfg.dns_primary || 'auto')}
-          onDnsPrimaryChange={(value) =>
-            saveConfig.mutate({ dns_primary: value })
-          }
-          followProxyTimezone={cfg.follow_proxy_timezone !== false}
-          onFollowProxyTimezoneChange={(value) =>
-            saveConfig.mutate({ follow_proxy_timezone: value })
-          }
-          onRawChange={setRaw}
-          onImport={() => importPx.mutate()}
-          onAddLocal={() => addLocal.mutate()}
-          addingLocal={addLocal.isPending}
-          hasLocal={list.some(
-            (item) =>
-              item.kind === 'local' ||
-              item.scheme === 'local' ||
-              item.id === 'px-local'
-          )}
-        />
-        <ProxyTable
-          rows={rows}
-          vms={vms}
-          bindLimit={bindLimit}
-          busy={busy}
-          sortKey={sortKey}
-          sortDir={sortDir}
-          copyingId={copyUri.isPending ? copyUri.variables : ''}
-          onToggleSort={toggleSort}
-          onProbe={(id) => probeOne.mutate(id)}
-          onGeo={(id) => geoOne.mutate(id)}
-          onDelete={setDelId}
-          onEdit={setEditId}
-          onCopy={(id) => copyUri.mutate(id)}
-          onToggleEnabled={(item) => {
-            if (!item.id) return
-            setEnabled.mutate({ id: item.id, on: item.enabled === false })
-          }}
-          onBind={(id, vmId) => bind.mutate({ id, vmId })}
-          onUnbind={(id, vmId) => setUnbindTarget({ id, vmId })}
-        />
+        <div className='grid items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)]'>
+          <aside
+            aria-label='添加与管理代理'
+            className='space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100svh-6rem)] lg:overflow-y-auto lg:overscroll-contain lg:pb-1'
+          >
+            <ProxyOverview
+              proxies={sorted}
+              vms={vms}
+              ownerOf={ownerOf}
+              poolLimit={bindLimit}
+              slotsUsed={slotsUsed}
+              slotsCap={slotsCap}
+              filter={filter}
+              onFilter={setFilter}
+              hover={hover}
+              onLocate={locate}
+              onVmDragChange={setDragVm}
+            />
+            <ProxyImportPanel hasLocal={list.some(proxyIsLocal)} />
+            <ProxyManagePanel
+              proxies={list}
+              bindLimit={bindLimit}
+              probeMin={probeMin}
+              dnsPrimary={String(cfg.dns_primary || 'auto')}
+              followProxyTimezone={cfg.follow_proxy_timezone !== false}
+            />
+          </aside>
+          <ProxyList
+            all={sorted}
+            rows={rows}
+            vms={vms}
+            vmById={vmById}
+            ownerOf={ownerOf}
+            poolLimit={bindLimit}
+            query={query}
+            onQuery={setQuery}
+            filter={filter}
+            onFilter={setFilter}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onSortKey={changeSortKey}
+            onSortDir={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+            hover={hover}
+            dragVm={dragVm}
+            pending={{
+              probe: firstOf(probing),
+              geo: firstOf(geoing),
+              copy: firstOf(copying),
+              toggle: firstOf(toggling),
+              binding: bind.isPending || unbind.isPending,
+            }}
+            actions={actions}
+          />
+        </div>
       </QueryGate>
       <ProxyEditDialog
         proxy={editing}
@@ -377,13 +363,11 @@ export function ProxiesPage() {
       <ConfirmDialog
         open={!!unbindTarget}
         onOpenChange={() => setUnbindTarget(null)}
-        title='解除这个账号的代理？'
-        desc={`${
-          vms.find((v) => v.id === unbindTarget?.vmId)?.name ||
-          unbindTarget?.vmId ||
-          ''
-        } 解除后发不出请求，直到重新绑一条代理。`}
-        confirmText='解除绑定'
+        title='解绑代理'
+        desc={`解绑后 ${
+          vmById.get(unbindTarget?.vmId || '')?.name || unbindTarget?.vmId || ''
+        } 将无法转发，确认？`}
+        confirmText='解绑'
         cancelBtnText='取消'
         destructive
         isLoading={unbind.isPending}
@@ -394,13 +378,13 @@ export function ProxiesPage() {
       <ConfirmDialog
         open={!!delId}
         onOpenChange={() => setDelId('')}
-        title='删除这条代理？'
+        title='删除代理'
         desc={
           delBound
-            ? `有 ${delBound} 个账号在用它，删除后这些账号发不出请求，直到重新绑代理。无法恢复。`
-            : '删除后无法恢复，需要时要重新添加。'
+            ? `删除后 ${delBound} 台虚拟机将解绑，确认？`
+            : '删除这条 SOCKS5？'
         }
-        confirmText='删除代理'
+        confirmText='删除'
         cancelBtnText='取消'
         destructive
         isLoading={remove.isPending}

@@ -93,6 +93,7 @@ import {
   isOfficialClaudeCodeTraffic,
   isProxiedOfficialClaudeCode,
   personaHidesUsageFromRoutingFile,
+  standingUsageFromRoutingFile,
   personaModeFromRoutingFile,
 } from '../identity/crs-persona.mjs'
 import { createDownstreamKeepalive } from './stream-keepalive.mjs'
@@ -179,7 +180,16 @@ export function createHandleProtocol(deps) {
     const summary = formatPoolSelectionSummary(details)
     logBag.error_code = originalCode || mapped.body?.error?.code
     logBag.error_message = summary || originalMessage || mapped.body?.error?.message || null
+    // Only a known wake time (cooldown / RPM / window reset) earns a Retry-After.
+    if (mapped.body?.error?.code === 'pool_overloaded' && Number(result?.retryAfterSec) > 0) {
+      mapped.retryAfterSec = Number(result.retryAfterSec)
+    }
     return mapped
+  }
+
+  function sendMapped(res, mapped) {
+    if (mapped.retryAfterSec) res.setHeader?.('retry-after', String(mapped.retryAfterSec))
+    return json(res, mapped.status, mapped.body)
   }
 
   function acceptAssistantHop(result) {
@@ -685,6 +695,10 @@ export function createHandleProtocol(deps) {
       stickyRouter?.unbind?.(familyKey)
       familyVmId = null
     }
+    // An explicit child counts against its root's conversation window, not a
+    // new one. Without a local root record there is no relation to trust.
+    const rootWindowKey = parentSession ? stickyRouter?.canonicalSessionKey?.(parentSession) || null : null
+    const windowKey = rootWindowKey && stickyRouter?.resolve?.(rootWindowKey) ? rootWindowKey : undefined
     const stickyBound =
       stickyKey && typeof stickyRouter?.resolve === 'function' ? stickyRouter.resolve(stickyKey) : null
     const outboundSessionId = resolveOutboundSessionId(callerSession, {
@@ -729,6 +743,7 @@ export function createHandleProtocol(deps) {
       officialClient: officialTraffic,
       mode: personaMode,
       hides: personaHidesUsageFromRoutingFile(routingConfigPath),
+      standing: standingUsageFromRoutingFile(routingConfigPath),
     })
 
     if (inferenceBackend === 'api') {
@@ -897,6 +912,7 @@ export function createHandleProtocol(deps) {
         deviceKey,
         skipSessionSeat: seatless,
         familyKey,
+        windowKey,
         familyVmId,
         pinVmId,
         ownerScope,
@@ -924,14 +940,19 @@ export function createHandleProtocol(deps) {
           } catch {}
           const identity = loadVmIdentity(selected.exec)
           const attemptStartedAt = extra.attemptStartedAt ?? Date.now()
+          const keptSession = extra.freshSlot ? '' : stickyBound?.sessionId || ''
+          const keptAccount = extra.freshSlot ? '' : stickyBound?.accountId || ''
+          const keptVm = extra.freshSlot ? '' : stickyBound?.vmId || ''
           const attemptSessionId = resolveOutboundSessionId(callerSession, {
             ...sessionContext,
             accountId: selected.accountId,
-            boundSessionId: stickyBound?.sessionId || '',
-            boundAccountId: stickyBound?.accountId || '',
-            boundVmId: stickyBound?.vmId || '',
+            boundSessionId: keptSession,
+            boundAccountId: keptAccount,
+            boundVmId: keptVm,
             vmId: selected.vmId,
-            epoch: `${attemptStartedAt}:${selected.vmId || extra.attemptNo || ''}`,
+            epoch: extra.freshSlot
+              ? `slot:${selected.slotIndex ?? 'x'}:${attemptStartedAt}`
+              : `${attemptStartedAt}:${selected.vmId || extra.attemptNo || ''}`,
           })
           if (identity && attemptSessionId) identity.callerSessionId = attemptSessionId
           const credMode = credentialModeFromOauth(selected.vm?.claude || {})
@@ -955,6 +976,13 @@ export function createHandleProtocol(deps) {
                 cliVersion: OFFICIAL_CLI_VERSION,
                 identity,
               })
+              // The slot preset may differ from the global one; its panel mask applies.
+              personaHideTokens = personaHideForUnofficial(personaIn, hopBody, {
+                officialClient: false,
+                mode: resolvedPersona,
+                hides: personaHidesUsageFromRoutingFile(routingConfigPath, resolvedPersona),
+                standing: standingUsageFromRoutingFile(routingConfigPath, resolvedPersona),
+              })
             }
             hopBody = prepareCliHopBody(repaired ? body : hopBody, {
               stream: upstreamStream,
@@ -966,23 +994,26 @@ export function createHandleProtocol(deps) {
                 officialClient: officialTraffic,
                 sessionId: attemptSessionId,
                 mode: sessionMode,
-                accountId: selected.accountId,
-                boundSessionId: stickyBound?.sessionId || '',
-                boundAccountId: stickyBound?.accountId || '',
-                boundVmId: stickyBound?.vmId || '',
+                boundSessionId: keptSession,
+                boundAccountId: keptAccount,
+                boundVmId: keptVm,
                 vmId: selected.vmId,
                 epoch: attemptStartedAt,
               })
             }
             if (getRouting()?.logging?.mode === 'debug') logBag.outbound_body = hopBody
 
-            // 0注入 hides CLI billing + env. 官方提示词 must show real usage.
+            // 0注入 hides CLI billing + env and the standing Node left in the leftover.
+            // 官方提示词 must show real usage.
             const cliHide =
               resolvedPersona === 'official'
                 ? 0
                 : personaHideForCliZero(personaIn, hopBody, {
                     officialClient: officialTraffic,
                     timezone: selected.vm?.timezone || selected.vm?.fingerprint?.timezone,
+                    // A re-applied Node persona's hide (summed below) already counts its overlay.
+                    overlay: cliAppliesNodePersona ? 0 : personaHideTokens?.overlay,
+                    hides: personaHidesUsageFromRoutingFile(routingConfigPath, resolvedPersona),
                   })
             personaHideTokens = cliAppliesNodePersona ? (Number(personaHideTokens) || 0) + cliHide : cliHide
             logBag.inference_engine = resolveInferenceEngine(selected.vm, routingNow)
@@ -1010,7 +1041,8 @@ export function createHandleProtocol(deps) {
             personaHideTokens = personaHideForUnofficial(personaIn, rewritten, {
               officialClient: officialTraffic,
               mode: modeOverride,
-              hides: personaHidesUsageFromRoutingFile(routingConfigPath),
+              hides: personaHidesUsageFromRoutingFile(routingConfigPath, modeOverride),
+              standing: standingUsageFromRoutingFile(routingConfigPath, modeOverride),
             })
           }
           logBag.inference_engine = resolveInferenceEngine(selected.vm, routingNow)
@@ -1157,7 +1189,8 @@ export function createHandleProtocol(deps) {
     logBag.vm_id = result?.vmId || null
     logBag.account_id = result?.accountId || null
     logBag.final_account_id = result?.accountId || null
-    logBag.attempt_count = result?.attemptCount || null
+    // Zero executions is a real 0, not unknown; the VM is the last one that ran.
+    logBag.attempt_count = result?.attemptCount ?? 0
     logBag.final_state = result?.finalState || result?.terminalState || null
     logBag.upstream_status = result?.status ?? null
     logBag.usage = result?.body?.usage || result?.usage || null
@@ -1222,7 +1255,7 @@ export function createHandleProtocol(deps) {
       if (!res.headersSent) {
         const mapped = mapProtocolClientError(result, logBag, result?.body?.error?.code || 'upstream_error')
         if (!isClientCancelledResult(result) && mapped.body?.error?.code !== 'client_cancelled') stats.errors++
-        return json(res, mapped.status, mapped.body)
+        return sendMapped(res, mapped)
       }
       if (result?.ok && protocol !== 'anthropic.messages') {
         res.write('data: [DONE]\n\n')
@@ -1241,7 +1274,7 @@ export function createHandleProtocol(deps) {
       const failed = isIncompleteAssistantMessage(result) ? incompleteAssistantClientError(result) : result
       const mapped = mapProtocolClientError(failed, logBag, failed?.body?.error?.code || 'upstream_error')
       if (mapped.body?.error?.code !== 'client_cancelled') stats.errors++
-      return json(res, mapped.status, mapped.body)
+      return sendMapped(res, mapped)
     }
 
     let output
