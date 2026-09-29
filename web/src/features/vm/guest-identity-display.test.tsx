@@ -48,6 +48,6 @@ describe('operations guest collection display', () => {
     expect(html).toContain('actual-guest')
     expect(html).toContain('已采集')
     expect(html).toContain('dateTime="2026-09-20T00:00:00Z"')
-    expect(html).toContain('采集特征')
+    expect(html).toContain('重新读取机器特征')
   })
 })

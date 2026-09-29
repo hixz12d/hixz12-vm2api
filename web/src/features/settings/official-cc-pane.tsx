@@ -36,14 +36,18 @@ const MEMORY: [string, string][] = [
 ]
 
 const BASIC: [string, string, string][] = [
-  ['enabled', '换票后自动', '启用'],
-  ['sync_telemetry', '同步遥测', '初装成功后开启'],
+  ['enabled', '导入凭证后自动安装', '开启'],
+  ['sync_telemetry', '安装后照官方方式上报统计', '安装成功后打开'],
 ]
 
 const ADVANCED: [string, string, string][] = [
-  ['wipe', '清空初装', '每次换票清空'],
-  ['apply_seed', '后置播种', 'init 之后覆写'],
-  ['reconcile_fingerprint', '官方指纹', 'machineID 覆盖 device_id'],
+  ['wipe', '安装前先清空', '每次导入凭证都清空运行环境'],
+  ['apply_seed', '安装后改几项默认配置', '按账号「初装设置」页签的开关改'],
+  [
+    'reconcile_fingerprint',
+    '用官方生成的设备编号',
+    '以官方客户端生成的机器编号为准',
+  ],
 ]
 
 function SwitchRow({
@@ -92,15 +96,13 @@ export function OfficialCcSettingsPane({
   return (
     <Card>
       <CardHeader className='pb-2'>
-        <CardTitle className='text-sm'>官方 Claude Code 初装</CardTitle>
+        <CardTitle className='text-sm'>自动安装官方 Claude Code</CardTitle>
       </CardHeader>
       <CardContent className='space-y-3'>
         <p className='text-xs text-muted-foreground'>
-          这是槽位外面的初装配置。启用时每次换票都重新 wipe 再跑官方
-          hello，不是只写票。运输固定 Rust cli-hop，这里不能改成 HTTP。真正跑
-          CLI 的是数据面：默认 cli-node + kernel，也可切 cc-node + kernel 或
-          crag + cc-node。成功后按「同步遥测」写官方身份，并热更新槽内
-          worker.json。虚拟机页的种子开关不能单独打开 DNT 来对抗这份配置。
+          打开后，每次给账号导入完整 OAuth
+          凭证，都会先清空它的运行环境，再装一遍官方 Claude Code
+          并用它打个招呼，让这个账号的设备特征和真实用户一致。一般保持默认即可。
         </p>
 
         <div className='divide-y'>
@@ -116,8 +118,8 @@ export function OfficialCcSettingsPane({
           ))}
           <SwitchRow
             id='occ-resident'
-            label='hello 后常驻'
-            hint='默认关。打开后单次 hello 不退出'
+            label='打完招呼后不退出'
+            hint='默认关。打开后官方 Claude Code 会一直开着'
             checked={config.resident === true}
             onChange={(v) => set({ resident: v })}
           />
@@ -191,10 +193,10 @@ export function OfficialCcSettingsPane({
             </div>
 
             <p className='text-xs text-muted-foreground'>
-              运输固定 cli-hop，跟 inference.engine=rust。保存不会把
-              official_cc.inference 写成 http。三种内核搭配在设置 →
-              协议或内核页切换。hello 之后在槽内跑 CLI /usage，失败重试 2
-              次；账号等级以完整官方 usage 为准。hello 默认不常驻。
+              技术细节：安装过程固定走 cli-hop
+              通道（inference.engine=rust），打完招呼后会在账号里查一次 /usage
+              来确认套餐等级，失败会重试 2 次。换内核组合在「设置 →
+              请求改写」或「内核」页。
             </p>
           </CollapsibleContent>
         </Collapsible>

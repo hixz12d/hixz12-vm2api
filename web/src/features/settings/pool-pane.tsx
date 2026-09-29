@@ -21,16 +21,16 @@ export function PoolPane(props: PoolPaneProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>账号池</CardTitle>
+        <CardTitle>挑选账号</CardTitle>
         <p className='text-xs text-muted-foreground'>
-          只调度 Claude VM。三态是开 / 受限 /
-          关。操作员开关只拨开或关；额度、429、冷却和熔断写成受限，窗口或探测成功后自动恢复，不会拨成调度关。
+          只对 Claude
+          账号生效。账号有三种状态：开、暂时受限、关。「关」只有你手动拨；额度用完、被限流、冷却、连续出错都记为「暂时受限」，到时间或检查通过后会自动恢复。
         </p>
       </CardHeader>
       <CardContent className='divide-y'>
         <SettingRow
-          label='策略'
-          desc='只作用于 Claude VM，已绑定的会话不受影响。智能评分：综合周额度临近作废程度、5h 余量和最近 5 分钟活跃会话数分配新会话，手动调度等级仍优先；其他方式：同优先级里先取最低负载，再按这里的方式挑选。'
+          label='挑选方式'
+          desc='只影响新的对话，已经固定了账号的对话不变。推荐「智能评分」：综合 7 天额度快过期的程度、5 小时剩余额度和最近 5 分钟的活跃对话数来挑；你手动设的调度等级仍然优先。'
         >
           <Select
             value={String(pool.strategy || 'weighted-round-robin')}
@@ -41,15 +41,15 @@ export function PoolPane(props: PoolPaneProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value='smart'>智能评分</SelectItem>
-              <SelectItem value='weighted-round-robin'>平滑 WRR</SelectItem>
-              <SelectItem value='round-robin'>轮询</SelectItem>
-              <SelectItem value='lru'>LRU</SelectItem>
+              <SelectItem value='weighted-round-robin'>按权重轮流</SelectItem>
+              <SelectItem value='round-robin'>依次轮流</SelectItem>
+              <SelectItem value='lru'>最久没用的优先</SelectItem>
             </SelectContent>
           </Select>
         </SettingRow>
         <SettingRow
-          label='同 VM 重试'
-          desc='空响应或可重试错误时，换号前在同一台 Claude VM 上再试的次数'
+          label='换账号前先原地重试几次'
+          desc='返回空内容或可以重试的错误时，先在同一个账号上再试几次'
         >
           <Input
             className='w-24'
@@ -65,7 +65,7 @@ export function PoolPane(props: PoolPaneProps) {
             }
           />
         </SettingRow>
-        <SettingRow label='同 VM 重试间隔' desc='毫秒，默认 500'>
+        <SettingRow label='原地重试间隔' desc='单位毫秒，默认 500'>
           <Input
             className='w-24'
             type='number'
@@ -80,8 +80,8 @@ export function PoolPane(props: PoolPaneProps) {
           />
         </SettingRow>
         <SettingRow
-          label='熔断失败次数'
-          desc='同一台 Claude VM 连续 5xx 达到该次数后打开熔断，529 和 401 不计入'
+          label='连续出错几次就暂停'
+          desc='一个账号连续返回服务器错误（5xx）这么多次，就暂时不给它派请求。529 和 401 不算'
         >
           <Input
             className='w-24'
@@ -98,8 +98,8 @@ export function PoolPane(props: PoolPaneProps) {
           />
         </SettingRow>
         <SettingRow
-          label='熔断打开时长'
-          desc='毫秒。到期后只放行 1 个探测请求，默认 30000'
+          label='暂停多久'
+          desc='单位毫秒，默认 30000。到时间后先放 1 个请求试试，成功才恢复'
         >
           <Input
             className='w-24'
@@ -115,8 +115,8 @@ export function PoolPane(props: PoolPaneProps) {
           />
         </SettingRow>
         <SettingRow
-          label='切号上限'
-          desc='单次请求失败转移时最多切换的 Claude VM 数'
+          label='一个请求最多换几个账号'
+          desc='请求失败时，最多换几个账号去重试'
         >
           <Input
             className='w-24'
@@ -130,7 +130,10 @@ export function PoolPane(props: PoolPaneProps) {
             }
           />
         </SettingRow>
-        <SettingRow label='总尝试' desc='含重试在内的总尝试上限'>
+        <SettingRow
+          label='最多尝试几次'
+          desc='一个请求连重试在内总共最多试几次'
+        >
           <Input
             className='w-24'
             type='number'
@@ -144,8 +147,8 @@ export function PoolPane(props: PoolPaneProps) {
           />
         </SettingRow>
         <SettingRow
-          label='每账号等待人数'
-          desc='max_waiters_per_account，默认 32'
+          label='每个账号最多排队几个请求'
+          desc='账号忙时最多让多少个请求排队等它，默认 32'
         >
           <Input
             className='w-24'
@@ -161,8 +164,8 @@ export function PoolPane(props: PoolPaneProps) {
           />
         </SettingRow>
         <SettingRow
-          label='粘性等待超时'
-          desc='毫秒，范围 1000–120000，默认 45000'
+          label='等固定账号最多等多久'
+          desc='对话固定的账号正忙时最多等多久再换号。单位毫秒，1000–120000，默认 45000'
         >
           <Input
             className='w-24'
@@ -179,8 +182,8 @@ export function PoolPane(props: PoolPaneProps) {
           />
         </SettingRow>
         <SettingRow
-          label='回退等待超时'
-          desc='毫秒，范围 1000–120000，默认 30000'
+          label='等其他账号最多等多久'
+          desc='所有账号都忙时最多等多久。单位毫秒，1000–120000，默认 30000'
         >
           <Input
             className='w-24'
@@ -197,8 +200,8 @@ export function PoolPane(props: PoolPaneProps) {
           />
         </SettingRow>
         <SettingRow
-          label='总重试时限'
-          desc='毫秒，整请求 failover 上限，默认 120000'
+          label='一个请求最多重试多久'
+          desc='换号重试总共最多花多长时间。单位毫秒，默认 120000'
         >
           <Input
             className='w-24'
@@ -213,7 +216,10 @@ export function PoolPane(props: PoolPaneProps) {
             }
           />
         </SettingRow>
-        <SettingRow label='401 冷却' desc='OAuth 401 后该账号退出调度的时长'>
+        <SettingRow
+          label='凭证报错（401）后暂停多久'
+          desc='账号凭证被官方拒绝后，暂时不给它派请求的时长'
+        >
           <Select
             value={String(failover.oauth_401_cooldown_ms ?? 120000)}
             onValueChange={(cooldownMs) =>
@@ -234,7 +240,10 @@ export function PoolPane(props: PoolPaneProps) {
             </SelectContent>
           </Select>
         </SettingRow>
-        <SettingRow label='流式交付'>
+        <SettingRow
+          label='流式回复怎么发'
+          desc='边收边发：响应快。确认后再发：先确认上游没出错再开始发，失败能换号，但首字会慢一些'
+        >
           <Select
             value={String(failover.delivery_mode || 'realtime')}
             onValueChange={(deliveryMode) =>
@@ -248,8 +257,8 @@ export function PoolPane(props: PoolPaneProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value='realtime'>realtime</SelectItem>
-              <SelectItem value='verified'>verified</SelectItem>
+              <SelectItem value='realtime'>边收边发（realtime）</SelectItem>
+              <SelectItem value='verified'>确认后再发（verified）</SelectItem>
             </SelectContent>
           </Select>
         </SettingRow>

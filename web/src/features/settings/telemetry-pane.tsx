@@ -54,26 +54,26 @@ export function TelemetryPane() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>遥测</CardTitle>
+        <CardTitle>每个账号的统计上报</CardTitle>
       </CardHeader>
       <CardContent className='space-y-3'>
         <div className='flex gap-2'>
           <Button size='sm' onClick={() => apply(null, true)}>
-            全开
+            全部打开
           </Button>
           <Button
             size='sm'
             variant='outline'
             onClick={() => apply(null, false)}
           >
-            全关
+            全部关闭
           </Button>
         </div>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>槽</TableHead>
-              <TableHead>状态</TableHead>
+              <TableHead>账号</TableHead>
+              <TableHead>上报</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -83,7 +83,7 @@ export function TelemetryPane() {
               return (
                 <TableRow key={vm.id}>
                   <TableCell>{vm.id}</TableCell>
-                  <TableCell>{on ? '开' : '关'}</TableCell>
+                  <TableCell>{on ? '打开' : '关闭'}</TableCell>
                   <TableCell>
                     <Button
                       size='sm'

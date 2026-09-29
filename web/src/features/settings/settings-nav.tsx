@@ -51,7 +51,7 @@ export function SettingsNav({ active }: { active: SettingsTabId }) {
           {indicator ? (
             <span
               aria-hidden
-              className='absolute -left-px w-0.5 rounded-full bg-primary motion-safe:transition-transform motion-safe:duration-200 motion-safe:[transition-timing-function:var(--ease-out-expo)]'
+              className='absolute -left-px w-0.5 rounded-full bg-brass motion-safe:transition-transform motion-safe:duration-200 motion-safe:[transition-timing-function:var(--ease-out-expo)]'
               style={{
                 height: indicator.h - 12,
                 transform: `translateY(${indicator.y + 6}px)`,
@@ -60,7 +60,7 @@ export function SettingsNav({ active }: { active: SettingsTabId }) {
           ) : null}
           {SETTINGS_NAV_GROUPS.map((group) => (
             <div key={group.label}>
-              <div className='px-3 pb-1 text-xs font-medium text-(--text-tertiary)'>
+              <div className='flex items-center gap-2 px-3 pb-1 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground after:h-px after:flex-1 after:bg-brass-dim'>
                 {group.label}
               </div>
               <div className='space-y-0.5'>

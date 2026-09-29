@@ -26,7 +26,7 @@ export function ColumnVisibilityMenu({
           variant='outline'
           size='sm'
           className='h-8 gap-1.5 text-xs'
-          aria-label='列显隐'
+          aria-label='选择显示哪些列'
         >
           <Columns3 className='size-3.5' />列
         </Button>

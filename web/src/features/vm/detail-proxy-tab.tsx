@@ -47,13 +47,15 @@ export function VmProxyTab(props: VmProxyTabProps) {
     <TabsContent value='proxy' className='space-y-3 pt-4'>
       <Card>
         <CardHeader className='pb-2'>
-          <CardTitle className='text-sm'>绑定的 SOCKS5</CardTitle>
+          <CardTitle className='text-sm'>出口代理</CardTitle>
         </CardHeader>
         <p className='px-6 pb-2 text-xs text-muted-foreground'>
-          出站经这条代理的 egress 网关。槽内不 Dial SOCKS。
+          这个账号发往官方的请求都从这条 SOCKS5
+          代理出去，官方看到的就是这条代理的 IP
+          和地区。没有绑定代理的账号不会发请求。
         </p>
         <CardContent className='divide-y pt-0'>
-          <Field label='绑定 ID'>
+          <Field label='代理编号'>
             <span className='field-host text-xs'>{boundId || '—'}</span>
           </Field>
           <Field label='地址'>
@@ -70,9 +72,9 @@ export function VmProxyTab(props: VmProxyTabProps) {
                   variant='pill'
                   tone={{
                     key: 'bad',
-                    text: '缺 SOCKS5',
+                    text: '没有代理',
                     cls: 'bad',
-                    label: '缺 SOCKS5 · fail closed',
+                    label: '没有代理，不会发请求',
                   }}
                 />
               ) : null}
@@ -88,7 +90,7 @@ export function VmProxyTab(props: VmProxyTabProps) {
               {proxy.latency_ms != null ? `${proxy.latency_ms}ms` : '—'}
             </span>
           </Field>
-          <Field label='认证'>{proxy.has_auth ? '有' : '无'}</Field>
+          <Field label='账号密码'>{proxy.has_auth ? '已设置' : '无'}</Field>
           <Field label='出口地区'>
             <span className='text-xs'>
               {[proxy.geo?.country, proxy.geo?.region, proxy.geo?.city]
@@ -101,7 +103,8 @@ export function VmProxyTab(props: VmProxyTabProps) {
               <span className='field-host'>{proxy.geo?.timezone || '—'}</span>
               {proxy.geo?.timezone && proxy.geo.timezone !== vm.timezone ? (
                 <span className='text-muted-foreground'>
-                  槽位为 {vm.timezone || '—'}，可在「运维 · 环境」跟随
+                  账号时区是 {vm.timezone || '—'}
+                  ，可以在「运行环境」页签改成跟随代理
                 </span>
               ) : null}
             </span>
@@ -111,15 +114,15 @@ export function VmProxyTab(props: VmProxyTabProps) {
       <div className='flex flex-wrap gap-2'>
         {boundId ? (
           <Button size='sm' variant='outline' onClick={onUnbind}>
-            解绑
+            解除绑定
           </Button>
         ) : null}
         <Button size='sm' variant='outline' onClick={onAllocate}>
-          分配空闲 SOCKS5
+          自动分一条空闲代理
         </Button>
         <Button size='sm' variant='ghost' asChild>
           <Link to='/settings/$tab' params={{ tab: 'socks5' }}>
-            设置里管理池
+            管理所有出口代理
           </Link>
         </Button>
       </div>
@@ -130,7 +133,7 @@ export function VmProxyTab(props: VmProxyTabProps) {
             onValueChange={onBindIdChange}
           >
             <SelectTrigger className='w-64'>
-              <SelectValue placeholder='选择 SOCKS5' />
+              <SelectValue placeholder='选一条代理' />
             </SelectTrigger>
             <SelectContent>
               {free.map((p) => (
@@ -141,12 +144,12 @@ export function VmProxyTab(props: VmProxyTabProps) {
             </SelectContent>
           </Select>
           <Button size='sm' onClick={onBind}>
-            绑定
+            绑定这条
           </Button>
         </div>
       ) : (
         <p className='text-sm text-muted-foreground'>
-          池里没有可绑的空闲 SOCKS5
+          没有空闲的代理可以绑定，先去「出口代理」页添加。
         </p>
       )}
     </TabsContent>

@@ -63,53 +63,55 @@ export function ProxyPoolControls(props: ProxyPoolControlsProps) {
   return (
     <>
       <p className='mb-3 max-w-3xl text-sm text-muted-foreground'>
-        一条 SOCKS5
-        起一台透明网关；也可以加「本地出口」走宿主机默认路由。槽走默认路由做推理。探测只问出口是否在，不打
-        Anthropic。
+        每个账号的请求都从它绑定的代理出去，官方看到的就是代理的 IP
+        和地区。也可以添加「本机直连」，直接用这台服务器的网络。自动检查只看代理能不能连上，不会访问官方。
       </p>
-      <div className='mb-4 flex flex-wrap items-center gap-3 text-sm'>
+      <div className='mb-4 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-md border border-brass-dim bg-card px-4 py-3 text-sm'>
         <label className='flex items-center gap-2'>
-          每条
+          每条代理最多给
           <Select
             value={String(bindLimit)}
             onValueChange={(value) => onBindLimitChange(Number(value))}
           >
-            <SelectTrigger className='h-8 w-[88px]' aria-label='每条绑定上限'>
+            <SelectTrigger
+              className='h-8 w-[88px]'
+              aria-label='每条代理最多给几个账号用'
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {BIND_LIMITS.map((n) => (
                 <SelectItem key={n} value={String(n)}>
-                  {n} 台
+                  {n} 个账号
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </label>
         <label className='flex items-center gap-2'>
-          探测
+          每隔
           <Select
             value={String(probeMin)}
             onValueChange={(value) => onProbeMinChange(Number(value))}
           >
-            <SelectTrigger className='h-8 w-[88px]' aria-label='探测间隔'>
+            <SelectTrigger className='h-8 w-[88px]' aria-label='自动检查间隔'>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {PROBE_MINS.map((n) => (
                 <SelectItem key={n} value={String(n)}>
-                  {n} 分
+                  {n} 分钟
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </label>
         <label className='flex items-center gap-2'>
-          出口 DNS
+          查域名用
           <Select value={dnsPrimary} onValueChange={onDnsPrimaryChange}>
             <SelectTrigger
               className='h-8 w-[200px]'
-              aria-label='透明出口优先 DNS'
+              aria-label='代理优先使用的 DNS'
             >
               <SelectValue />
             </SelectTrigger>
@@ -122,28 +124,29 @@ export function ProxyPoolControls(props: ProxyPoolControlsProps) {
             </SelectContent>
           </Select>
           <span className='text-xs text-muted-foreground'>
-            优先用所选，失败自动换下一个
+            选的不通时自动换下一个
           </span>
         </label>
         <label className='flex items-center gap-2'>
           <Switch
             checked={followProxyTimezone}
             onCheckedChange={onFollowProxyTimezoneChange}
-            aria-label='绑定后跟随代理时区'
+            aria-label='绑代理后账号时区跟着代理走'
           />
-          绑定后跟随代理时区
+          绑代理后账号时区跟着代理走
           <span className='text-xs text-muted-foreground'>
-            手动钉过时区的槽位不受影响
+            手动设过时区的账号不受影响
           </span>
         </label>
       </div>
-      <Card className='mb-4'>
+      <Card className='mb-4 border-brass-dim shadow-none'>
         <CardHeader>
-          <CardTitle className='text-base'>追加 SOCKS5</CardTitle>
+          <CardTitle className='text-base'>添加 SOCKS5 代理</CardTitle>
         </CardHeader>
         <CardContent className='space-y-2'>
           <Label>
-            host:port 或 user:pass@host:port，可多行。不会回显账密。
+            每行一条，格式 host:port 或
+            user:pass@host:port，可以一次贴多行。账号密码保存后不会再显示。
           </Label>
           <Textarea
             value={raw}
@@ -156,7 +159,7 @@ export function ProxyPoolControls(props: ProxyPoolControlsProps) {
               disabled={!raw.trim() || importing}
               loading={importing}
             >
-              导入
+              添加
             </Button>
             {onAddLocal ? (
               <Button
@@ -165,7 +168,7 @@ export function ProxyPoolControls(props: ProxyPoolControlsProps) {
                 disabled={addingLocal || hasLocal}
                 loading={addingLocal}
               >
-                {hasLocal ? '已有本地出口' : '添加本地出口'}
+                {hasLocal ? '已有本机直连' : '添加本机直连'}
               </Button>
             ) : null}
           </div>

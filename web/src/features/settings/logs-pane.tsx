@@ -18,10 +18,13 @@ export function LogsPane({ value: logging, onChange }: LogsPaneProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>日志</CardTitle>
+        <CardTitle>请求日志</CardTitle>
       </CardHeader>
       <CardContent className='divide-y'>
-        <SettingRow label='记录模式'>
+        <SettingRow
+          label='记录多少'
+          desc='普通：记请求概况。详细：连请求和回复内容也记，排查问题时用，占空间大'
+        >
           <Select
             value={String(logging.mode || 'normal')}
             onValueChange={(mode) => onChange({ ...logging, mode })}
@@ -30,13 +33,13 @@ export function LogsPane({ value: logging, onChange }: LogsPaneProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value='off'>关闭</SelectItem>
+              <SelectItem value='off'>不记录</SelectItem>
               <SelectItem value='normal'>普通</SelectItem>
-              <SelectItem value='debug'>Debug</SelectItem>
+              <SelectItem value='debug'>详细（Debug）</SelectItem>
             </SelectContent>
           </Select>
         </SettingRow>
-        <SettingRow label='保留天数'>
+        <SettingRow label='保留几天'>
           <Input
             className='w-24'
             type='number'
@@ -52,8 +55,8 @@ export function LogsPane({ value: logging, onChange }: LogsPaneProps) {
           />
         </SettingRow>
         <SettingRow
-          label='Debug 保留天数'
-          desc='request_log_debug 行。不超过上面的保留天数。'
+          label='详细内容保留几天'
+          desc='详细模式记下的请求和回复内容保留几天，不会超过上面的天数'
         >
           <Input
             className='w-24'
@@ -70,8 +73,8 @@ export function LogsPane({ value: logging, onChange }: LogsPaneProps) {
           />
         </SettingRow>
         <SettingRow
-          label='存储上限 MB'
-          desc='0 表示不按体积清理。超出删最旧 debug 行。'
+          label='最多占多少空间（MB）'
+          desc='超过后先删最旧的详细内容。0 表示不按大小清理'
         >
           <Input
             className='w-24'

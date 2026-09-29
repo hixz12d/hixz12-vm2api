@@ -37,10 +37,10 @@ type Bootstrap = { scheduled?: boolean; reason?: string } | null
 
 // 步骤定义对齐 index.html:4258 renderImportRail() —— 两边词汇必须一致。
 const STEPS = [
-  { n: 1, label: '空槽' },
-  { n: 2, label: '代理' },
-  { n: 3, label: '换票' },
-  { n: 4, label: '初装' },
+  { n: 1, label: '选账号位置' },
+  { n: 2, label: '绑出口代理' },
+  { n: 3, label: '导入凭证' },
+  { n: 4, label: '自动安装' },
 ]
 
 /** 该槽能否换票：权威字段优先，回落看有没有绑代理。对齐 index.html:7952。 */
@@ -59,15 +59,15 @@ function bootstrapOk(bs: Bootstrap) {
 function bootstrapReason(bs: Bootstrap) {
   const reason = bs?.reason || 'unknown'
   const map: Record<string, string> = {
-    disabled: '官方初装在路由配置中被关闭',
-    already_running: '该槽已有初装任务在跑',
-    credential_edit: '本次只改了凭证，未触发初装',
+    disabled: '设置里关掉了自动安装官方 Claude Code',
+    already_running: '这个账号已经在安装了',
+    credential_edit: '这次只改了凭证，不需要重新安装',
     // 同名码在「手动初装 400」与「刷新凭证 400」下语义不同，
     // 这里只解释「导入成功后自动调度被跳过」这一种来源。
     credential_mode_unsupported:
-      '此槽为 Setup Token / Console API Key 凭证，官方初装仅支持完整 OAuth',
-    mock: '网关处于 mock 模式',
-    'vmId required': '网关未收到槽位 ID',
+      'Setup Token / Console Key 不需要安装官方 Claude Code，只有完整 OAuth 才装',
+    mock: '服务处于测试（mock）模式',
+    'vmId required': '没有收到账号编号，请重新选择',
   }
   return map[reason] || `原因：${reason}`
 }
@@ -246,14 +246,15 @@ export function CredentialFlow() {
     bootSeen.current = st
     if (st === 'ok') {
       toast.success(
-        '官方初装完成' +
+        '官方 Claude Code 安装完成' +
           (bootStatus?.account_tier ? ` · ${bootStatus.account_tier}` : '') +
-          (bootStatus?.telemetry_official ? ' · 遥测已对齐' : '')
+          (bootStatus?.telemetry_official ? ' · 设备特征已对齐' : '')
       )
     } else if (st === 'error') {
       const hint = officialCcErrorHint(bootStatus?.error)
       toast.error(
-        (bootStatus?.error || '官方初装失败') + (hint ? `。${hint}` : '')
+        (bootStatus?.error || '官方 Claude Code 安装失败') +
+          (hint ? `。${hint}` : '')
       )
     }
   }, [bootStatus])
@@ -267,9 +268,9 @@ export function CredentialFlow() {
     onSuccess: async (data) => {
       if (bootstrapOk(data)) {
         setPendingBootstrap('')
-        toast.success('已重新触发官方初装')
+        toast.success('已重新开始安装')
       } else {
-        toast.error(`官方初装仍未启动。${bootstrapReason(data)}`)
+        toast.error(`安装还是没有开始。${bootstrapReason(data)}`)
       }
       await qc.invalidateQueries({ queryKey: dashboardQueryOptions().queryKey })
       await boot.refetch()
@@ -296,7 +297,9 @@ export function CredentialFlow() {
       toast.success(`${ok}。${bootstrapReason(bs)}`)
     } else {
       setPendingBootstrap(target)
-      toast.warning(`${ok}，但官方初装未启动。${bootstrapReason(bs)}`)
+      toast.warning(
+        `${ok}，但官方 Claude Code 没有开始安装。${bootstrapReason(bs)}`
+      )
     }
     await qc.invalidateQueries({ queryKey: dashboardQueryOptions().queryKey })
     await qc.invalidateQueries({
@@ -313,7 +316,7 @@ export function CredentialFlow() {
   }
 
   function finishWithoutImport() {
-    toast.success('槽已就绪，可稍后导入账号')
+    toast.success('账号位置已建好，以后可以随时回来导入凭证')
     continueImport()
   }
 
@@ -336,9 +339,13 @@ export function CredentialFlow() {
       ?.enabled === false
 
   return (
-    <Card className='max-w-2xl'>
+    <Card className='max-w-2xl border-brass-dim shadow-none'>
       <CardHeader className='gap-3'>
-        <CardTitle>上线一台槽</CardTitle>
+        <CardTitle>导入一个账号</CardTitle>
+        <p className='text-sm text-muted-foreground'>
+          三步：选好放账号的位置 → 给它绑一条出口代理 → 贴入凭证。完整 OAuth
+          凭证导入后会自动在里面装好官方 Claude Code。
+        </p>
         <StepDots current={step} natural={natural} onGo={stepBack} />
       </CardHeader>
       <CardContent>
@@ -352,26 +359,26 @@ export function CredentialFlow() {
                 <p className='mt-0.5 text-xs break-all text-muted-foreground'>
                   {pinned.email ||
                     (isCodexVm(pinned)
-                      ? 'GPT OAuth 已写入'
+                      ? 'GPT 凭证已导入'
                       : credType === 'oauth'
-                        ? '票已写入，正在本页初装'
-                        : '凭证已写入')}
+                        ? '凭证已导入，正在安装官方 Claude Code'
+                        : '凭证已导入，可以开始用了')}
                 </p>
               </div>
               <Button size='sm' variant='outline' onClick={continueImport}>
-                继续导入
+                再导入一个
               </Button>
             </div>
 
             {isCodexVm(pinned) ? (
               <p className='text-xs text-muted-foreground'>
-                GPT 槽不跑 Claude 官方初装。账号用 Codex OAuth 或 auth.json。
+                GPT 账号不需要安装官方 Claude Code，导入后就能用。
               </p>
             ) : credType === 'oauth' ? (
               <>
                 {autoOff ? (
                   <p className='text-xs text-muted-foreground'>
-                    设置里关闭了换票后自动初装，可在下面手动执行。
+                    设置里关掉了导入后自动安装，可以在下面手动开始。
                   </p>
                 ) : null}
                 <div className='space-y-2 rounded-md border p-3'>
@@ -380,10 +387,10 @@ export function CredentialFlow() {
                       tone={{
                         key: 'bootstrap',
                         text: bootDone
-                          ? '初装完成'
+                          ? '安装完成'
                           : bootStatus?.status === 'error'
-                            ? '初装失败'
-                            : '初装进行中',
+                            ? '安装失败'
+                            : '正在安装',
                         cls: bootDone
                           ? 'ok'
                           : bootStatus?.status === 'error'
@@ -422,7 +429,7 @@ export function CredentialFlow() {
                       disabled={bootstrap.isPending}
                       loading={bootstrap.isPending}
                     >
-                      重试官方初装
+                      重新安装
                     </Button>
                   ) : null}
                 </div>
@@ -435,8 +442,8 @@ export function CredentialFlow() {
             ) : (
               <p className='text-xs text-muted-foreground'>
                 {credType === 'apikey'
-                  ? 'Console Key 不跑官方初装。'
-                  : 'Setup Token 不跑官方初装。'}
+                  ? 'Console Key 不需要安装官方 Claude Code，导入后就能用。'
+                  : 'Setup Token 不需要安装官方 Claude Code，导入后就能用。'}
               </p>
             )}
           </div>
@@ -446,18 +453,21 @@ export function CredentialFlow() {
               n={1}
               step={step}
               done={!!current}
-              title='选一台空槽'
+              title='选一个还没导入凭证的账号位置'
               lead={
                 empty.length
-                  ? '只列出还没有凭证的虚拟机。可先创建空槽，账号稍后导入。'
-                  : '现在没有空槽。先创建一台，或等有槽卸下凭证。'
+                  ? '每个账号都有自己独立的运行环境。这里只列出还没导入凭证的，也可以新建一个。'
+                  : '现在没有空位置，先新建一个。'
               }
             >
               <div className='flex items-center gap-2'>
                 <Select value={vmId || undefined} onValueChange={setVmId}>
-                  <SelectTrigger className='flex-1' aria-label='待导入虚拟机'>
+                  <SelectTrigger
+                    className='flex-1'
+                    aria-label='要导入凭证的账号位置'
+                  >
                     <SelectValue
-                      placeholder={empty.length ? '选择空槽' : '没有空槽'}
+                      placeholder={empty.length ? '选一个' : '没有空位置'}
                     />
                   </SelectTrigger>
                   <SelectContent>
@@ -474,7 +484,7 @@ export function CredentialFlow() {
                   variant='outline'
                   onClick={() => setCreateOpen(true)}
                 >
-                  创建
+                  新建
                 </Button>
                 {current ? (
                   <Button
@@ -488,7 +498,7 @@ export function CredentialFlow() {
               </div>
               {!current && empty.length ? (
                 <p className='mt-2.5 text-xs text-muted-foreground tabular-nums'>
-                  {empty.length} 个空槽可导入
+                  有 {empty.length} 个空位置可用
                 </p>
               ) : null}
             </Block>
@@ -498,11 +508,11 @@ export function CredentialFlow() {
                 n={2}
                 step={step}
                 done={hasProxy}
-                title='绑 SOCKS5'
+                title='绑一条出口代理'
                 lead={
                   hasProxy
-                    ? '已绑到本槽。改选或粘贴新行会盖掉这条。'
-                    : '转发必须走槽上代理。选一条现成的，或粘贴一行新的。'
+                    ? '已经绑好。改选或粘贴新的一条会替换掉它。'
+                    : '这个账号的所有请求都从这条代理出去，官方看到的就是它的 IP。选一条现成的，或粘贴一条新的 SOCKS5。'
                 }
               >
                 <ImportProxyStep vmId={vmId} />
@@ -514,11 +524,11 @@ export function CredentialFlow() {
                 n={3}
                 step={step}
                 done={false}
-                title={isCodexVm(current) ? '导入 GPT 账号' : '换票'}
+                title={isCodexVm(current) ? '导入 GPT 凭证' : '导入凭证'}
                 lead={
                   isCodexVm(current)
-                    ? 'Codex OAuth 或账号文件（auth.json）。不要用 Setup Token / Console Key。'
-                    : 'Cookie、授权链接或官方 Claude Code，都经刚绑的 SOCKS5。成功后留在本页看初装。'
+                    ? '用 Codex OAuth 或账号文件（auth.json）导入。'
+                    : '选凭证类型和导入方式，所有网络请求都走刚绑的出口代理。导入成功后在本页看安装进度。'
                 }
               >
                 <CredentialPanel

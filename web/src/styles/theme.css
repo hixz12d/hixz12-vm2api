@@ -1,75 +1,84 @@
+/*
+ * 夜班交换台主题。
+ *
+ * 暗色（默认）：暖近黑胶木面板，象牙标签，黄铜发丝线；饱和色只留给「灯」：
+ *   琥珀 = 需要处理，红 = 坏了，柔绿 = 只在确认 / 悬停时出现。
+ * 亮色：同一套材料翻成「象牙面板 + 胶木字」，灯色压暗到能当文字读。
+ *
+ * 变量名沿用旧主题（全站组件都在引用），只换数值；新增的交换台专用
+ * token 在每个主题块末尾。
+ */
+
 :root {
-  --radius: 0.75rem;
-  --background: oklch(0.995 0.001 258);
-  --foreground: oklch(0.21 0.008 258);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.008 258);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.008 258);
-  --primary: oklch(0.52 0.115 157);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.968 0.003 258);
-  --secondary-foreground: oklch(0.28 0.008 258);
-  --muted: oklch(0.968 0.003 258);
-  --muted-foreground: oklch(0.5 0.014 258);
-  --accent: oklch(0.955 0.018 157);
-  --accent-foreground: oklch(0.4 0.095 157);
-  --destructive: oklch(0.5 0.18 16);
-  --border: oklch(0.916 0.005 258);
-  --input: oklch(0.916 0.005 258);
-  --ring: oklch(0.52 0.115 157);
+  --radius: 0.375rem;
+
+  /* ── 亮色：象牙面板 ─────────────────────────────── */
+  --background: oklch(0.972 0.011 87);
+  --foreground: oklch(0.235 0.014 67);
+  --card: oklch(0.988 0.007 87);
+  --card-foreground: oklch(0.235 0.014 67);
+  --popover: oklch(0.992 0.005 87);
+  --popover-foreground: oklch(0.235 0.014 67);
+  /* 唯一的实心按钮：胶木色块 + 象牙字 */
+  --primary: oklch(0.27 0.015 67);
+  --primary-foreground: oklch(0.955 0.018 87);
+  --secondary: oklch(0.935 0.014 84);
+  --secondary-foreground: oklch(0.27 0.015 67);
+  --muted: oklch(0.935 0.014 84);
+  --muted-foreground: oklch(0.47 0.022 72);
+  --accent: oklch(0.925 0.02 82);
+  --accent-foreground: oklch(0.235 0.014 67);
+  --destructive: oklch(0.52 0.19 29);
+  --border: oklch(0.5 0.06 76 / 24%);
+  --input: oklch(0.5 0.06 76 / 32%);
+  --ring: oklch(0.56 0.09 76);
 
   /*
    * 语义色板。每族 5 档：1 surface · 2 muted · 3 fg · 4 solid · 5 ink。
-   * 绿 a–e 是健康基准的 5 个青绿（默认 c），不是第二套状态轴。
+   * 色相对齐交换台的灯：ok 柔绿 152、caution 琥珀 78、warn 橙 52、
+   * bad（沿用 pink 族名）信号红 27。
    */
-  --ok-1: oklch(0.94 0.045 157);
-  --ok-2: oklch(0.78 0.07 157);
-  --ok-3: oklch(0.47 0.101 157);
-  --ok-4: oklch(0.595 0.133 157);
-  --ok-5: oklch(0.32 0.11 157);
-  --green-a: oklch(0.45 0.1 145);
-  --green-b: oklch(0.46 0.105 151);
-  --green-c: oklch(0.47 0.101 157);
-  --green-d: oklch(0.46 0.09 163);
-  --green-e: oklch(0.45 0.08 170);
+  --ok-1: oklch(0.94 0.035 152);
+  --ok-2: oklch(0.78 0.06 152);
+  --ok-3: oklch(0.47 0.09 152);
+  --ok-4: oklch(0.6 0.12 152);
+  --ok-5: oklch(0.32 0.08 152);
+  --green-a: oklch(0.45 0.09 140);
+  --green-b: oklch(0.46 0.09 146);
+  --green-c: oklch(0.47 0.09 152);
+  --green-d: oklch(0.46 0.08 160);
+  --green-e: oklch(0.45 0.07 168);
 
-  --caution-1: oklch(0.94 0.05 95);
-  --caution-2: oklch(0.78 0.08 95);
-  --caution-3: oklch(0.475 0.088 95);
-  --caution-4: oklch(0.61 0.118 95);
-  --caution-5: oklch(0.34 0.09 95);
+  --caution-1: oklch(0.94 0.05 82);
+  --caution-2: oklch(0.8 0.09 80);
+  --caution-3: oklch(0.49 0.1 75);
+  --caution-4: oklch(0.72 0.15 75);
+  --caution-5: oklch(0.34 0.08 75);
 
-  --warn-1: oklch(0.94 0.05 42);
-  --warn-2: oklch(0.78 0.09 42);
-  --warn-3: oklch(0.49 0.133 42);
-  --warn-4: oklch(0.63 0.179 42);
-  --warn-5: oklch(0.36 0.12 42);
+  --warn-1: oklch(0.94 0.045 52);
+  --warn-2: oklch(0.78 0.09 52);
+  --warn-3: oklch(0.5 0.13 50);
+  --warn-4: oklch(0.65 0.17 50);
+  --warn-5: oklch(0.36 0.11 50);
 
-  --pink-1: oklch(0.94 0.04 16);
-  --pink-2: oklch(0.78 0.08 16);
-  --pink-3: oklch(0.495 0.178 16);
-  --pink-4: oklch(0.635 0.239 16);
-  --pink-5: oklch(0.36 0.16 16);
+  --pink-1: oklch(0.94 0.04 27);
+  --pink-2: oklch(0.78 0.09 27);
+  --pink-3: oklch(0.5 0.18 27);
+  --pink-4: oklch(0.6 0.21 27);
+  --pink-5: oklch(0.36 0.15 27);
 
-  --red-1: oklch(0.94 0.05 27);
+  --red-1: oklch(0.94 0.04 27);
   --red-2: oklch(0.76 0.1 27);
   --red-3: oklch(0.48 0.19 27);
-  --red-4: oklch(0.58 0.22 27);
-  --red-5: oklch(0.34 0.17 27);
+  --red-4: oklch(0.58 0.21 27);
+  --red-5: oklch(0.34 0.16 27);
 
-  /* 状态轴：色盲安全（绿偏青 / 警告琥珀 / 受限橙 / 坏态玫红 / 无态中性灰）。
-     色相不变，饱和整体提了 17–38%。之前「不够艳」不是 C 给小了——在原来的
-     亮度上 C 已经用到 sRGB 上限的 92–98%，没空间了。真正的杠杆是亮度：
-     每个色相移到自己的色度峰值区，C 的天花板才抬得起来。
-     四档两两感知距离 ΔE 全部 > 0.11（caution 88→95、warn 52→42 拉开了
-     原本只有 0.09 的黄橙撞车）。 */
+  /* 状态轴：形状 + 颜色双编码（见 StatusMark），这里只管颜色。 */
   --status-ok: var(--ok-3);
   --status-caution: var(--caution-3);
   --status-warn: var(--warn-3);
   --status-bad: var(--pink-3);
-  --status-none: oklch(0.47 0.016 258);
-  /* 标尺填充/图形用的实色版：比文字版更亮更艳，用在非文本处（3:1 即可）。 */
+  --status-none: oklch(0.5 0.018 72);
   --status-ok-solid: var(--ok-4);
   --status-caution-solid: var(--caution-4);
   --status-warn-solid: var(--warn-4);
@@ -78,132 +87,140 @@
   --status-caution-bg: var(--caution-1);
   --status-warn-bg: var(--warn-1);
   --status-bad-bg: var(--pink-1);
-  --status-none-bg: oklch(0.932 0.007 258);
+  --status-none-bg: oklch(0.925 0.012 82);
 
-  /* 账号等级轴：与状态轴正交。蓝 = Pro，紫 = Max。
-     surface 是整卡底色（与中性 card 差 ~7%，够分辨、不抢状态色）；
-     border 只做 1px；fg 给数字与 badge 文字；实测最低 5.47:1。 */
-  --tier-pro-surface: oklch(0.972 0.014 252);
-  --tier-pro-surface-hover: oklch(0.952 0.02 252);
-  --tier-pro-border: oklch(0.8 0.075 252);
-  --tier-pro-fg: oklch(0.475 0.142 252);
-  --tier-pro-badge-bg: oklch(0.93 0.03 252);
-  --tier-pro-muted: oklch(0.505 0.045 252);
-  /* 实心身份 badge。淡底淡字的 pill 在一屏 12 张卡里根本认不出来，
-     等级是分类信息，得能被扫到。 */
-  --tier-pro-solid: oklch(0.645 0.183 252);
-  --tier-pro-solid-fg: oklch(0.16 0.03 252);
-  --tier-max-surface: oklch(0.973 0.017 308);
-  --tier-max-surface-hover: oklch(0.953 0.024 308);
-  --tier-max-border: oklch(0.775 0.115 308);
-  --tier-max-fg: oklch(0.47 0.175 308);
-  --tier-max-badge-bg: oklch(0.934 0.036 308);
-  --tier-max-muted: oklch(0.5 0.05 308);
-  --tier-max-solid: oklch(0.585 0.284 308);
-  --tier-max-solid-fg: oklch(0.99 0.005 308);
-  /* GPT / Codex：绿相，和 Pro 蓝 / Max 紫正交。 */
-  --tier-codex-surface: oklch(0.972 0.018 155);
-  --tier-codex-surface-hover: oklch(0.952 0.026 155);
-  --tier-codex-border: oklch(0.78 0.09 155);
-  --tier-codex-fg: oklch(0.42 0.12 155);
-  --tier-codex-muted: oklch(0.5 0.045 155);
-  --tier-codex-solid: oklch(0.62 0.16 155);
-  --tier-codex-solid-fg: oklch(0.16 0.03 155);
-  /* 无凭证槽位的卡边框。全局 --border 是为表格与输入框调的，套在卡片上
-     只有 1.26 对比度，卡几乎从页面上消失；等级卡有 1.8+ 的彩色边框撑着，
-     中性卡需要单独提一档才和它们并排成立。 */
-  --tier-none-border: oklch(0.888 0.004 258);
+  /*
+   * 分组 = 插线颜色。卡片不再按分组整块着色：surface / border 回到中性，
+   * 只有 fg（文字）、solid（插头色块）保留插线色相。
+   */
+  --tier-pro-surface: var(--card);
+  --tier-pro-surface-hover: var(--accent);
+  --tier-pro-border: var(--tier-none-border);
+  --tier-pro-fg: oklch(0.45 0.11 245);
+  --tier-pro-badge-bg: oklch(0.92 0.03 245);
+  --tier-pro-muted: var(--muted-foreground);
+  --tier-pro-solid: var(--cord-pro);
+  --tier-pro-solid-fg: oklch(0.985 0.005 245);
+  --tier-max-surface: var(--card);
+  --tier-max-surface-hover: var(--accent);
+  --tier-max-border: var(--tier-none-border);
+  --tier-max-fg: oklch(0.44 0.14 320);
+  --tier-max-badge-bg: oklch(0.92 0.035 320);
+  --tier-max-muted: var(--muted-foreground);
+  --tier-max-solid: var(--cord-max);
+  --tier-max-solid-fg: oklch(0.985 0.005 320);
+  --tier-codex-surface: var(--card);
+  --tier-codex-surface-hover: var(--accent);
+  --tier-codex-border: var(--tier-none-border);
+  --tier-codex-fg: oklch(0.43 0.08 195);
+  --tier-codex-muted: var(--muted-foreground);
+  --tier-codex-solid: var(--cord-codex);
+  --tier-codex-solid-fg: oklch(0.985 0.005 195);
+  --tier-none-border: oklch(0.5 0.06 76 / 30%);
 
-  /* 三级文字：用于「累计消耗」这类字段标签。比 muted-foreground 再退一档，
-     但仍是正文尺寸，所以照样守 4.5:1（实测 4.95）。 */
-  --text-tertiary: oklch(0.545 0.013 258);
-  /* 卡内分组线。发丝级——可见但不切割版面（实测 1.27，刻意低于常规 border）。 */
-  --hairline: oklch(0 0 0 / 10%);
-  /* 量表槽。用前景色低 alpha 叠加而非实色，这样它跟着等级底色走，
-     在中性/Pro/Max 三种卡面上都保持同样的凹陷深度。 */
-  --track: oklch(0 0 0 / 8.5%);
+  --text-tertiary: oklch(0.52 0.02 72);
+  --hairline: oklch(0.5 0.06 76 / 18%);
+  --track: oklch(0.3 0.02 67 / 9%);
 
   /* 浏览器自带表面 */
-  --selection: oklch(0.52 0.115 157 / 22%);
-  --scrollbar-thumb: oklch(0.5 0.014 258 / 40%);
+  --selection: oklch(0.683 0.087 76 / 28%);
+  --scrollbar-thumb: oklch(0.5 0.05 76 / 40%);
 
-  --chart-1: oklch(0.6 0.13 157);
-  --chart-2: oklch(0.55 0.145 250);
-  --chart-3: oklch(0.68 0.135 88);
-  --chart-4: oklch(0.62 0.155 38);
-  --chart-5: oklch(0.58 0.17 325);
+  --chart-1: oklch(0.6 0.09 76);
+  --chart-2: oklch(0.52 0.11 245);
+  --chart-3: oklch(0.52 0.1 152);
+  --chart-4: oklch(0.6 0.15 52);
+  --chart-5: oklch(0.5 0.13 320);
 
-  --sidebar: var(--background);
-  --sidebar-foreground: var(--foreground);
+  /* 侧栏是比内容区深半档的面板，框架固定，只换内容。 */
+  --sidebar: oklch(0.945 0.016 84);
+  --sidebar-foreground: oklch(0.3 0.016 67);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--accent);
-  --sidebar-accent-foreground: var(--accent-foreground);
-  --sidebar-border: var(--border);
+  --sidebar-accent: oklch(0.905 0.024 82);
+  --sidebar-accent-foreground: oklch(0.2 0.014 67);
+  --sidebar-border: oklch(0.5 0.06 76 / 28%);
   --sidebar-ring: var(--ring);
+
+  /* ── 交换台材料 ─────────────────────────────────── */
+  --panel: var(--sidebar);
+  --ivory: oklch(0.905 0.028 87);
+  --ivory-ink: oklch(0.22 0.014 67);
+  --brass: oklch(0.56 0.09 76);
+  --brass-dim: oklch(0.5 0.06 76 / 45%);
+  /* 灯：亮色主题下灯要能直接当文字/图标读 */
+  --lamp-amber: oklch(0.62 0.15 70);
+  --lamp-red: oklch(0.55 0.2 29);
+  --lamp-green: oklch(0.55 0.11 152);
+  --lamp-off: oklch(0.5 0.02 72 / 45%);
+  /* 插线：分组身份色 */
+  --cord-pro: oklch(0.55 0.13 245);
+  --cord-max: oklch(0.52 0.16 320);
+  --cord-codex: oklch(0.55 0.09 195);
 }
 
 .dark {
-  --background: oklch(0.155 0.006 258);
-  --foreground: oklch(0.955 0.004 258);
-  --card: oklch(0.185 0.006 258);
-  --card-foreground: oklch(0.955 0.004 258);
-  --popover: oklch(0.205 0.007 258);
-  --popover-foreground: oklch(0.955 0.004 258);
-  --primary: oklch(0.779 0.165 157);
-  --primary-foreground: oklch(0.2 0.045 157);
-  --secondary: oklch(0.255 0.007 258);
-  --secondary-foreground: oklch(0.955 0.004 258);
-  --muted: oklch(0.255 0.007 258);
-  --muted-foreground: oklch(0.72 0.012 258);
-  --accent: oklch(0.265 0.018 157);
-  --accent-foreground: oklch(0.85 0.13 157);
-  --destructive: oklch(0.72 0.15 16);
-  --border: oklch(1 0 0 / 11%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.779 0.165 157);
+  /* ── 暗色：胶木面板 ─────────────────────────────── */
+  --background: oklch(0.185 0.008 67);
+  --foreground: oklch(0.925 0.022 87);
+  --card: oklch(0.212 0.01 67);
+  --card-foreground: oklch(0.925 0.022 87);
+  --popover: oklch(0.243 0.013 72);
+  --popover-foreground: oklch(0.925 0.022 87);
+  /* 唯一的实心按钮：象牙色块 + 胶木字 */
+  --primary: oklch(0.905 0.028 87);
+  --primary-foreground: oklch(0.2 0.01 67);
+  --secondary: oklch(0.265 0.013 70);
+  --secondary-foreground: oklch(0.925 0.022 87);
+  --muted: oklch(0.265 0.013 70);
+  --muted-foreground: oklch(0.74 0.02 80);
+  --accent: oklch(0.285 0.016 72);
+  --accent-foreground: oklch(0.955 0.02 87);
+  --destructive: oklch(0.7 0.19 29);
+  --border: oklch(0.683 0.087 76 / 20%);
+  --input: oklch(0.683 0.087 76 / 28%);
+  --ring: oklch(0.76 0.1 76);
 
-  --ok-1: oklch(0.28 0.048 157);
-  --ok-2: oklch(0.52 0.08 157);
-  --ok-3: oklch(0.82 0.176 157);
-  --ok-4: oklch(0.875 0.196 157);
-  --ok-5: oklch(0.92 0.14 157);
-  --green-a: oklch(0.8 0.14 145);
-  --green-b: oklch(0.81 0.16 151);
-  --green-c: oklch(0.82 0.176 157);
-  --green-d: oklch(0.84 0.15 163);
-  --green-e: oklch(0.85 0.12 170);
+  --ok-1: oklch(0.27 0.035 152);
+  --ok-2: oklch(0.5 0.06 152);
+  --ok-3: oklch(0.857 0.098 152);
+  --ok-4: oklch(0.8 0.12 152);
+  --ok-5: oklch(0.92 0.07 152);
+  --green-a: oklch(0.82 0.09 140);
+  --green-b: oklch(0.84 0.095 146);
+  --green-c: oklch(0.857 0.098 152);
+  --green-d: oklch(0.86 0.085 160);
+  --green-e: oklch(0.86 0.07 168);
 
-  --caution-1: oklch(0.28 0.042 95);
-  --caution-2: oklch(0.55 0.08 95);
-  --caution-3: oklch(0.825 0.153 95);
-  --caution-4: oklch(0.875 0.169 95);
-  --caution-5: oklch(0.92 0.13 95);
+  --caution-1: oklch(0.28 0.045 75);
+  --caution-2: oklch(0.55 0.09 75);
+  --caution-3: oklch(0.83 0.14 75);
+  --caution-4: oklch(0.818 0.153 73);
+  --caution-5: oklch(0.92 0.1 80);
 
-  --warn-1: oklch(0.28 0.06 42);
-  --warn-2: oklch(0.5 0.09 42);
-  --warn-3: oklch(0.755 0.139 42);
-  --warn-4: oklch(0.8 0.16 42);
-  --warn-5: oklch(0.86 0.14 42);
+  --warn-1: oklch(0.28 0.055 50);
+  --warn-2: oklch(0.52 0.1 50);
+  --warn-3: oklch(0.77 0.14 50);
+  --warn-4: oklch(0.74 0.17 50);
+  --warn-5: oklch(0.87 0.1 52);
 
-  --pink-1: oklch(0.28 0.08 16);
-  --pink-2: oklch(0.5 0.1 16);
-  --pink-3: oklch(0.755 0.134 16);
-  --pink-4: oklch(0.635 0.239 16);
-  --pink-5: oklch(0.86 0.12 16);
+  --pink-1: oklch(0.27 0.07 27);
+  --pink-2: oklch(0.5 0.12 27);
+  --pink-3: oklch(0.74 0.16 27);
+  --pink-4: oklch(0.686 0.203 29);
+  --pink-5: oklch(0.86 0.1 27);
 
-  --red-1: oklch(0.28 0.09 27);
+  --red-1: oklch(0.27 0.07 27);
   --red-2: oklch(0.48 0.12 27);
   --red-3: oklch(0.72 0.18 27);
-  --red-4: oklch(0.62 0.21 27);
-  --red-5: oklch(0.84 0.15 27);
+  --red-4: oklch(0.65 0.2 29);
+  --red-5: oklch(0.84 0.12 27);
 
   --status-ok: var(--ok-3);
   --status-caution: var(--caution-3);
   --status-warn: var(--warn-3);
   --status-bad: var(--pink-3);
-  --status-none: oklch(0.775 0.015 258);
-  /* 标尺填充/图形用的实色版。暗色端提升最大：ok +40%、bad +59% 饱和。 */
+  --status-none: oklch(0.7 0.018 78);
   --status-ok-solid: var(--ok-4);
   --status-caution-solid: var(--caution-4);
   --status-warn-solid: var(--warn-4);
@@ -212,54 +229,80 @@
   --status-caution-bg: var(--caution-1);
   --status-warn-bg: var(--warn-1);
   --status-bad-bg: var(--pink-1);
-  --status-none-bg: oklch(0.325 0.01 258);
+  --status-none-bg: oklch(0.29 0.012 70);
 
-  --tier-pro-surface: oklch(0.207 0.026 252);
-  --tier-pro-surface-hover: oklch(0.238 0.032 252);
-  --tier-pro-border: oklch(0.475 0.105 252);
-  --tier-pro-fg: oklch(0.8 0.104 252);
-  --tier-pro-badge-bg: oklch(0.315 0.052 252);
-  --tier-pro-muted: oklch(0.745 0.032 252);
-  --tier-pro-solid: oklch(0.645 0.183 252);
-  --tier-pro-solid-fg: oklch(0.15 0.02 252);
-  --tier-max-surface: oklch(0.212 0.032 308);
-  --tier-max-surface-hover: oklch(0.243 0.038 308);
-  --tier-max-border: oklch(0.49 0.135 308);
-  --tier-max-fg: oklch(0.8 0.126 308);
-  --tier-max-badge-bg: oklch(0.325 0.06 308);
-  --tier-max-muted: oklch(0.745 0.038 308);
-  --tier-max-solid: oklch(0.585 0.284 308);
-  --tier-max-solid-fg: oklch(0.99 0.005 308);
-  --tier-codex-surface: oklch(0.207 0.03 155);
-  --tier-codex-surface-hover: oklch(0.238 0.038 155);
-  --tier-codex-border: oklch(0.46 0.11 155);
-  --tier-codex-fg: oklch(0.82 0.11 155);
-  --tier-codex-muted: oklch(0.745 0.035 155);
-  --tier-codex-solid: oklch(0.72 0.16 155);
-  --tier-codex-solid-fg: oklch(0.14 0.03 155);
-  --tier-none-border: oklch(1 0 0 / 15%);
+  --tier-pro-surface: var(--card);
+  --tier-pro-surface-hover: var(--accent);
+  --tier-pro-border: var(--tier-none-border);
+  --tier-pro-fg: oklch(0.8 0.08 245);
+  --tier-pro-badge-bg: oklch(0.3 0.04 245);
+  --tier-pro-muted: var(--muted-foreground);
+  --tier-pro-solid: var(--cord-pro);
+  --tier-pro-solid-fg: oklch(0.18 0.02 245);
+  --tier-max-surface: var(--card);
+  --tier-max-surface-hover: var(--accent);
+  --tier-max-border: var(--tier-none-border);
+  --tier-max-fg: oklch(0.8 0.1 320);
+  --tier-max-badge-bg: oklch(0.3 0.05 320);
+  --tier-max-muted: var(--muted-foreground);
+  --tier-max-solid: var(--cord-max);
+  --tier-max-solid-fg: oklch(0.18 0.02 320);
+  --tier-codex-surface: var(--card);
+  --tier-codex-surface-hover: var(--accent);
+  --tier-codex-border: var(--tier-none-border);
+  --tier-codex-fg: oklch(0.82 0.07 195);
+  --tier-codex-muted: var(--muted-foreground);
+  --tier-codex-solid: var(--cord-codex);
+  --tier-codex-solid-fg: oklch(0.18 0.02 195);
+  --tier-none-border: oklch(0.683 0.087 76 / 24%);
 
-  --text-tertiary: oklch(0.655 0.011 258);
-  --hairline: oklch(1 0 0 / 11%);
-  --track: oklch(1 0 0 / 13%);
+  --text-tertiary: oklch(0.66 0.018 78);
+  --hairline: oklch(0.683 0.087 76 / 16%);
+  --track: oklch(0.905 0.028 87 / 10%);
 
-  --selection: oklch(0.779 0.165 157 / 26%);
-  --scrollbar-thumb: oklch(0.72 0.012 258 / 38%);
+  --selection: oklch(0.683 0.087 76 / 34%);
+  --scrollbar-thumb: oklch(0.683 0.087 76 / 32%);
 
-  --chart-1: oklch(0.78 0.145 157);
-  --chart-2: oklch(0.72 0.125 240);
-  --chart-3: oklch(0.82 0.135 88);
-  --chart-4: oklch(0.74 0.145 35);
-  --chart-5: oklch(0.72 0.145 320);
+  --chart-1: oklch(0.76 0.1 76);
+  --chart-2: oklch(0.74 0.1 245);
+  --chart-3: oklch(0.8 0.1 152);
+  --chart-4: oklch(0.76 0.14 52);
+  --chart-5: oklch(0.72 0.12 320);
+
+  --sidebar: oklch(0.158 0.007 67);
+  --sidebar-foreground: oklch(0.84 0.02 84);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.245 0.013 70);
+  --sidebar-accent-foreground: oklch(0.955 0.02 87);
+  --sidebar-border: oklch(0.683 0.087 76 / 22%);
+  --sidebar-ring: var(--ring);
+
+  --panel: var(--sidebar);
+  --ivory: oklch(0.905 0.028 87);
+  --ivory-ink: oklch(0.2 0.012 67);
+  --brass: oklch(0.683 0.087 76);
+  --brass-dim: oklch(0.683 0.087 76 / 40%);
+  --lamp-amber: oklch(0.818 0.153 73);
+  --lamp-red: oklch(0.686 0.203 29);
+  --lamp-green: oklch(0.857 0.098 152);
+  --lamp-off: oklch(0.905 0.028 87 / 16%);
+  --cord-pro: oklch(0.7 0.11 245);
+  --cord-max: oklch(0.68 0.14 320);
+  --cord-codex: oklch(0.74 0.08 195);
 }
 
 @theme inline {
-  --font-inter: 'Inter', 'sans-serif';
-  --font-manrope: 'Manrope', 'sans-serif';
+  --font-inter:
+    'Inter', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei',
+    'Noto Sans SC', system-ui, sans-serif;
+  --font-manrope:
+    'Manrope', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei',
+    'Noto Sans SC', system-ui, sans-serif;
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
   --radius-xl: calc(var(--radius) + 4px);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -322,4 +365,17 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-panel: var(--panel);
+  --color-ivory: var(--ivory);
+  --color-ivory-ink: var(--ivory-ink);
+  --color-brass: var(--brass);
+  --color-brass-dim: var(--brass-dim);
+  --color-lamp-amber: var(--lamp-amber);
+  --color-lamp-red: var(--lamp-red);
+  --color-lamp-green: var(--lamp-green);
+  --color-lamp-off: var(--lamp-off);
+  --color-cord-pro: var(--cord-pro);
+  --color-cord-max: var(--cord-max);
+  --color-cord-codex: var(--cord-codex);
 }

@@ -87,7 +87,7 @@ export function ProxyEditDialog({
             .join('、')}`
         )
       } else {
-        toast.success('已保存')
+        toast.success('代理已保存')
       }
       onOpenChange(false)
       await Promise.all([
@@ -120,12 +120,12 @@ export function ProxyEditDialog({
     <Dialog open={!!proxy} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>编辑代理</DialogTitle>
+          <DialogTitle>修改代理</DialogTitle>
         </DialogHeader>
         <div className='space-y-3'>
           <div className='grid gap-3 sm:grid-cols-[2fr_1fr]'>
             <div className='space-y-1'>
-              <Label>主机</Label>
+              <Label>地址</Label>
               <Input
                 value={host}
                 onChange={(e) => setHost(e.target.value)}
@@ -154,12 +154,14 @@ export function ProxyEditDialog({
           ) : null}
 
           <div className='space-y-1'>
-            <Label>用户名</Label>
+            <Label>账号</Label>
             <Input
               value={username}
               disabled={clearAuth}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder={proxy?.has_auth ? '留空则不修改' : '（当前无账密）'}
+              placeholder={
+                proxy?.has_auth ? '留空则不修改' : '（现在没有账号密码）'
+              }
             />
           </div>
           <div className='space-y-1'>

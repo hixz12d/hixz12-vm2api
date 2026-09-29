@@ -74,7 +74,7 @@ export function ProxiesPage() {
         body: JSON.stringify({}),
       }),
     onSuccess: async (data) => {
-      toast.success(data.created ? '已添加本地出口' : '本地出口已存在')
+      toast.success(data.created ? '已添加本机直连' : '本机直连已经有了')
       await refresh()
     },
     onError: (error: Error) => toast.error(error.message),
@@ -86,7 +86,9 @@ export function ProxiesPage() {
         body: JSON.stringify({ text: raw }),
       }),
     onSuccess: async (data) => {
-      toast.success(`导入 +${data.added ?? 0} 跳过 ${data.skipped ?? 0}`)
+      toast.success(
+        `新增 ${data.added ?? 0} 条，跳过 ${data.skipped ?? 0} 条（重复或格式不对）`
+      )
       setRaw('')
       await refresh()
     },
@@ -95,7 +97,7 @@ export function ProxiesPage() {
   const probeAll = useMutation({
     mutationFn: () => api('/api/panel/proxies/probe', { method: 'POST' }),
     onSuccess: async () => {
-      toast.success('代理探测完成')
+      toast.success('已检查所有代理能不能连上')
       await refresh()
     },
     onError: (error: Error) => toast.error(error.message),
@@ -115,11 +117,11 @@ export function ProxiesPage() {
           `DNS 已保存，但 ${failed.length} 个出口重载失败：${failed.map((entry) => entry.proxy_id).join('、')}`
         )
       } else if (patch.dns_primary != null) {
-        toast.success('出口 DNS 已保存，运行中的出口已同步')
+        toast.success('DNS 设置已保存，已同步到正在用的代理')
       } else if (patch.bind_limit != null) {
-        toast.success(`每条最多绑 ${String(patch.bind_limit)} 台`)
+        toast.success(`每条代理最多给 ${String(patch.bind_limit)} 个账号用`)
       } else if (patch.probe_interval_min != null) {
-        toast.success(`探测间隔 ${String(patch.probe_interval_min)} 分钟`)
+        toast.success(`每 ${String(patch.probe_interval_min)} 分钟自动检查一次`)
       } else {
         toast.success('已保存')
       }
@@ -133,7 +135,7 @@ export function ProxiesPage() {
         method: 'POST',
       }),
     onSuccess: async () => {
-      toast.success('探测完成')
+      toast.success('检查完成')
       await refresh()
     },
     onError: (error: Error) => toast.error(error.message),
@@ -148,7 +150,7 @@ export function ProxiesPage() {
       const where = [data.geo?.country, data.geo?.timezone]
         .filter(Boolean)
         .join(' · ')
-      toast.success(where ? `出口位置 ${where}` : '已检测')
+      toast.success(where ? `出口在 ${where}` : '已查过位置')
       await refresh()
     },
     onError: (error: Error) => toast.error(error.message),
@@ -162,7 +164,7 @@ export function ProxiesPage() {
     onSuccess: async (data) => {
       const rows = data.results || []
       const ok = rows.filter((r) => r.ok).length
-      toast.success(`地理检测完成 ${ok}/${rows.length}`)
+      toast.success(`位置查询完成（${ok}/${rows.length}）`)
       await refresh()
     },
     onError: (error: Error) => toast.error(error.message),
@@ -173,7 +175,7 @@ export function ProxiesPage() {
         method: 'DELETE',
       }),
     onSuccess: async () => {
-      toast.success('已删除')
+      toast.success('代理已删除')
       setDelId('')
       await refresh()
     },
@@ -186,7 +188,7 @@ export function ProxiesPage() {
         { method: 'POST' }
       ),
     onSuccess: async (_data, { on }) => {
-      toast.success(on ? '已启用' : '已禁用')
+      toast.success(on ? '代理已启用' : '代理已停用')
       await refresh()
     },
     onError: (error: Error) => toast.error(error.message),
@@ -198,7 +200,7 @@ export function ProxiesPage() {
         body: JSON.stringify({ vm_id: vmId }),
       }),
     onSuccess: async () => {
-      toast.success('已绑定')
+      toast.success('已绑到账号')
       await refresh()
     },
     onError: (error: Error) => toast.error(error.message),
@@ -210,7 +212,7 @@ export function ProxiesPage() {
         body: JSON.stringify({ vm_id: vmId }),
       }),
     onSuccess: async () => {
-      toast.success('已解绑')
+      toast.success('已解除绑定')
       setUnbindTarget(null)
       await refresh()
     },
@@ -236,7 +238,7 @@ export function ProxiesPage() {
       }
       try {
         await navigator.clipboard.writeText(uri)
-        toast.success('已复制 SOCKS5 地址（含账密）')
+        toast.success('已复制完整代理地址（含账号密码），注意不要泄露')
       } catch {
         // 剪贴板 API 需要安全上下文（HTTPS 或 localhost），失败要说明白，
         // 而不是静默什么都没发生。这里也不把 uri 兜底渲染出来。
@@ -272,21 +274,21 @@ export function ProxiesPage() {
         <>
           <Button
             variant='outline'
-            title='经每条代理查出口 IP 的国家 / 城市 / 时区'
+            title='通过每条代理查一下出口 IP 在哪个国家、城市、时区'
             onClick={() => geoAll.mutate()}
             disabled={geoAll.isPending}
             loading={geoAll.isPending}
           >
-            测地理
+            查所有位置
           </Button>
           <Button
             variant='outline'
-            title='只测 SOCKS TCP，不打 Anthropic'
+            title='只检查能不能连上代理，不会访问官方'
             onClick={() => probeAll.mutate()}
             disabled={probeAll.isPending}
             loading={probeAll.isPending}
           >
-            测通
+            检查全部连通
           </Button>
         </>
       }
@@ -375,13 +377,13 @@ export function ProxiesPage() {
       <ConfirmDialog
         open={!!unbindTarget}
         onOpenChange={() => setUnbindTarget(null)}
-        title='解绑代理'
-        desc={`解绑后 ${
+        title='解除这个账号的代理？'
+        desc={`${
           vms.find((v) => v.id === unbindTarget?.vmId)?.name ||
           unbindTarget?.vmId ||
           ''
-        } 将无法转发，确认？`}
-        confirmText='解绑'
+        } 解除后发不出请求，直到重新绑一条代理。`}
+        confirmText='解除绑定'
         cancelBtnText='取消'
         destructive
         isLoading={unbind.isPending}
@@ -392,13 +394,13 @@ export function ProxiesPage() {
       <ConfirmDialog
         open={!!delId}
         onOpenChange={() => setDelId('')}
-        title='删除代理'
+        title='删除这条代理？'
         desc={
           delBound
-            ? `删除后 ${delBound} 台虚拟机将解绑，确认？`
-            : '删除这条 SOCKS5？'
+            ? `有 ${delBound} 个账号在用它，删除后这些账号发不出请求，直到重新绑代理。无法恢复。`
+            : '删除后无法恢复，需要时要重新添加。'
         }
-        confirmText='删除'
+        confirmText='删除代理'
         cancelBtnText='取消'
         destructive
         isLoading={remove.isPending}

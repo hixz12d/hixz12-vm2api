@@ -64,7 +64,9 @@ export function LogsStatsStrip({
             <BarChart3 className='size-4' />
           </span>
           <div className='space-y-0.5'>
-            <h3 className='text-sm leading-none font-semibold'>当前窗口汇总</h3>
+            <h3 className='text-sm leading-none font-semibold'>
+              这段时间的汇总
+            </h3>
             <p className='text-xs text-muted-foreground'>{windowLabel}</p>
           </div>
         </div>

@@ -155,7 +155,7 @@ export function LogsPage() {
         body: JSON.stringify({ logging: { muted_error_classes: next } }),
       }),
     onSuccess: () => {
-      toast.success('屏蔽设置已保存')
+      toast.success('已保存：这类错误不再计入统计')
       qc.invalidateQueries({ queryKey: routingQueryOptions().queryKey })
     },
     onError: (error: Error) => toast.error(error.message || '保存失败'),
@@ -318,6 +318,9 @@ export function LogsPage() {
 
   return (
     <PageHeader title={VIEW_TITLES.logs} fluid>
+      <p className='-mt-2 mb-3 max-w-3xl text-sm text-muted-foreground'>
+        每一个经过本服务的请求都记在这里。出问题时先看下面的「错误分类」，点一个分类只看这类错误；再点某一行看完整细节。
+      </p>
       <div className='mb-3'>
         <ErrorCollectionPanel
           collection={errorCollection}
@@ -387,7 +390,7 @@ export function LogsPage() {
                 size='icon'
                 onClick={() => void enterFullscreen()}
                 className='size-8'
-                aria-label='全屏实时日志'
+                aria-label='全屏看实时日志'
               >
                 <Expand className='size-3.5' />
               </Button>
@@ -403,10 +406,10 @@ export function LogsPage() {
                 <Switch
                   checked={viewMode === 'stream'}
                   onCheckedChange={(on) => setViewMode(on ? 'stream' : 'pager')}
-                  aria-label='流式自动刷新'
+                  aria-label='自动刷新新日志'
                 />
                 <span className='text-xs text-muted-foreground'>
-                  {viewMode === 'stream' ? '流式' : '分页'}
+                  {viewMode === 'stream' ? '自动刷新' : '手动翻页'}
                 </span>
               </div>
             )}
@@ -428,12 +431,12 @@ export function LogsPage() {
               onValueChange={(v) => setErrorClass(v === 'none' ? '' : v)}
             >
               <SelectTrigger className='w-40'>
-                <SelectValue placeholder='错误类' />
+                <SelectValue placeholder='错误分类' />
               </SelectTrigger>
               <SelectContent>
                 {ERROR_CLASSES.map((c) => (
                   <SelectItem key={c || 'none'} value={c || 'none'}>
-                    {c ? `${ERROR_CLASS_META[c].label}（${c}）` : '全部类'}
+                    {c ? `${ERROR_CLASS_META[c].label}（${c}）` : '全部分类'}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -469,7 +472,7 @@ export function LogsPage() {
               aria-pressed={mismatchOnly}
               onClick={() => setMismatchOnly((on) => !on)}
             >
-              仅模型重定向
+              只看换了模型的请求
             </Button>
           </div>
         </CollapsibleContent>

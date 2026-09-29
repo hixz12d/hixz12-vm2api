@@ -1,3 +1,4 @@
+import { VIEW_TITLES } from '@/config/nav'
 import {
   Activity,
   Boxes,
@@ -9,41 +10,48 @@ import {
   Layers,
   LayoutDashboard,
   ScrollText,
-  Server,
   Settings,
   Shield,
   Sparkles,
+  Users,
 } from 'lucide-react'
 import type { NavGroup, NavItem, SidebarData } from '../types'
 
+/**
+ * 侧栏按「多常用」分组，不按实现分：
+ * 常用 = 三件日常事（看状态、管 Key 和分组、导入 / 管理账号）；
+ * 高级 = 很少碰的底层页，功能全保留，只是不和常用项混在一起。
+ * url 与权限 view 名保持不变。
+ */
 const ALL_GROUPS: NavGroup[] = [
   {
-    title: '集群',
+    title: '常用',
     items: [
-      { title: '总览', url: '/overview', icon: LayoutDashboard },
-      { title: '集群', url: '/cluster', icon: Boxes },
-      { title: '虚拟机', url: '/vm', icon: Server },
-      { title: '导入', url: '/import', icon: Download },
-      { title: '用量', url: '/usage', icon: Gauge },
+      { title: VIEW_TITLES.overview, url: '/overview', icon: LayoutDashboard },
+      { title: VIEW_TITLES.vm, url: '/vm', icon: Users, lamp: 'accounts' },
+      { title: VIEW_TITLES.keys, url: '/keys', icon: KeyRound },
+      { title: VIEW_TITLES.import, url: '/import', icon: Download },
+      { title: VIEW_TITLES.proxies, url: '/proxies', icon: Cable },
     ],
   },
   {
-    title: '协议',
+    title: '记录与设置',
     items: [
-      { title: '模型', url: '/models', icon: Sparkles },
-      { title: '协议', url: '/protocol', icon: Shield },
-      { title: '密钥', url: '/keys', icon: KeyRound },
-      { title: '压测', url: '/loadtest', icon: Activity },
+      { title: VIEW_TITLES.usage, url: '/usage', icon: Gauge },
+      { title: VIEW_TITLES.logs, url: '/logs', icon: ScrollText },
+      { title: VIEW_TITLES.settings, url: '/settings', icon: Settings },
     ],
   },
   {
-    title: '运维',
+    title: '高级',
+    folded: true,
     items: [
-      { title: '代理', url: '/proxies', icon: Cable },
-      { title: '日志', url: '/logs', icon: ScrollText },
-      { title: '设置', url: '/settings', icon: Settings },
-      { title: '内核', url: '/wrap', icon: Layers },
-      { title: '数据库', url: '/database', icon: Database },
+      { title: VIEW_TITLES.models, url: '/models', icon: Sparkles },
+      { title: VIEW_TITLES.protocol, url: '/protocol', icon: Shield },
+      { title: VIEW_TITLES.wrap, url: '/wrap', icon: Layers },
+      { title: VIEW_TITLES.loadtest, url: '/loadtest', icon: Activity },
+      { title: VIEW_TITLES.database, url: '/database', icon: Database },
+      { title: VIEW_TITLES.cluster, url: '/cluster', icon: Boxes },
     ],
   },
 ]

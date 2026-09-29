@@ -19,10 +19,7 @@ export function HealthPane(props: HealthPaneProps) {
           <CardTitle>{title}</CardTitle>
         </CardHeader>
         <CardContent className='space-y-2 text-sm text-muted-foreground'>
-          <p>
-            当前配置随「保存」写入 GET/PUT /api/panel/routing（含 official_cc /
-            health_probe / compatibility）。
-          </p>
+          <p>这里显示当前的健康检查配置，改动随页面底部的「保存」一起生效。</p>
           <RawConfigFields value={healthProbe} />
         </CardContent>
       </Card>
@@ -42,18 +39,17 @@ function SignatureRepairCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>签名修复</CardTitle>
+        <CardTitle>自动修复思考签名错误</CardTitle>
       </CardHeader>
       <CardContent className='flex items-start justify-between gap-4'>
         <div className='space-y-1 text-sm text-muted-foreground'>
           <p>
-            上游因思考签名返回 400 时，剥掉思考历史后重试一次，客户端最终看到
-            200。
+            官方因为「思考内容签名不对」返回 400
+            错误时，去掉之前的思考内容再试一次，下游最终拿到正常结果。
           </p>
           <p>
-            关闭则把 400 原样透传 ——
-            探测伪造签名时需要这个真实结果。其它修复（搜索 / 预填 / 工具配对 /
-            schema / 自适应）不受此开关影响。
+            关闭则把 400
+            原样返回给下游（做签名相关测试时需要）。其他自动修复不受这个开关影响。
           </p>
         </div>
         <Switch
@@ -61,7 +57,7 @@ function SignatureRepairCard({
           onCheckedChange={(checked) =>
             onChange({ ...failover, signature_repair: checked })
           }
-          aria-label='签名修复'
+          aria-label='自动修复思考签名错误'
         />
       </CardContent>
     </Card>

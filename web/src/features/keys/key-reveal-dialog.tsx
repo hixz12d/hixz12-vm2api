@@ -26,12 +26,12 @@ export function KeyRevealDialog({
 
   function copy() {
     if (!plain) {
-      toast.error('没有可复制的密钥')
+      toast.error('没有可复制的 Key')
       return
     }
     void navigator.clipboard
       .writeText(plain)
-      .then(() => toast.success('已复制明文密钥，请妥善保存'))
+      .then(() => toast.success('Key 已复制，注意不要泄露'))
       .catch(() => toast.error('复制失败'))
   }
 
@@ -40,7 +40,7 @@ export function KeyRevealDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {value?.title || '密钥'}
+            {value?.title || 'Key'}
             {value?.name ? ` · ${value.name}` : ''}
           </DialogTitle>
         </DialogHeader>
@@ -48,7 +48,7 @@ export function KeyRevealDialog({
           {value?.id ? (
             <span className='font-mono'>{value.id}</span>
           ) : (
-            '明文仅在此弹层展示'
+            '完整的 Key 只在这里显示'
           )}
         </p>
         <button
@@ -59,7 +59,7 @@ export function KeyRevealDialog({
           {plain}
         </button>
         <p className='text-sm text-destructive'>
-          关闭后列表仍只显示脱敏片段。可还原的密钥之后还能再点「查看」或「复制」。
+          点上面的文字或「复制」按钮就能复制。关闭后列表里只显示开头和结尾几位；以后还能在列表里点「查看」或「复制」再拿到它。
         </p>
         <DialogFooter>
           <Button variant='outline' onClick={onClose}>

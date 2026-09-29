@@ -37,7 +37,7 @@ export function ErrorCollectionSummary({
 
   return (
     <PanelCard
-      title='错误集合'
+      title='错误分类'
       meta={
         <span className='tabular-nums'>
           {visibleTotal ? fmtNum(visibleTotal) : null}
@@ -47,14 +47,14 @@ export function ErrorCollectionSummary({
       action={
         <Button variant='outline' size='sm' asChild>
           <Link to='/logs' search={{ kind: 'error' }}>
-            查看错误日志
+            看出错的请求
           </Link>
         </Button>
       }
     >
       <div className='px-4 py-3'>
         {!visible.length && !hidden.length ? (
-          <EmptyState reason='该窗口无错误' />
+          <EmptyState reason='这段时间没有出错的请求' />
         ) : (
           <div className='flex flex-wrap gap-2'>
             {visible.length ? (
