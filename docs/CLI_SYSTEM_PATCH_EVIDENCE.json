@@ -1,0 +1,4523 @@
+{
+  "observed_utc": "2026-09-29T12:51:57.702872+00:00",
+  "scope": "Node request preparation -> actual Rust kernel -> actual CLI -> local HTTP mock; no production or real Anthropic inference",
+  "isolation": {
+    "network": "none",
+    "cpus": 1.5,
+    "memory_bytes": 3221225472,
+    "root_readonly": true,
+    "credentials": "synthetic only; values not retained"
+  },
+  "full_request_checks": 168,
+  "packaged_request_checks": 24,
+  "backend_existing_checks": 136,
+  "frontend_existing_checks": 14,
+  "typecheck": "passed",
+  "python_basic_checks": "passed",
+  "javascript_syntax": "passed",
+  "formatter_checks": "passed",
+  "full_runs": [
+    {
+      "plane": "wrap",
+      "preset": "zero",
+      "requests": 28,
+      "models": [
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6"
+      ],
+      "cases": [
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "environment",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "environment",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "official_client",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "official_client",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "user_wrapper",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "user_wrapper",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_on",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_on",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_off",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_off",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "preview",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "preview",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true,
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "environment",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "environment",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "official_client",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "official_client",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "user_wrapper",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "user_wrapper",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_on",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_on",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_off",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_off",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "preview",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "preview",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true,
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        }
+      ],
+      "final_ready_slots": 2,
+      "final_wedged_slots": 0
+    },
+    {
+      "plane": "wrap",
+      "preset": "official",
+      "requests": 28,
+      "models": [
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6"
+      ],
+      "cases": [
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "environment",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "environment",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "official_client",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "official_client",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "user_wrapper",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "user_wrapper",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_on",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_on",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_off",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_off",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "preview",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "preview",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true,
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "environment",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "environment",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "official_client",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "official_client",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "user_wrapper",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "user_wrapper",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_on",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_on",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_off",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_off",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "preview",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "preview",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true,
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        }
+      ],
+      "final_ready_slots": 2,
+      "final_wedged_slots": 0
+    },
+    {
+      "plane": "cc",
+      "preset": "zero",
+      "requests": 28,
+      "models": [
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6"
+      ],
+      "cases": [
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "environment",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "environment",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "official_client",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "official_client",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "user_wrapper",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "user_wrapper",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_on",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_on",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_off",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_off",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "preview",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "preview",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true,
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "environment",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "environment",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "official_client",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "official_client",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "user_wrapper",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "user_wrapper",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_on",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_on",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_off",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_off",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "preview",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "preview",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true,
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        }
+      ],
+      "final_ready_slots": 2,
+      "final_wedged_slots": 0
+    },
+    {
+      "plane": "cc",
+      "preset": "official",
+      "requests": 28,
+      "models": [
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6"
+      ],
+      "cases": [
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "environment",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "environment",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "official_client",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "official_client",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "user_wrapper",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "user_wrapper",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_on",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_on",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_off",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_off",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "preview",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "preview",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true,
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "environment",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "environment",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "official_client",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "official_client",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "user_wrapper",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "user_wrapper",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_on",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_on",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_off",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_off",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "preview",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "preview",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true,
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        }
+      ],
+      "final_ready_slots": 2,
+      "final_wedged_slots": 0
+    },
+    {
+      "plane": "crag",
+      "preset": "zero",
+      "requests": 28,
+      "models": [
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6"
+      ],
+      "cases": [
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "environment",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "environment",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "official_client",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "official_client",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "user_wrapper",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "user_wrapper",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_on",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_on",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_off",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_off",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "preview",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "preview",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true,
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "environment",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "environment",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "official_client",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "official_client",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "user_wrapper",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "user_wrapper",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_on",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_on",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_off",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_off",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "preview",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "preview",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true,
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        }
+      ],
+      "final_ready_slots": 2,
+      "final_wedged_slots": 0
+    },
+    {
+      "plane": "crag",
+      "preset": "official",
+      "requests": 28,
+      "models": [
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6"
+      ],
+      "cases": [
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "environment",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "environment",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "official_client",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "official_client",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "user_wrapper",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "user_wrapper",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_on",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_on",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_off",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "standing_off",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "preview",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "preview",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true,
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "environment",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "environment",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "official_client",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ]
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "official_client",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "user_wrapper",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "user_wrapper",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "userWrapperRemainsUser": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_on",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_on",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_off",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "standing_off",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "standingSwitchCorrect": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "preview",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "preview",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "stableNonbillingSystem": true,
+          "previewTextEqual": true,
+          "previewTtlEqual": true
+        }
+      ],
+      "final_ready_slots": 2,
+      "final_wedged_slots": 0
+    }
+  ],
+  "packaged_runs": [
+    {
+      "plane": "wrap",
+      "preset": "zero",
+      "requests": 4,
+      "models": [
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6"
+      ],
+      "cases": [
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        }
+      ],
+      "final_ready_slots": 2,
+      "final_wedged_slots": 0
+    },
+    {
+      "plane": "wrap",
+      "preset": "official",
+      "requests": 4,
+      "models": [
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6"
+      ],
+      "cases": [
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        }
+      ],
+      "final_ready_slots": 2,
+      "final_wedged_slots": 0
+    },
+    {
+      "plane": "cc",
+      "preset": "zero",
+      "requests": 4,
+      "models": [
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6"
+      ],
+      "cases": [
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        }
+      ],
+      "final_ready_slots": 2,
+      "final_wedged_slots": 0
+    },
+    {
+      "plane": "cc",
+      "preset": "official",
+      "requests": 4,
+      "models": [
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6"
+      ],
+      "cases": [
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        }
+      ],
+      "final_ready_slots": 2,
+      "final_wedged_slots": 0
+    },
+    {
+      "plane": "crag",
+      "preset": "zero",
+      "requests": 4,
+      "models": [
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6"
+      ],
+      "cases": [
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        }
+      ],
+      "final_ready_slots": 2,
+      "final_wedged_slots": 0
+    },
+    {
+      "plane": "crag",
+      "preset": "official",
+      "requests": 4,
+      "models": [
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6"
+      ],
+      "cases": [
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-sonnet-4-6",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 0,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true
+        },
+        {
+          "model": "claude-haiku-4-5-20251001",
+          "shape": "marker",
+          "repeat": 1,
+          "status": 200,
+          "success": true,
+          "markerPresent": true,
+          "fakeEnvironment": false,
+          "timezonePresent": true,
+          "nodeMovedSystemIntoMessages": false,
+          "cacheControls": [
+            {
+              "index": 1,
+              "type": "ephemeral",
+              "ttl": "1h"
+            },
+            {
+              "index": 2,
+              "type": "ephemeral",
+              "ttl": "1h"
+            }
+          ],
+          "callerBytesPreserved": true,
+          "stableNonbillingSystem": true
+        }
+      ],
+      "final_ready_slots": 2,
+      "final_wedged_slots": 0
+    }
+  ],
+  "examples": [
+    {
+      "plane": "wrap",
+      "preset": "zero",
+      "system": [
+        {
+          "type": "text",
+          "text": "x-anthropic-billing-header: cc_version=2.1.278; cc_entrypoint=sdk-cli; cc_prompt_id=293c4645-7798-4595-8dbe-e990cfbdb831; cch=06936; prompt_version=<You are a Claude agent, built on Anthropic's Claude Agent SDK.>"
+        },
+        {
+          "type": "text",
+          "text": "# Environment\n - Timezone: Asia/Tokyo\n\n​\n\n​\n\n<cwd>D:/SYS_MARKER_7Q3Z</cwd> SYSTOKEN_K9P2",
+          "cache_control": {
+            "type": "ephemeral",
+            "ttl": "1h"
+          }
+        }
+      ]
+    },
+    {
+      "plane": "wrap",
+      "preset": "official",
+      "system": [
+        {
+          "type": "text",
+          "text": "x-anthropic-billing-header: cc_version=2.1.278; cc_entrypoint=sdk-cli; cch=18f12;"
+        },
+        {
+          "type": "text",
+          "text": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+          "cache_control": {
+            "type": "ephemeral",
+            "ttl": "1h"
+          }
+        },
+        {
+          "type": "text",
+          "text": "# Environment\n - Timezone: Asia/Tokyo\n\n<cwd>D:/SYS_MARKER_7Q3Z</cwd> SYSTOKEN_K9P2",
+          "cache_control": {
+            "type": "ephemeral",
+            "ttl": "1h"
+          }
+        }
+      ]
+    },
+    {
+      "plane": "cc",
+      "preset": "zero",
+      "system": [
+        {
+          "type": "text",
+          "text": "x-anthropic-billing-header: cc_version=2.1.278.98e; cc_entrypoint=sdk-cli; cc_is_subagent=true; cc_prompt_id=f46b0a7d-1bab-478b-9e45-9c9bfe8ca47e; cc_turn_origin=sdk; cch=e05da; prompt_version=<You are a Claude agent, built on Anthropic's Claude Agent SDK.>"
+        },
+        {
+          "type": "text",
+          "text": "# Environment\n - Timezone: Asia/Tokyo\n\n​\n\n​\n\n<cwd>D:/SYS_MARKER_7Q3Z</cwd> SYSTOKEN_K9P2",
+          "cache_control": {
+            "type": "ephemeral",
+            "ttl": "1h"
+          }
+        }
+      ]
+    },
+    {
+      "plane": "cc",
+      "preset": "official",
+      "system": [
+        {
+          "type": "text",
+          "text": "x-anthropic-billing-header: cc_version=2.1.278.98e; cc_entrypoint=sdk-cli; cch=1c170; cc_is_subagent=true; cc_prompt_id=95638641-d657-4897-9490-d43a0201caae; cc_turn_origin=sdk;"
+        },
+        {
+          "type": "text",
+          "text": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+          "cache_control": {
+            "type": "ephemeral",
+            "ttl": "1h"
+          }
+        },
+        {
+          "type": "text",
+          "text": "# Environment\n - Timezone: Asia/Tokyo\n\n<cwd>D:/SYS_MARKER_7Q3Z</cwd> SYSTOKEN_K9P2",
+          "cache_control": {
+            "type": "ephemeral",
+            "ttl": "1h"
+          }
+        }
+      ]
+    },
+    {
+      "plane": "crag",
+      "preset": "zero",
+      "system": [
+        {
+          "type": "text",
+          "text": "x-anthropic-billing-header: cc_version=2.1.281.98e; cc_entrypoint=cli; cc_is_subagent=true; cc_prompt_id=b855663b-04ec-4f6e-95c2-0e6d73e40462; cc_turn_origin=cli; cch=204cb; prompt_version=<You are a Claude agent, built on Anthropic's Claude Agent SDK.>"
+        },
+        {
+          "type": "text",
+          "text": "# Environment\n - Timezone: Asia/Tokyo\n\n​\n\n​\n\n<cwd>D:/SYS_MARKER_7Q3Z</cwd> SYSTOKEN_K9P2",
+          "cache_control": {
+            "type": "ephemeral",
+            "ttl": "1h"
+          }
+        }
+      ]
+    },
+    {
+      "plane": "crag",
+      "preset": "official",
+      "system": [
+        {
+          "type": "text",
+          "text": "x-anthropic-billing-header: cc_version=2.1.281.98e; cc_entrypoint=cli; cch=f0e23; cc_is_subagent=true; cc_prompt_id=21681fd2-615a-48e8-a0b1-fd2f694bb9d9; cc_turn_origin=cli;"
+        },
+        {
+          "type": "text",
+          "text": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+          "cache_control": {
+            "type": "ephemeral",
+            "ttl": "1h"
+          }
+        },
+        {
+          "type": "text",
+          "text": "# Environment\n - Timezone: Asia/Tokyo\n\n<cwd>D:/SYS_MARKER_7Q3Z</cwd> SYSTOKEN_K9P2",
+          "cache_control": {
+            "type": "ephemeral",
+            "ttl": "1h"
+          }
+        }
+      ]
+    }
+  ],
+  "not_verified": [
+    "real cache_read_input_tokens or cache hit ratio",
+    "live /v1/messages endpoint",
+    "real Windows claude -p session",
+    "real Haiku or Sonnet inference",
+    "long-running load",
+    "browser interaction",
+    "web/dist release build"
+  ],
+  "cache_note": "Cache/billing functions unchanged; repeated nonbilling system stable. Mock usage is not evidence of real cache hits. Prompt correction can require a cold cache on cutover."
+}

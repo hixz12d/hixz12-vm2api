@@ -31,7 +31,7 @@ vm2api 把 Claude（以及 GPT / Codex）账号分别放进独立的机器环境
 ## Operating Context
 
 - 部署在一台美国 VPS（Debian 12），经 Nginx 暴露。Sub2API 以 Anthropic / API Key 上游的方式调用本服务。
-- 当前有三个 Claude 账号：Ubuntu 槽位 vm-01 属于 Claude Pro 分组；Debian 槽位 vm-02 和 Ubuntu 槽位 vm-03 属于 Claude Max 分组。Key 有 `sub2api-pro`、`sub2api-max` 和旧的"连接Sub"。
+- 当前有四个 Claude 账号：Claude Pro 分组为 vm-04；Claude Max 分组为 Debian 槽位 vm-02 和 Ubuntu 槽位 vm-03（vm-03 已关闭调度）；vm-01 未分入这两组且已关闭调度。Key 有 `sub2api-pro`（Claude Pro）、`sub2api-max` 和旧的"连接Sub"（Claude Max）。成员以管理台为准。
 - 本仓库是 fork（origin `hixz12d/hixz12-vm2api`，upstream `dofastted/vm2api`），上游更新频繁。
 - 已确认：前端可以深度重做，接受以后合并上游时手动对齐前端改动的成本。
 

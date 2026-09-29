@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.79-fork.1 — 2026-09-29
+
+- cli-hop（wrap / cc / crag）保留调用方顶层 system，槽位只追加网关时区，不再注入槽位 cwd、平台、OS 和 Notes。仓内 `cli-node`、`cc-node` 应用 `caller-system-v1` 补丁（见 `docs/CLI_SYSTEM_PATCH.md`）。
+- 管理台「最终 system prompt」预览改为按 CLI 实际出站分段显示。
+- 账号分组支持删除：默认分组不可删，仍有 Key 绑定时拒绝。
+
 ## Unreleased（fork）— 智能评分调度
 
 - 号池策略新增「智能评分」（`pool.strategy: smart`）。只决定新会话落到哪个号，已绑定的粘性会话不变。

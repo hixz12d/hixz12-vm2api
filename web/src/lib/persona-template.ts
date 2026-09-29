@@ -736,6 +736,45 @@ export function previewSystemBlocks(
   return out
 }
 
+/** Native CLI layout + splitSysPromptPrefix, without the private billing line.
+ * Template cache markers are removed at cli-hop; the CLI owns final boundaries.
+ * Request-specific system text is represented by the caller placeholders.
+ */
+export function previewCliSystemBlocks(
+  blocks: readonly RawBlock[],
+  vars: Record<string, string>,
+  preset: PersonaPreset,
+  ttl: string = '1h'
+): SystemPreviewBlock[] {
+  const identity =
+    "You are a Claude agent, built on Anthropic's Claude Agent SDK."
+  const timezoneOnly =
+    /^# Environment\r?\n[ \t]*(?:-[ \t]*)?Time ?zone:[^\r\n]+$/i
+  const rendered = previewSystemBlocks(blocks, vars)
+  const leftover = rendered.filter((block) => {
+    const text = block.text.trim()
+    return text !== identity && !timezoneOnly.test(text)
+  })
+  const make = (id: string, text: string): SystemPreviewBlock => ({
+    id,
+    text,
+    hide: false,
+    ttl,
+    scope: '',
+    placeholder: false,
+  })
+  return [
+    ...(preset === 'zero' ? [] : [make('identity', identity)]),
+    make(
+      'environment_and_caller',
+      [
+        envTimezoneText(vars.timezone || 'UTC'),
+        ...leftover.map((block) => block.text),
+      ].join('\n\n')
+    ),
+  ]
+}
+
 export function estimateTokens(text: string): number {
   return text ? Math.ceil(text.length / TOKEN_CHAR_DIVISOR) : 0
 }

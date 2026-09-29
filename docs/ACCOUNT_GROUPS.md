@@ -26,6 +26,7 @@
 - `GET /api/panel/groups`：列出分组；管理员同时获取成员和可选槽位。
 - `POST /api/panel/groups`：创建分组，字段包括 `name`、`description`、`status`、`vm_ids`。
 - `PATCH /api/panel/groups/:id`：编辑分组；`vm_ids` 为完整成员集合，空数组表示空组。
+- `DELETE /api/panel/groups/:id`：软删除分组并移除成员关系（账号本身保留，历史请求记录的分组名保留）。默认分组 `coding`（ID 1）不能删除；仍有 Key 绑定时返回 409 `group_in_use`，需先把 Key 换到别的分组。
 - `POST /api/panel/api-keys` / `PATCH /api/panel/api-keys/:id`：通过 `group_id` 绑定分组。
 
 ## 验证

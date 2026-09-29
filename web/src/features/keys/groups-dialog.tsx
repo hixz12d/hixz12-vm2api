@@ -12,11 +12,16 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   groupsQueryOptions,
   type AccountGroup,
   type GroupsPayload,
 } from './groups-query'
+import { apiKeysQueryOptions } from './queries'
+
+/** Group 1 is the fallback for keys created without a group. */
+const DEFAULT_GROUP_ID = 1
 
 export function GroupsDialog({
   open,
@@ -25,8 +30,27 @@ export function GroupsDialog({
   open: boolean
   onOpenChange: (value: boolean) => void
 }) {
+  const qc = useQueryClient()
   const q = useQuery(groupsQueryOptions())
+  const keysQ = useQuery(apiKeysQueryOptions())
   const [editing, setEditing] = useState<AccountGroup | 'new' | null>(null)
+  const [deleting, setDeleting] = useState<AccountGroup | null>(null)
+  const keyCount = (id: number) =>
+    (keysQ.data?.keys || []).filter((k) => k.group_id === id).length
+  const remove = useMutation({
+    mutationFn: (id: number) =>
+      api(`/api/panel/groups/${id}`, { method: 'DELETE' }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: groupsQueryOptions().queryKey }),
+        qc.invalidateQueries({ queryKey: ['panel', 'api-keys'] }),
+      ])
+      toast.success('分组已删除')
+      setDeleting(null)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const deletingKeys = deleting ? keyCount(deleting.id) : 0
   return (
     <Dialog
       open={open}
@@ -86,19 +110,61 @@ export function GroupsDialog({
                           .join('、') || '组里还没有账号'}
                       </p>
                     </div>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => setEditing(group)}
-                    >
-                      编辑
-                    </Button>
+                    <div className='flex shrink-0 gap-2'>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() => setEditing(group)}
+                      >
+                        编辑
+                      </Button>
+                      {group.id !== DEFAULT_GROUP_ID && (
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          className='text-destructive'
+                          onClick={() => setDeleting(group)}
+                        >
+                          删除
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
             </>
           ))}
       </DialogContent>
+      <ConfirmDialog
+        open={!!deleting}
+        onOpenChange={(value) => {
+          if (!value) setDeleting(null)
+        }}
+        title={deletingKeys ? '这个分组还在用' : '删除这个分组？'}
+        desc={
+          <div className='grid gap-1.5 text-sm'>
+            <p>「{deleting?.name}」</p>
+            {deletingKeys ? (
+              <p className='text-destructive'>
+                还有 {deletingKeys} 个 Key 接在这个分组上。先在 Key
+                列表里把它们换到别的分组，再来删除。
+              </p>
+            ) : (
+              <p>
+                组里的账号不会被删除，只是不再属于这个分组。以前的请求记录保留。删除后无法恢复，需要时可以重新建一个。
+              </p>
+            )}
+          </div>
+        }
+        confirmText='删除分组'
+        cancelBtnText={deletingKeys ? '知道了' : '取消'}
+        destructive
+        disabled={deletingKeys > 0 || keysQ.isLoading}
+        isLoading={remove.isPending}
+        handleConfirm={() => {
+          if (deleting) remove.mutate(deleting.id)
+        }}
+      />
     </Dialog>
   )
 }

@@ -48,6 +48,7 @@ import { ownerScopeFromRequest } from '../admin/resource-owner.mjs'
 import {
   resolveInferenceEngine,
   resolveOfficialCcInference,
+  resolveKernelDataplane,
   resolveSlotPersonaPreset,
   slotPersonaModeOverride,
 } from '../vm/slot-engine.mjs'
@@ -963,9 +964,11 @@ export function createHandleProtocol(deps) {
           if (cliHop) {
             const repaired = extra.repaired === true
             const resolvedPersona = resolveSlotPersonaPreset(selected.vm, routingNow)
-            const cliAppliesNodePersona =
+            const cliCountsNodePersona =
               !officialTraffic && resolvedPersona !== 'zero' && resolvedPersona !== 'official_full'
-            if (cliAppliesNodePersona) {
+            // Rebuild from the caller snapshot for every slot preset; the global
+            // persona may already have moved its system into messages.
+            if (!officialTraffic) {
               hopBody = applyCrsUnofficialPersona(structuredClone(personaIn), {
                 officialClient: false,
                 routingFile: routingConfigPath,
@@ -975,6 +978,7 @@ export function createHandleProtocol(deps) {
                 model: personaIn?.model,
                 cliVersion: OFFICIAL_CLI_VERSION,
                 identity,
+                cliHop: true,
               })
               // The slot preset may differ from the global one; its panel mask applies.
               personaHideTokens = personaHideForUnofficial(personaIn, hopBody, {
@@ -987,6 +991,7 @@ export function createHandleProtocol(deps) {
             hopBody = prepareCliHopBody(repaired ? body : hopBody, {
               stream: upstreamStream,
               repaired,
+              dataplane: resolveKernelDataplane(selected.vm, routingNow),
             })
             hopBody = await materializeRemoteImageSources(hopBody)
             if (identity) {
@@ -1012,10 +1017,10 @@ export function createHandleProtocol(deps) {
                     officialClient: officialTraffic,
                     timezone: selected.vm?.timezone || selected.vm?.fingerprint?.timezone,
                     // A re-applied Node persona's hide (summed below) already counts its overlay.
-                    overlay: cliAppliesNodePersona ? 0 : personaHideTokens?.overlay,
+                    overlay: cliCountsNodePersona ? 0 : personaHideTokens?.overlay,
                     hides: personaHidesUsageFromRoutingFile(routingConfigPath, resolvedPersona),
                   })
-            personaHideTokens = cliAppliesNodePersona ? (Number(personaHideTokens) || 0) + cliHide : cliHide
+            personaHideTokens = cliCountsNodePersona ? (Number(personaHideTokens) || 0) + cliHide : cliHide
             logBag.inference_engine = resolveInferenceEngine(selected.vm, routingNow)
             logBag.persona_preset = resolveSlotPersonaPreset(selected.vm, routingNow)
             logBag.official_cc_inference = 'cli-hop'

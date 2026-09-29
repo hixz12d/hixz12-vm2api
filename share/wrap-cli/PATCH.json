@@ -1,0 +1,42 @@
+{
+  "patch": "caller-system-v1",
+  "bun_revision": "1.3.14+0d9b296af",
+  "upx": "5.2.1 -1",
+  "graph_flags": 7,
+  "embedded_entry": "/$bunfs/root/cli.js",
+  "upstream_tree": "336729010c6040236bdcd507923737eb4abb1178",
+  "files": {
+    "cli-node": {
+      "upstream_binary_sha256": "3202378ad990d0ba098d813e7a2a4b488ba9d0930fa96b5ddbbd16cc144d709a",
+      "upstream_source_sha256": "7d5366daf48ae71c96dce3ede9151ddf332056006f0d57e9ad9e188923083a10",
+      "patched_source_sha256": "d713f81d76513b469bca94ec75602b51bfe1b228bac992a5772041eb5fd9fe0e",
+      "unpacked_binary_sha256": "63a5d596614f52f8ada2c0a43459dabd1112b1b982b88b47e46e0758a66335a1",
+      "binary_sha256": "2f1bbb63c918a4a5b643d682faf5fa57adce3b4e060c2b75867401805566672a",
+      "binary_bytes": 51953524,
+      "unchanged_cache_and_billing_functions": [
+        "splitSysPromptPrefix",
+        "getCacheControl",
+        "buildSystemPromptBlocks",
+        "fillMissingCacheTtl",
+        "finalizeZeroBilling",
+        "withCchPlaceholder"
+      ]
+    },
+    "cc-node": {
+      "upstream_binary_sha256": "be5eec49a78345dd935e302e88c9d7ad0afbb09a195356d81be1bdea766f3960",
+      "upstream_source_sha256": "6fef71bdda7ad0929681711efee472552635f88b0a6ead51f711d10e03f55ca5",
+      "patched_source_sha256": "c4aa28fa0cbcfb80d37361806e6c9ca3f4f7250d98b2099a3f4f840d09c8109e",
+      "unpacked_binary_sha256": "c6639af4207319b67ef531ce9554be25127edba65a1a2069accb226035b16eb5",
+      "binary_sha256": "9ed70a3748ec7b63be617b9ee3add91820f399c9a1f90e0d45ace4fed1fb2c9f",
+      "binary_bytes": 48533096,
+      "unchanged_cache_and_billing_functions": [
+        "splitSysPromptPrefix",
+        "getCacheControl",
+        "buildSystemPromptBlocks",
+        "fillMissingCacheTtl",
+        "finalizeZeroBilling",
+        "withCchPlaceholder"
+      ]
+    }
+  }
+}

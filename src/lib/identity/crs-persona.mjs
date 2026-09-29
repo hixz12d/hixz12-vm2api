@@ -696,9 +696,14 @@ export function personaTemplateVars({
   callerAgent = '',
   leftover = '',
   model = '',
+  cliHop = false,
 } = {}) {
   const billing = buildBillingAttributionText(firstUserText, cliVersion, sessionId)
-  const envTimezoneOnly = () => buildOfficialEnvironmentSection(env, { sourceTexts, contextManagement: false })
+  const envTimezoneOnly = () =>
+    buildOfficialEnvironmentSection(cliHop ? { timezone: env.timezone } : env, {
+      sourceTexts: cliHop ? [] : sourceTexts,
+      contextManagement: false,
+    })
   return {
     billing,
     billing_semi: billing.endsWith(';') ? billing : `${billing};`,
@@ -709,9 +714,10 @@ export function personaTemplateVars({
     agent_standing: String(agentStanding || ''),
     env: () => (withEnv ? envTimezoneOnly() : ''),
     caller_agent: String(callerAgent || '').trim(),
-    caller_system: String(leftover || '').trim(),
+    caller_system: String(leftover || ''),
     env_timezone_only: envTimezoneOnly,
-    env_official: () => buildOfficialContinuationText(env, sourceTexts, { overwrite: true }),
+    env_official: () =>
+      cliHop ? envTimezoneOnly() : buildOfficialContinuationText(env, sourceTexts, { overwrite: true }),
     timezone: String(env?.timezone || '').trim(),
     locale: String(env?.locale || '').trim(),
     model: String(model || env?.modelId || '').trim(),
@@ -1689,6 +1695,7 @@ function applyTemplatePersona(
     identity,
     model,
     callerAgent: rawCallerAgent = '',
+    cliHop = false,
   } = {},
 ) {
   const messages = Array.isArray(body.messages) ? body.messages : []
@@ -1706,13 +1713,18 @@ function applyTemplatePersona(
   // slot for it, otherwise a template without {{caller_agent}} would drop it.
   const usesCallerAgent = blocks.some((block) => extractTemplateVars(block?.text).includes('caller_agent'))
   const callerAgent = usesCallerAgent ? String(rawCallerAgent || '').trim() : ''
-  const leftover = usesCallerAgent
-    ? parkableSystemTexts(body.system)
-        .filter((text) => !looksLikeAgentPrompt(text))
+  const leftover = cliHop
+    ? extractSystemTexts(body.system)
+        .filter((text) => !isBillingLine(text) && !isStandaloneOfficialLine(text))
+        .filter((text) => !callerAgent || text.trim() !== callerAgent)
         .join('\n\n')
-    : collectCallerSystemAppend(body)
+    : usesCallerAgent
+      ? parkableSystemTexts(body.system)
+          .filter((text) => !looksLikeAgentPrompt(text))
+          .join('\n\n')
+      : collectCallerSystemAppend(body)
   const modelId = model || body.model
-  const midSystem = leftoverGoesToMidSystem(preset, modelId)
+  const midSystem = !cliHop && leftoverGoesToMidSystem(preset, modelId)
   const system = renderPersonaTemplate(
     blocks,
     personaTemplateVars({
@@ -1726,6 +1738,7 @@ function applyTemplatePersona(
       callerAgent,
       leftover: midSystem ? '' : leftover,
       model: modelId,
+      cliHop,
     }),
   )
   let outMessages = messages
@@ -1753,6 +1766,7 @@ export function applyCrsUnofficialPersona(
     sessionId,
     identity,
     model,
+    cliHop = false,
   } = {},
 ) {
   if (!body || typeof body !== 'object') return body
@@ -1763,7 +1777,7 @@ export function applyCrsUnofficialPersona(
   const rawCallerAgent = extractCallerAgentPrompt(body.system)
   const cleaned = {
     ...body,
-    system: stripLeakySystem(body.system),
+    system: cliHop ? body.system : stripLeakySystem(body.system),
     messages: sanitizeUnofficialMessages(body.messages),
   }
   const fileSettings = personaTemplateSettingsFromRoutingFile(routingFile)
@@ -1786,6 +1800,7 @@ export function applyCrsUnofficialPersona(
       identity,
       model,
       callerAgent: rawCallerAgent,
+      cliHop,
     })
   }
   const doPark =

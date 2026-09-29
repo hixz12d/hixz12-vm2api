@@ -20,6 +20,11 @@ export async function handleGroups(req, res, { path, projectRoot, groups, json, 
     }
     const create = req.method === 'POST' && path === '/api/panel/groups'
     const update = req.method === 'PATCH' && /^\/api\/panel\/groups\/\d+$/.test(path)
+    const remove = req.method === 'DELETE' && /^\/api\/panel\/groups\/\d+$/.test(path)
+    if (remove) {
+      json(res, 200, { ok: true, item: groups.remove(Number(path.split('/').pop())) })
+      return true
+    }
     if (!create && !update) {
       json(res, 405, { ok: false, error: { code: 'method_not_allowed', message: '不支持的操作' } })
       return true

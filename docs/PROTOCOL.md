@@ -42,7 +42,7 @@
 - `persona_env_presets`：是否写 `{{env}}`。官方完整的 `env_official` 不受此开关影响。
 - `persona_hide_presets`：整档 usage 遮罩（billing / identity / agent / Environment 等 `hide:true` 块）。缺 key 时依次回落旧全局 `persona_hides`、该档模板的 `hide` 标记（默认 zero 开、其余关）。槽位单独指定人设时读该槽位档的开关；cli-hop 0注入 关掉后 CLI billing + Environment 计入 usage。
 
-cli-hop 路径下 wrap CLI 自己也会写 `# Environment\n - Timezone: <kernel.json timezone>`（两种 `system_layout` 都写）；Node 侧的 `# Environment` 块在 hop 前被剥离，不会重复。
+cli-hop（wrap / cc / crag）保留调用方顶层 system，`zero`、`official`、`official_full` 都不再把它搬入 user/reminder。CLI 在身份段后只生成 `# Environment\n - Timezone: <kernel.json timezone>`，随后追加调用方文本；不调用环境增强函数注入槽位 cwd、platform、OS 和 Notes。Node 只剥网关的纯时区块，包含客户端目录等信息的 `# Environment` 必须保留。crag 的首块转交、缓存与预览契约见 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md)。
 
 调用方 `messages[].role=system` 和 tools / `tool_choice` 保留；`overlay_preset=off` 不挂 prompt-leak / identity / no-tools reminder。
 
@@ -50,7 +50,7 @@ cli-hop 路径下 wrap CLI 自己也会写 `# Environment\n - Timezone: <kernel.
 
 遗留 `persona_inject=rewrite|overwrite|append|none` 仍可用，但不是仓库配置默认值。`rewrite` 使用 KIN 短 agent + env；`overwrite` 使用完整 agent_prompt + continuation + Environment。system提示词页保存时三档写回 `official_prompt` / `official_full` / `zero`；自定义才保留旧 inject。
 
-权威开关是 `routing.json` 的 `compatibility.persona_preset`（system提示词）与 `cache_ttl`（设置 → 协议）。`vms/<id>/run/kernel.json` 不是第二套面板：面板保存、槽位「跟随全局」、外部改写 `routing.json`，或虚拟机环境保存时区之后，才把解析结果投影进去（`persona_preset`、`system_layout`、`default_cache_ttl`、`timezone`）。`system_layout` 只有 `zero` 与 `identity`（`official` / `official_full` / `custom` 都是 `identity`）。字节没变不重写。kernel 热读该文件，不必重启槽。Codex 槽不写。手改 `kernel.json` 会在下一次投影时被盖掉。
+权威开关是 `routing.json` 的 `compatibility.persona_preset`（system提示词）与 `cache_ttl`（设置 → 协议）。`vms/<id>/run/kernel.json` 不是第二套面板：面板保存、槽位「跟随全局」、外部改写 `routing.json`，或账号环境保存时区之后，才把解析结果投影进去（`persona_preset`、`system_layout`、`default_cache_ttl`、`timezone`）。`system_layout` 只有 `zero` 与 `identity`（`official` / `official_full` / `custom` 都是 `identity`）。字节没变不重写。修补后的 CLI 在请求阶段读取投影档位和时区，保持旧内核启动握手兼容；配置热读不代表运行进程会自动载入新的 CLI 二进制。Codex 槽不写。手改 `kernel.json` 会在下一次投影时被盖掉。
 
 Go worker JSON 透传，不必因人设重建 worker。
 

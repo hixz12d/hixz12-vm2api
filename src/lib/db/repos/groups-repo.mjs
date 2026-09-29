@@ -135,6 +135,28 @@ export class GroupsRepo {
     return this.save(id, patch)
   }
 
+  /** Soft delete keeps historic request-log names; bound keys must be moved first. */
+  remove(id) {
+    id = normalizeGroupId(id)
+    if (id === DEFAULT_GROUP_ID) fail('默认分组不能删除', 'group_default_protected', 409)
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      if (!this.getById(id)) fail('分组不存在', 'group_not_found', 404)
+      const { n } = this.db
+        .prepare('SELECT COUNT(*) AS n FROM api_keys WHERE group_id=? AND deleted_at IS NULL')
+        .get(id)
+      if (n > 0) fail(`还有 ${n} 个 Key 接在这个分组上，请先把它们换到别的分组`, 'group_in_use', 409)
+      const now = new Date().toISOString()
+      this.db.prepare('DELETE FROM account_groups WHERE group_id=?').run(id)
+      this.db.prepare('UPDATE groups SET deleted_at=?,updated_at=? WHERE id=?').run(now, now, id)
+      this.db.exec('COMMIT')
+    } catch (e) {
+      this.db.exec('ROLLBACK')
+      throw e
+    }
+    return { id }
+  }
+
   /** Recheck live membership at selection/reservation/hop; never fall back to all slots. */
   routingScope(record) {
     const id = normalizeGroupId(record.group_id ?? DEFAULT_GROUP_ID)

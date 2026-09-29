@@ -58,11 +58,12 @@ function systemBlockText(block) {
 export function isCliOwnedSystemText(text) {
   const t = String(text || '').trim()
   if (!t) return true
-  if (/^x-anthropic-billing-header/i.test(t)) return true
-  if (t.startsWith('# Environment')) return true
+  if (/^x-anthropic-billing-header:[^\r\n]*$/i.test(t)) return true
+  // Only the gateway's timezone-only block is owned; client Environment
+  // blocks can contain the real cwd/platform and must survive the hop.
+  if (/^# Environment\r?\n[ \t]*(?:-[ \t]*)?Time ?zone:[^\r\n]+$/i.test(t)) return true
   if (t === CLI_IDENTITY || t === CRS_OFFICIAL_SYSTEM || t === CRS_OFFICIAL_AGENT_IDENTITY) return true
   if (t === CRS_COMPACT_IDENTITY || t === CRS_OFFICIAL_CLI_SYSTEM) return true
-  if (t.startsWith('You are Claude Code')) return true
   // Agent / expansion stay as leftover so wrap CLI identity/zero can still carry 官方完整提示词.
   return false
 }
@@ -163,7 +164,7 @@ function stabilizeMessageBudgets(body) {
  * This must not depend on client classification: relays strip the billing
  * block and rewrite the UA, so relayed Claude Code looks third-party.
  */
-export function prepareCliHopBody(canonicalBody, { stream = true, repaired = false } = {}) {
+export function prepareCliHopBody(canonicalBody, { stream = true, repaired = false, dataplane } = {}) {
   let body = officialMessagesBody(canonicalBody, { stream })
   delete body.metadata
   // Wrap CLI (Claude Code) throws a fatal "max_output_tokens" error if response reaches max_tokens.
@@ -175,6 +176,12 @@ export function prepareCliHopBody(canonicalBody, { stream = true, repaired = fal
   const leftover = stripCliOwnedSystem(body.system)
   if (leftover == null) delete body.system
   else body.system = leftover
+  if (dataplane === 'crag') {
+    // Crag joins blocks with one newline before wrapping them in <system>.
+    // Pack the native CLI separator ourselves, and always supply a gateway
+    // block so a caller's first user <system> block cannot be promoted instead.
+    body.system = (Array.isArray(leftover) ? leftover.map(systemBlockText).join('\n\n') : leftover) || '\u200b'
+  }
   body = stabilizeSystemBudget(body)
   body = stabilizeMessageBudgets(body)
   // cli-node sends mid-conversation-system. Only models that reject the role need the lift.
