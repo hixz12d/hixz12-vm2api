@@ -318,7 +318,7 @@ function ClaudeCredentialPanel({
 
       {kind !== 'oauth' ? (
         <div className='space-y-1'>
-          <Label htmlFor='cred-auth-scheme'>上游认证</Label>
+          <Label htmlFor='cred-auth-scheme'>请求头写法</Label>
           <Select
             value={authScheme}
             onValueChange={(v) => setAuthScheme(v as AuthScheme)}
@@ -337,8 +337,8 @@ function ClaudeCredentialPanel({
             </SelectContent>
           </Select>
           <Hint>
-            Claude Console 可用 Authorization: Bearer 调用 Setup Token。兼容上游
-            也可改回 x-api-key。
+            一般保持默认。只有上游要求另一种写法时才改：Authorization: Bearer 或
+            x-api-key。
           </Hint>
         </div>
       ) : null}
@@ -356,8 +356,9 @@ function ClaudeCredentialPanel({
             placeholder='sk-ant-api03-…'
           />
           <Hint>
-            console.anthropic.com 静态密钥，提交后立即从表单清除、不回显。
-            不刷新、不跑官方初装。
+            在 console.anthropic.com 生成的
+            Key。提交后马上从输入框清掉，不会再显示。 这种 Key
+            不需要刷新，也不需要安装官方 Claude Code。
           </Hint>
           <Button
             size='sm'
@@ -365,10 +366,10 @@ function ClaudeCredentialPanel({
             loading={importCred.isPending}
             onClick={() => importCred.mutate()}
           >
-            {importCred.isPending ? '写入中…' : '导入'}
+            {importCred.isPending ? '正在导入…' : '导入'}
           </Button>
           {apiKey.trim() && !CONSOLE_KEY_PREFIX.test(apiKey.trim()) ? (
-            <Hint>需要 sk-ant-api03- 开头的 Console API Key。</Hint>
+            <Hint>格式不对：Console Key 以 sk-ant-api03- 开头。</Hint>
           ) : null}
         </div>
       ) : activeMethod === 'session' ? (
@@ -381,20 +382,20 @@ function ClaudeCredentialPanel({
             value={sessionKey}
             disabled={busy}
             onChange={(e) => setSessionKey(e.target.value)}
-            placeholder='sk-ant-sid01-… 或 access token，不会回显'
+            placeholder='sk-ant-sid01-… 或 access token，输入后不会再显示'
           />
           <Hint>
             {kind === 'setup-token'
               ? !sessionKey.trim()
-                ? 'sessionKey 经槽出口申请完整 OAuth 权限（含 profile、inference、sessions），采集身份并开启账号 Grove（Help improve Claude）。以 Setup Token 模式运行，不跑官方初装；直接粘贴 access token 不增加权限。'
+                ? '粘贴浏览器 Cookie 里的 sessionKey（sk-ant-sid01- 开头），系统会通过这个账号的出口代理换一张完整权限的凭证，并在账号设置里打开 Help improve Claude。按 Setup Token 方式运行，不安装官方 Claude Code。直接贴 access token 也可以，但不会增加权限。'
                 : SESSION_KEY_PREFIX.test(sessionKey.trim())
-                  ? '识别为 sessionKey，将申请完整 OAuth 权限、采集身份并开启账号 Grove，以 Setup Token 模式运行。'
-                  : '识别为 access token，将按 Setup Token 直接落盘，不增加权限。'
+                  ? '认出是 sessionKey：会换一张完整权限的凭证，按 Setup Token 方式运行。'
+                  : '认出是 access token：会按 Setup Token 直接保存，不增加权限。'
               : !sessionKey.trim()
-                ? 'sk-ant-sid 经槽出口申请完整 OAuth 权限、采集身份并开启账号 Grove（Help improve Claude）；其它值按 access token 直接落盘，不增加权限。'
+                ? '粘贴浏览器 Cookie 里的 sessionKey（sk-ant-sid 开头），系统会通过出口代理换一张完整权限的凭证，并在账号设置里打开 Help improve Claude。粘贴 access token 则直接保存，不增加权限。'
                 : SESSION_KEY_PREFIX.test(sessionKey.trim())
-                  ? '识别为 sessionKey，将申请完整 OAuth 权限、采集身份并开启账号 Grove（Help improve Claude）。'
-                  : '识别为 access token，将直接落盘，不增加权限。'}
+                  ? '认出是 sessionKey：会换一张完整权限的凭证。'
+                  : '认出是 access token：会直接保存，不增加权限。'}
           </Hint>
           <Button
             size='sm'
@@ -402,7 +403,7 @@ function ClaudeCredentialPanel({
             loading={importCred.isPending}
             onClick={() => importCred.mutate()}
           >
-            {importCred.isPending ? '换票中…' : '导入'}
+            {importCred.isPending ? '正在导入…' : '导入'}
           </Button>
         </div>
       ) : linkReady ? (
@@ -435,8 +436,8 @@ function ClaudeCredentialPanel({
             {link.authUrl}
           </p>
           <p className='text-xs text-muted-foreground tabular-nums'>
-            剩余有效 {remaining}
-            {proxyHint ? ` · 经 ${proxyHint}` : ''}
+            链接还剩 {remaining} 有效
+            {proxyHint ? ` · 走 ${proxyHint}` : ''}
           </p>
           <div className='space-y-1'>
             <Label htmlFor='cred-code'>授权码</Label>
@@ -446,7 +447,7 @@ function ClaudeCredentialPanel({
               value={code}
               disabled={busy}
               onChange={(e) => setCode(e.target.value)}
-              placeholder='完整授权码，含 # 后半段'
+              placeholder='授权后页面给出的完整授权码，# 后面的部分也要'
             />
           </div>
           <div className='flex flex-wrap items-center gap-2'>
@@ -470,18 +471,18 @@ function ClaudeCredentialPanel({
           </div>
           <Hint>
             {kind === 'setup-token'
-              ? `申请完整 OAuth 权限，换票后采集身份并开启账号 Grove（Help improve Claude）。浏览器须走 ${proxyHint || '同一槽出口'}，授权码须含 # 后半段。以 Setup Token 模式运行，不跑官方初装。`
-              : `浏览器须走 ${proxyHint || '同一槽出口'}，授权码须含 # 后半段。换票后采集身份并开启账号 Grove（Help improve Claude）。`}
+              ? `打开授权页的浏览器要走同一条代理（${proxyHint || '这个账号的出口代理'}），授权码要完整复制，包括 # 后面的部分。按 Setup Token 方式运行，不安装官方 Claude Code。`
+              : `打开授权页的浏览器要走同一条代理（${proxyHint || '这个账号的出口代理'}），授权码要完整复制，包括 # 后面的部分。`}
           </Hint>
         </div>
       ) : (
         <div className='space-y-2'>
           <Hint>
             {kind === 'setup-token'
-              ? `连接形式：生成完整 OAuth 权限授权链接。换票经槽 SOCKS5，浏览器须走 ${proxyHint || '同一槽出口'}；落盘后仍以 Setup Token 模式运行。`
+              ? `会生成一个授权链接。在走同一条代理（${proxyHint || '这个账号的出口代理'}）的浏览器里打开、登录并同意，再把授权码贴回来。导入后按 Setup Token 方式运行。`
               : activeMethod === 'cc'
-                ? '官方 Claude Code 授权页。换票经槽 SOCKS5，打开链接仍是本机浏览器。'
-                : `换票经槽 SOCKS5，浏览器须走 ${proxyHint || '同一 SOCKS5'}。`}
+                ? '会生成官方 Claude Code 的授权链接，在你自己的浏览器里打开就行，换凭证的请求会走这个账号的出口代理。'
+                : `会生成一个授权链接。在走同一条代理（${proxyHint || '这个账号的出口代理'}）的浏览器里打开、登录并同意，再把授权码贴回来。`}
           </Hint>
           <Button
             size='sm'

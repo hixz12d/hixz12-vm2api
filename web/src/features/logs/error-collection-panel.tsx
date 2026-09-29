@@ -65,7 +65,7 @@ function ClassChip({
         type='button'
         onClick={() => onToggleMute(id)}
         className='cursor-pointer opacity-60 transition-opacity hover:opacity-100'
-        title={muted ? '取消屏蔽' : '屏蔽这一类'}
+        title={muted ? '重新统计这类错误' : '不再统计这类错误（日志照常保存）'}
         aria-label={muted ? `取消屏蔽${label}` : `屏蔽${label}`}
       >
         {muted ? <Eye className='size-3' /> : <EyeOff className='size-3' />}
@@ -217,7 +217,7 @@ export function ErrorCollectionPanel({
           type='button'
           className='flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-xs text-muted-foreground transition-colors select-none hover:text-foreground'
         >
-          <span>错误集合</span>
+          <span>错误分类</span>
           {visibleTotal > 0 ? (
             <span className='font-semibold text-foreground tabular-nums'>
               {fmtNum(visibleTotal)}
@@ -269,7 +269,7 @@ export function ErrorCollectionPanel({
             ))}
             {visible.length === 0 && hidden.length > 0 ? (
               <span className='text-xs text-muted-foreground'>
-                最近记录都是已屏蔽错误。点右侧「已屏蔽」里的类可查看明细。
+                最近的错误都属于你设了「不统计」的分类。点右侧「已屏蔽」里的分类可以查看。
               </span>
             ) : null}
           </div>

@@ -7,6 +7,7 @@ import type {
   VmKernelSnapshot,
   VmProxySnap,
 } from '@/types/panel-vm'
+import { ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import {
@@ -23,9 +24,9 @@ import {
   weeklySplitInfo,
 } from '@/lib/fable-status'
 import { usedPctOf } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { compactEmail, isCodexVm } from '@/lib/vm-kind'
 import {
-  accountStatus,
   claudeTier,
   poolStatus,
   restrictionCopy,
@@ -53,9 +54,11 @@ import { PageHeader } from '@/components/page-header'
 import { PlatformChip, SlotIdentity } from '@/components/platform-chip'
 import { QueryGate } from '@/components/query-gate'
 import { StatusMark } from '@/components/status-mark'
+import { LabelStrip, Lamp } from '@/components/switchboard-parts'
 import { dashboardQueryOptions } from '@/features/overview/queries'
 import { proxiesQueryOptions } from '@/features/proxies/queries'
 import { routingQueryOptions } from '@/features/settings/queries'
+import { accountLamp } from '@/features/vm/account-lines'
 import { VmAccountTab } from '@/features/vm/detail-account-tab'
 import { VmOpsTab } from '@/features/vm/detail-ops-tab'
 import { VmOverviewTab } from '@/features/vm/detail-overview-tab'
@@ -80,6 +83,21 @@ function postVm<T = unknown>(id: string, path: string, body?: unknown) {
     method: 'POST',
     body: body === undefined ? undefined : JSON.stringify(body),
   })
+}
+
+/** 操作成功后的白话提示；没列出的路径回落为「已完成」。 */
+const ACTION_DONE: Record<string, string> = {
+  '/start': '已启动，账号开始接请求',
+  '/stop': '已停止，这个账号暂时不接请求',
+  '/activate': '已设为当前调度账号',
+  '/reload': '已重新加载，这个账号用上了最新程序',
+  '/collect-identity': '已重新读取机器特征',
+  '/official-cc-bootstrap': '已开始官方初装，稍后刷新看进度',
+  '/reconcile-fingerprint': '已按官方配置对齐设备特征',
+  '/oauth/refresh': '凭证已刷新',
+  '/wrap-cli/promote': '已把这个账号的内核设为模板',
+  '/wrap-cli/repair': '已重装这个账号的内核',
+  '/allocate-proxy': '已分配一条空闲出口代理',
 }
 
 export function VmDetailPage() {
@@ -133,7 +151,7 @@ export function VmDetailPage() {
         if (probe.ok === true) toast.success(probeOutcome(probe))
         else toast.error(probeOutcome({ ...probe, ok: false }))
       } else {
-        toast.success('已执行 ' + vars.path)
+        toast.success(ACTION_DONE[vars.path] || '已完成')
       }
       await refreshAll()
     },
@@ -204,7 +222,7 @@ export function VmDetailPage() {
     mutationFn: () =>
       api(`/api/panel/vms/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     onSuccess: async () => {
-      toast.success('已删除')
+      toast.success('账号已删除')
       await qc.invalidateQueries({ queryKey: dashboardQueryOptions().queryKey })
       navigate({ to: '/vm' })
     },
@@ -213,7 +231,7 @@ export function VmDetailPage() {
   const resetVm = useMutation({
     mutationFn: () => postVm(id, '/reset', {}),
     onSuccess: async () => {
-      toast.success(`已销毁并重建 ${id}`)
+      toast.success('运行环境已清空重建，请重新导入凭证')
       setConfirmReset(false)
       setResetInput('')
       await refreshAll()
@@ -278,10 +296,15 @@ export function VmDetailPage() {
       : credType === 'setup-token' && !vm.has_refresh
         ? '官方 Setup Token（无 refresh）不能刷新'
         : ''
+  const lamp = accountLamp(vm)
 
   return (
     <PageHeader
-      title={vm.email ? compactEmail(vm.email, 28) : vm.name || vm.id}
+      title={
+        vm.email
+          ? `账号 · ${compactEmail(vm.email, 28)}`
+          : `账号 · ${vm.name || vm.id}`
+      }
       fluid
     >
       <QueryGate
@@ -289,80 +312,114 @@ export function VmDetailPage() {
         error={detail.error}
         skeleton={<VmDetailSkeleton />}
       >
-        <div className='mb-4 flex flex-wrap items-center gap-2'>
-          <Button variant='ghost' size='sm' asChild>
-            <Link to='/vm'>列表</Link>
-          </Button>
-          {(dash.data?.vms || []).length > 1 ? (
-            <Select
-              value={id}
-              onValueChange={(next) =>
-                navigate({ to: '/vm/$id', params: { id: next } })
-              }
-            >
-              <SelectTrigger className='h-8 w-[220px]' aria-label='切换节点'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(dash.data?.vms || []).map((v) => (
-                  <SelectItem key={v.id} value={v.id} className='max-w-[280px]'>
-                    <SlotIdentity vm={v} compact />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null}
-          <PlatformChip vm={vm} />
-          <StatusMark tone={accountStatus(vm)} variant='pill' />
-          {claudeTier(vm).key !== 'none' ? (
-            <StatusMark tone={claudeTier(vm)} variant='pill' />
-          ) : null}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <StatusMark tone={poolStatus(vm)} variant='pill' />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>{restrictionCopy(vm)}</TooltipContent>
-          </Tooltip>
-          <span className='text-sm text-muted-foreground'>
-            {vmRunning(vm) ? '运行' : '停止'}
-          </span>
-          <div className='flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm text-muted-foreground'>
-            调度
-            <SchedulableSwitch {...vmSchedulableProps(vm)} />
+        <div className='mb-4 grid gap-3 rounded-md border border-brass-dim bg-card px-4 py-3'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <Button variant='ghost' size='sm' className='-ms-2' asChild>
+              <Link to='/vm'>
+                <ArrowLeft />
+                全部账号
+              </Link>
+            </Button>
+            {(dash.data?.vms || []).length > 1 ? (
+              <Select
+                value={id}
+                onValueChange={(next) =>
+                  navigate({ to: '/vm/$id', params: { id: next } })
+                }
+              >
+                <SelectTrigger
+                  size='sm'
+                  className='w-[220px]'
+                  aria-label='切换到其他账号'
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(dash.data?.vms || []).map((v) => (
+                    <SelectItem
+                      key={v.id}
+                      value={v.id}
+                      className='max-w-[280px]'
+                    >
+                      <SlotIdentity vm={v} compact />
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
           </div>
-          <div className='ms-auto flex flex-wrap gap-2'>
-            {vmRunning(vm) ? (
+          <div className='flex flex-wrap items-center gap-x-3 gap-y-2'>
+            <Lamp tone={lamp.lamp} className='size-3' />
+            <LabelStrip className='text-sm'>{vm.name || vm.id}</LabelStrip>
+            <PlatformChip vm={vm} />
+            {claudeTier(vm).key !== 'none' ? (
+              <StatusMark tone={claudeTier(vm)} variant='pill' />
+            ) : null}
+            <span
+              className={cn(
+                'text-sm',
+                lamp.lamp === 'red'
+                  ? 'text-lamp-red'
+                  : lamp.lamp === 'amber'
+                    ? 'text-lamp-amber'
+                    : 'text-muted-foreground'
+              )}
+            >
+              {lamp.text}
+            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <StatusMark tone={poolStatus(vm)} variant='pill' />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>调度状态：{restrictionCopy(vm)}</TooltipContent>
+            </Tooltip>
+            <span className='text-sm text-muted-foreground'>
+              运行环境{vmRunning(vm) ? '已启动' : '已停止'}
+            </span>
+            <div className='ms-auto flex flex-wrap items-center gap-2'>
+              <label className='flex items-center gap-1.5 rounded-md border border-input px-2 py-1 text-sm text-muted-foreground'>
+                接请求
+                <SchedulableSwitch {...vmSchedulableProps(vm)} />
+              </label>
               <Button
                 size='sm'
                 variant='outline'
-                onClick={() => act.mutate({ path: '/stop' })}
+                onClick={() => act.mutate({ path: '/probe', body: {} })}
+                loading={act.isPending && act.variables?.path === '/probe'}
+                title='向官方查一次这个账号的额度和凭证是否有效'
               >
-                关机
+                查一次额度
               </Button>
-            ) : (
-              <Button size='sm' onClick={() => act.mutate({ path: '/start' })}>
-                开机
-              </Button>
-            )}
-            <Button
-              size='sm'
-              variant='outline'
-              onClick={() => act.mutate({ path: '/probe', body: {} })}
-            >
-              探测
-            </Button>
+              {vmRunning(vm) ? (
+                <Button
+                  size='sm'
+                  variant='outline'
+                  onClick={() => act.mutate({ path: '/stop' })}
+                  title='停掉运行环境，这个账号不再接请求'
+                >
+                  停止
+                </Button>
+              ) : (
+                <Button
+                  size='sm'
+                  onClick={() => act.mutate({ path: '/start' })}
+                >
+                  启动
+                </Button>
+              )}
+            </div>
           </div>
         </div>
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
-            <TabsTrigger value='overview'>概览</TabsTrigger>
-            <TabsTrigger value='account'>账号</TabsTrigger>
-            <TabsTrigger value='proxy'>代理</TabsTrigger>
-            <TabsTrigger value='test'>测试</TabsTrigger>
-            <TabsTrigger value='ops'>运维</TabsTrigger>
-            <TabsTrigger value='seed'>种子</TabsTrigger>
+            <TabsTrigger value='overview'>状态和用量</TabsTrigger>
+            <TabsTrigger value='account'>凭证</TabsTrigger>
+            <TabsTrigger value='proxy'>出口代理</TabsTrigger>
+            <TabsTrigger value='test'>发条测试</TabsTrigger>
+            <TabsTrigger value='ops'>运行环境</TabsTrigger>
+            <TabsTrigger value='seed'>初装设置</TabsTrigger>
           </TabsList>
           <VmOverviewTab
             kernel={kernel}
@@ -487,7 +544,9 @@ export function VmDetailPage() {
           />
           <TabsContent value='seed' className='space-y-3 pt-4'>
             <p className='text-sm text-muted-foreground'>
-              官方 Claude Code 初装之后的后置覆写。开=删键 · 关=写 1。
+              导入完整 OAuth 凭证后，系统会在这个账号的运行环境里装一遍官方
+              Claude Code。这里决定装完后要不要改掉官方默认的几项配置：开关打开
+              = 删掉那一项，关闭 = 保持官方默认值。一般不用动。
             </p>
             <SeedPolicyCard
               policy={pol}
@@ -500,9 +559,19 @@ export function VmDetailPage() {
         <ConfirmDialog
           open={confirmDel}
           onOpenChange={setConfirmDel}
-          title={`删除 ${id}`}
-          desc='删除槽位不可恢复。'
-          confirmText='删除'
+          title='删除这个账号？'
+          desc={
+            <div className='grid gap-1.5 text-sm'>
+              <p>
+                {vm.name && vm.name !== id ? `${vm.name} · ` : ''}
+                {id}
+              </p>
+              <p className='text-destructive'>
+                无法恢复：运行环境、凭证、出口代理绑定会一起删除，它所在的分组里也会少掉它。
+              </p>
+            </div>
+          }
+          confirmText='删除账号'
           cancelBtnText='取消'
           destructive
           handleConfirm={() => remove.mutate()}
@@ -513,21 +582,25 @@ export function VmDetailPage() {
             setConfirmReset(open)
             if (!open) setResetInput('')
           }}
-          title='重置'
+          title='清空重建运行环境？'
           desc={
             <>
               <p>
                 {vm.name && vm.name !== id ? `${vm.name} · ` : ''}
                 {id}
               </p>
-              <p className='mt-2 text-destructive'>
-                销毁容器与家目录，再按原槽位重新创建。保留
-                ID、名称、内核、时区、代理和种子策略。凭证、指纹、统计和 guest
-                家目录会清空。
-              </p>
+              <div className='mt-2 grid gap-1.5 text-sm'>
+                <p className='text-destructive'>
+                  会清空：凭证、设备特征、用量统计、运行环境里的所有文件。重建后需要重新导入凭证，清掉的内容无法找回。
+                </p>
+                <p>会保留：账号名称、出口代理、时区和其他设置。</p>
+                <p className='text-muted-foreground'>
+                  输入 <b className='text-foreground'>{id}</b> 确认。
+                </p>
+              </div>
             </>
           }
-          confirmText='销毁并重建'
+          confirmText='清空并重建'
           cancelBtnText='取消'
           destructive
           disabled={resetInput.trim() !== id}

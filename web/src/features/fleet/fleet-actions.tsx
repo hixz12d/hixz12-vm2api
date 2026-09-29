@@ -4,6 +4,15 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query'
+import {
+  ChevronDown,
+  Gauge,
+  Layers,
+  Loader2,
+  MoreHorizontal,
+  RefreshCw,
+  RotateCcw,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { wrapSyncKernelFails } from '@/lib/wrap-health'
@@ -11,10 +20,20 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   dashboardQueryOptions,
   usageQueryOptions,
@@ -74,6 +93,7 @@ async function invalidateFleet(qc: QueryClient) {
 export function FleetActions() {
   const qc = useQueryClient()
   const [fleetOpen, setFleetOpen] = useState(false)
+  const [wrapOpen, setWrapOpen] = useState(false)
   const refresh = useMutation({
     mutationFn: () => invalidateFleet(qc),
     onSuccess: () => toast.success('已刷新'),
@@ -96,10 +116,10 @@ export function FleetActions() {
           )
           .join('；')
         toast.error(
-          `探测 ${ok}/${items.length} · 失败 ${failed.length}${reasons ? ` · ${reasons}` : ''}`
+          `额度查询 ${ok}/${items.length} 成功 · ${failed.length} 个失败${reasons ? ` · ${reasons}` : ''}`
         )
       } else {
-        toast.success(`探测完成 ${ok}/${items.length}`)
+        toast.success(`额度已更新（${ok}/${items.length}）`)
       }
       await invalidateFleet(qc)
     },
@@ -116,11 +136,11 @@ export function FleetActions() {
       const total = report.total ?? items.length
       const ok = report.ok_count ?? items.filter((x) => x?.ok).length
       const failed = items.filter((x) => x && !x.ok).map((x) => x.id || '?')
-      const label = report.action === 'collect' ? '仅采集' : '重载并采集'
+      const label = report.action === 'collect' ? '重新读取' : '重新加载并读取'
       if (failed.length) {
-        toast.error(`${label} ${ok}/${total} · 失败 ${failed.join('、')}`)
+        toast.error(`${label} ${ok}/${total} 成功 · 失败：${failed.join('、')}`)
       } else {
-        toast.success(`${label} ${ok}/${total}`)
+        toast.success(`${label}完成（${ok}/${total}）`)
       }
       setFleetOpen(false)
       await invalidateFleet(qc)
@@ -143,22 +163,27 @@ export function FleetActions() {
       const ok = report.ok_count ?? 0
       const kernelFail = wrapSyncKernelFails(report.items)
       if ((report.failed_count || 0) > 0) {
-        toast.error(`kernel 重装 ${ok}/${total}`)
+        toast.error(`内核重装 ${ok}/${total} 成功，有账号失败，去日志页看原因`)
       } else if (kernelFail > 0) {
-        toast.error(`kernel 文件 ${ok}/${total}，进程未起来 ${kernelFail}`)
+        toast.error(
+          `内核已装好 ${ok}/${total}，但有 ${kernelFail} 个没能重新跑起来`
+        )
       } else {
-        toast.success(`kernel 重装 ${ok}/${total}`)
+        toast.success(`内核重装完成（${ok}/${total}）`)
       }
       await invalidateFleet(qc)
     },
     onError: (error: Error) => toast.error(error.message),
   })
 
+  const busy = probe.isPending || fleet.isPending || wrapSync.isPending
+
   return (
-    <div className='hidden items-center gap-2 md:flex'>
+    <div className='flex items-center gap-1.5'>
       <Button
         variant='outline'
         size='sm'
+        className='max-md:hidden'
         onClick={() => refresh.mutate()}
         disabled={refresh.isPending}
         loading={refresh.isPending}
@@ -168,44 +193,91 @@ export function FleetActions() {
       <Button
         variant='outline'
         size='sm'
+        className='max-md:hidden'
         onClick={() => probe.mutate()}
         disabled={probe.isPending}
         loading={probe.isPending}
+        title='向每个账号查一次 5 小时 / 7 天额度还剩多少'
       >
-        额度探测
+        查一遍额度
       </Button>
-      <Button
-        variant='outline'
-        size='sm'
-        onClick={() => setFleetOpen(true)}
-        disabled={fleet.isPending}
-        loading={fleet.isPending}
-      >
-        全槽更新
-      </Button>
-      <Button
-        variant='outline'
-        size='sm'
-        onClick={() => wrapSync.mutate()}
-        disabled={wrapSync.isPending}
-        loading={wrapSync.isPending}
-      >
-        重装当前内核
-      </Button>
+
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant='ghost'
+            size='sm'
+            className='gap-1 px-2'
+            aria-label={busy ? '更多批量操作（有任务在执行）' : '更多批量操作'}
+          >
+            {busy && <Loader2 className='size-3.5 animate-spin' />}
+            <span className='max-md:sr-only'>更多</span>
+            <MoreHorizontal className='md:hidden' />
+            <ChevronDown className='size-3.5 opacity-60 max-md:hidden' />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align='end' className='w-64'>
+          <DropdownMenuItem
+            className='md:hidden'
+            onSelect={() => refresh.mutate()}
+            disabled={refresh.isPending}
+          >
+            <RefreshCw />
+            刷新
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className='md:hidden'
+            onSelect={() => probe.mutate()}
+            disabled={probe.isPending}
+          >
+            <Gauge />
+            查一遍额度
+          </DropdownMenuItem>
+          <DropdownMenuSeparator className='md:hidden' />
+          <DropdownMenuLabel className='text-xs font-normal text-muted-foreground'>
+            对所有账号生效，会先让你确认
+          </DropdownMenuLabel>
+          <DropdownMenuItem
+            onSelect={() => setFleetOpen(true)}
+            disabled={fleet.isPending}
+          >
+            <Layers />
+            全部账号更新…
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            variant='destructive'
+            onSelect={() => setWrapOpen(true)}
+            disabled={wrapSync.isPending}
+          >
+            <RotateCcw />
+            重装内核并重启…
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <Dialog open={fleetOpen} onOpenChange={setFleetOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>全槽更新</DialogTitle>
+            <DialogTitle>全部账号更新</DialogTitle>
+            <DialogDescription>
+              一次处理所有账号的运行环境，同时最多 4
+              个。不会删除任何账号，也不会重启管理台。
+            </DialogDescription>
           </DialogHeader>
-          <p className='text-sm text-muted-foreground'>
-            滚动处理全部槽位的 kernel / slot runtime。不重启控制面，不 docker
-            rm，不启动 Go worker hop。
-          </p>
-          <p className='text-sm text-muted-foreground'>
-            重载会吃到新二进制再采集 guest 特征。KVM
-            槽在适配器未接线时会失败并跳过。
-          </p>
+          <dl className='grid gap-3 text-sm'>
+            <div>
+              <dt className='font-medium'>只重新读取机器特征</dt>
+              <dd className='text-muted-foreground'>
+                不打断任何账号，只是把每台机器的设备信息重新记一遍。
+              </dd>
+            </div>
+            <div>
+              <dt className='font-medium'>重新加载并读取</dt>
+              <dd className='text-muted-foreground'>
+                每个账号换上最新版本的程序再读取特征。加载那几秒里，这个账号上正在跑的请求可能失败。真虚拟机账号如果还没接好会跳过并记为失败。
+              </dd>
+            </div>
+          </dl>
           <DialogFooter>
             <Button
               variant='outline'
@@ -220,18 +292,45 @@ export function FleetActions() {
               loading={fleet.isPending}
               onClick={() => fleet.mutate('collect')}
             >
-              只采集
+              只重新读取
             </Button>
             <Button
               disabled={fleet.isPending}
               loading={fleet.isPending}
               onClick={() => fleet.mutate('roll')}
             >
-              重载并采集
+              重新加载并读取
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={wrapOpen}
+        onOpenChange={setWrapOpen}
+        destructive
+        title='重装内核并重启？'
+        desc={
+          <div className='grid gap-2'>
+            <p>
+              把当前选定的内核重新装到所有账号上，然后逐个重启正在运行的账号的内核。
+            </p>
+            <p>
+              影响：重启那几秒里，这些账号上正在进行的请求会中断，调用方会看到报错。已停止的账号只换文件、不启动。
+            </p>
+            <p>
+              一般只在换了内核版本、或某个账号内核卡住时才需要。可以随时再执行一次，不会丢数据。
+            </p>
+          </div>
+        }
+        cancelBtnText='取消'
+        confirmText='重装并重启'
+        isLoading={wrapSync.isPending}
+        handleConfirm={() => {
+          setWrapOpen(false)
+          wrapSync.mutate()
+        }}
+      />
     </div>
   )
 }

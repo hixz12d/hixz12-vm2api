@@ -32,7 +32,9 @@ export function SaveBar({
             <span className='truncate'>{blockedReason}</span>
           </span>
         ) : (
-          <span className='text-sm text-muted-foreground'>有未保存的更改</span>
+          <span className='text-sm text-muted-foreground'>
+            改动还没保存（Ctrl+S 保存）
+          </span>
         )}
         <div className='flex shrink-0 items-center gap-2'>
           <Button
@@ -41,7 +43,7 @@ export function SaveBar({
             onClick={onDiscard}
             disabled={saving}
           >
-            放弃
+            撤销改动
           </Button>
           <Button
             size='sm'

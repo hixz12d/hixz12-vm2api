@@ -9,8 +9,8 @@ const LAYOUT_COLLAPSIBLE_COOKIE_NAME = 'layout_collapsible'
 const LAYOUT_VARIANT_COOKIE_NAME = 'layout_variant'
 const LAYOUT_COOKIE_MAX_AGE = 60 * 60 * 24 * 7 // 7 days
 
-// Default values
-const DEFAULT_VARIANT = 'inset'
+// Default values：固定面板框架（侧栏贴边、内容区不浮起），只换内容
+const DEFAULT_VARIANT = 'sidebar'
 const DEFAULT_COLLAPSIBLE = 'icon'
 
 type LayoutContextType = {

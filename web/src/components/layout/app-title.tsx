@@ -26,8 +26,10 @@ export function AppTitle({ version }: { version?: string }) {
               onClick={() => setOpenMobile(false)}
               className='grid flex-1 text-start text-sm leading-tight'
             >
-              <span className='truncate font-bold'>vm2api</span>
-              <span className='mt-0.5 text-[10px] font-medium tracking-wide text-sidebar-foreground/55 tabular-nums'>
+              <span className='truncate text-[15px] font-bold tracking-tight dark:text-ivory'>
+                vm2api
+              </span>
+              <span className='mt-0.5 text-[10px] font-medium tracking-wide text-sidebar-foreground/60 tabular-nums'>
                 v{version || '—'}
               </span>
               <BrandPlatforms className='mt-1.5' />

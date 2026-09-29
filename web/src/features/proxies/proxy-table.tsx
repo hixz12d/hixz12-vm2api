@@ -67,7 +67,7 @@ export function ProxyTable(props: ProxyTableProps) {
   return (
     <>
       {rows.length === 0 ? (
-        <EmptyState reason='还没有代理。粘贴 SOCKS5 行再点导入。' />
+        <EmptyState reason='还没有代理。在上面粘贴一条 SOCKS5，点「添加」。' />
       ) : (
         <div className='overflow-x-auto rounded-lg border border-border/60'>
           <div className='min-w-[1060px]'>
@@ -97,7 +97,7 @@ export function ProxyTable(props: ProxyTableProps) {
                 className='min-w-[160px] flex-[1.2] px-1.5'
               />
               <SortHead
-                label='绑定'
+                label='给哪些账号用'
                 col='vm'
                 current={sortKey}
                 dir={sortDir}
@@ -225,12 +225,12 @@ function ProxyRow({
     >
       <div className='field-host min-w-[140px] flex-[1.2] truncate pl-3 text-xs'>
         {item.kind === 'local' || item.scheme === 'local'
-          ? '本地出口'
+          ? '本机直连'
           : `${item.host}:${item.port}`}
         {item.has_auth ? (
           <Lock
             className='ml-1 inline size-3 align-[-1px] text-muted-foreground'
-            aria-label='已配账密'
+            aria-label='已设置账号密码'
           />
         ) : null}
       </div>
@@ -260,7 +260,7 @@ function ProxyRow({
           </>
         ) : (
           <span className='text-muted-foreground'>
-            {item.geo?.error ? '检测失败' : '未检测'}
+            {item.geo?.error ? '查询失败' : '还没查'}
           </span>
         )}
       </div>
@@ -283,7 +283,7 @@ function ProxyRow({
             <button
               type='button'
               aria-label={`解绑 ${id}`}
-              title='解绑'
+              title='解除绑定'
               className='text-muted-foreground hover:text-destructive disabled:opacity-50'
               disabled={busy}
               onClick={() => onUnbind(id)}
@@ -297,8 +297,11 @@ function ProxyRow({
         ) : candidates.length ? (
           <span className='inline-flex items-center gap-1'>
             <Select value={pick} onValueChange={setPick}>
-              <SelectTrigger className='h-7 w-[128px]' aria-label='绑定虚拟机'>
-                <SelectValue placeholder='选槽位' />
+              <SelectTrigger
+                className='h-7 w-[128px]'
+                aria-label='绑给一个账号'
+              >
+                <SelectValue placeholder='绑给账号…' />
               </SelectTrigger>
               <SelectContent>
                 {candidates.map((v) => (
@@ -323,7 +326,7 @@ function ProxyRow({
             </Button>
           </span>
         ) : (
-          <span className='text-muted-foreground'>无可绑槽位</span>
+          <span className='text-muted-foreground'>没有可绑的账号</span>
         )}
       </div>
       <div className='flex min-w-[200px] flex-[1.1] items-center justify-end gap-0.5 pr-3'>
@@ -333,7 +336,7 @@ function ProxyRow({
           className='px-2'
           disabled={busy || copying}
           onClick={onCopy}
-          title='复制含账密的 SOCKS5 地址到剪贴板'
+          title='复制完整代理地址（含账号密码）'
         >
           复制
         </Button>
@@ -352,8 +355,9 @@ function ProxyRow({
           className='px-2'
           disabled={busy}
           onClick={onProbe}
+          title='检查能不能连上'
         >
-          测
+          检查
         </Button>
         <Button
           size='sm'
@@ -361,9 +365,9 @@ function ProxyRow({
           className='px-2'
           disabled={busy}
           onClick={onGeo}
-          title='经这条代理查出口 IP 的国家 / 城市 / 时区'
+          title='查这条代理的出口在哪个国家、城市、时区'
         >
-          地理
+          查位置
         </Button>
         <Button
           size='sm'
@@ -372,7 +376,7 @@ function ProxyRow({
           disabled={busy}
           onClick={onToggleEnabled}
         >
-          {off ? '启用' : '禁用'}
+          {off ? '启用' : '停用'}
         </Button>
         <Button
           size='sm'
@@ -381,7 +385,7 @@ function ProxyRow({
           disabled={busy}
           onClick={onDelete}
         >
-          删
+          删除
         </Button>
       </div>
     </div>

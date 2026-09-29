@@ -24,7 +24,7 @@ export function QuickFiltersBar({
         aria-pressed={kind === 'error'}
       >
         <AlertCircle className='mr-1.5 size-4' />
-        仅错误
+        只看出错的
       </Button>
       <Button
         size='sm'
@@ -33,7 +33,7 @@ export function QuickFiltersBar({
         aria-pressed={mode === 'debug'}
       >
         <Bug className='mr-1.5 size-4' />
-        Debug
+        详细记录（Debug）
       </Button>
     </div>
   )

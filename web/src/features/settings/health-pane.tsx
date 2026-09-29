@@ -58,13 +58,13 @@ export function HealthPane(props: HealthPaneProps) {
         <CardHeader>
           <CardTitle>{title}</CardTitle>
           <p className='text-xs text-muted-foreground'>
-            探测和测试请求在进入调度前就地应答，不占并发、会话席位和粘性。
+            下游发来的连通性测试请求（比如「hi」「ping」）直接由本服务回答，不占用账号额度和并发。
           </p>
         </CardHeader>
         <CardContent className='divide-y'>
           <SettingRow
-            label='拦截预热请求'
-            desc='仅 Claude 模型的 /v1/messages。Claude Code 的 Warmup、标题生成、SUGGESTION MODE、haiku max_tokens=1 连通性检查直接返回模拟响应，不打上游。'
+            label='直接回答预热请求'
+            desc='Claude Code 启动时会发一些预热、生成标题、连通性检查之类的小请求，打开后由本服务直接回答，不消耗账号额度。只对 Claude 模型生效'
           >
             <Switch
               checked={probe.intercept_warmup === true}
@@ -75,8 +75,8 @@ export function HealthPane(props: HealthPaneProps) {
             />
           </SettingRow>
           <SettingRow
-            label='max_tokens 下限'
-            desc='Claude 出站时把过小的 max_tokens 抬到下限，避免探测请求在输出前被截断。未传 max_tokens 的请求不受影响。'
+            label='最少允许输出多少 Token'
+            desc='请求要求的输出上限太小时自动调高到这个值，避免回复还没开始就被截断。没设置输出上限的请求不受影响'
           >
             <div className='flex items-center gap-3'>
               <Input
@@ -131,22 +131,25 @@ function HealthCacheCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>健康缓存</CardTitle>
+        <CardTitle>定时健康检查</CardTitle>
         <p className='text-xs text-muted-foreground'>
-          定时用真实槽位跑一次对话并缓存结果。new-api 渠道测试、sub2api
-          账号测试这类 hi / ping 请求直接回放缓存，覆盖
-          Messages、Chat、Responses 的流式和非流式。
+          定时用真实账号发一次对话，把结果存下来。new-api、Sub2API
+          后台点「测试」时发来的 hi / ping
+          请求，直接用这份结果回答，不再真的调用账号。
         </p>
       </CardHeader>
       <CardContent className='divide-y'>
-        <SettingRow label='启用' desc='关闭时探测请求照常进入调度'>
+        <SettingRow
+          label='开启'
+          desc='关闭后，测试请求会像普通请求一样真的调用账号'
+        >
           <Switch
             checked={probe.enabled === true}
             onCheckedChange={(checked) => onProbeChange({ enabled: checked })}
             aria-label='启用健康缓存'
           />
         </SettingRow>
-        <SettingRow label='探测间隔' desc='秒，30–86400'>
+        <SettingRow label='多久检查一次' desc='单位秒，30–86400'>
           <Input
             className='w-28'
             type='number'
@@ -161,7 +164,10 @@ function HealthCacheCard({
             aria-label='探测间隔'
           />
         </SettingRow>
-        <SettingRow label='缓存有效期' desc='秒，过期后探测请求照常进入调度'>
+        <SettingRow
+          label='结果保留多久'
+          desc='单位秒。过期后测试请求会真的调用账号'
+        >
           <Input
             className='w-28'
             type='number'
@@ -176,7 +182,10 @@ function HealthCacheCard({
             aria-label='缓存有效期'
           />
         </SettingRow>
-        <SettingRow label='Claude 探测模型' desc='在 Claude 槽上跑真实探测'>
+        <SettingRow
+          label='检查 Claude 用的模型'
+          desc='在 Claude 账号上用这个模型做检查'
+        >
           <Input
             className='w-56'
             value={String(real.model ?? 'claude-haiku-4-5')}
@@ -185,8 +194,8 @@ function HealthCacheCard({
           />
         </SettingRow>
         <SettingRow
-          label='GPT 探测模型'
-          desc='在 GPT 槽上跑真实探测。留空则 GPT 模型的探测请求不走缓存。'
+          label='检查 GPT 用的模型'
+          desc='在 GPT 账号上用这个模型做检查。留空则 GPT 的测试请求不走这份结果'
         >
           <Input
             className='w-56'
@@ -198,7 +207,7 @@ function HealthCacheCard({
             aria-label='GPT 探测模型'
           />
         </SettingRow>
-        <SettingRow label='最近快照'>
+        <SettingRow label='最近一次结果'>
           <div className='flex flex-col items-end gap-1 text-xs'>
             <SnapshotLine label='Claude' snap={snaps?.anthropic} />
             <SnapshotLine label='GPT' snap={snaps?.openai} />
@@ -246,18 +255,17 @@ function SignatureRepairCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>签名修复</CardTitle>
+        <CardTitle>自动修复思考签名错误</CardTitle>
       </CardHeader>
       <CardContent className='flex items-start justify-between gap-4'>
         <div className='space-y-1 text-sm text-muted-foreground'>
           <p>
-            上游因思考签名返回 400 时，剥掉思考历史后重试一次，客户端最终看到
-            200。
+            官方因为「思考内容签名不对」返回 400
+            错误时，去掉之前的思考内容再试一次，下游最终拿到正常结果。
           </p>
           <p>
-            关闭则把 400 原样透传 ——
-            探测伪造签名时需要这个真实结果。其它修复（搜索 / 预填 / 工具配对 /
-            schema / 自适应）不受此开关影响。
+            关闭则把 400
+            原样返回给下游（做签名相关测试时需要）。其他自动修复不受这个开关影响。
           </p>
         </div>
         <Switch
@@ -265,7 +273,7 @@ function SignatureRepairCard({
           onCheckedChange={(checked) =>
             onChange({ ...failover, signature_repair: checked })
           }
-          aria-label='签名修复'
+          aria-label='自动修复思考签名错误'
         />
       </CardContent>
     </Card>

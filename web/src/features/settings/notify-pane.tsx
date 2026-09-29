@@ -31,14 +31,14 @@ const EVENT_FIELDS: {
   label: string
   desc: string
 }[] = [
-  { key: 'pool_empty', label: '账号池清空', desc: '可用账号降到 0' },
-  { key: 'pool_low', label: '账号池偏低', desc: '低于最小可用数' },
-  { key: 'pool_recovered', label: '账号池恢复', desc: '从低水位恢复' },
-  { key: 'digest', label: '定时汇报', desc: '按汇报间隔发送摘要' },
-  { key: 'revoked', label: '凭证吊销', desc: '发现新的吊销账号' },
-  { key: 'invalid', label: '凭证失效', desc: '发现新的失效凭证' },
-  { key: 'account_down', label: '账号离线', desc: '单个账号变为不可用' },
-  { key: 'account_up', label: '账号上线', desc: '单个账号恢复可用' },
+  { key: 'pool_empty', label: '没有能用的账号了', desc: '能用的账号降到 0 个' },
+  { key: 'pool_low', label: '能用的账号太少', desc: '低于下面设的最少数量' },
+  { key: 'pool_recovered', label: '账号数量恢复了', desc: '从太少恢复到正常' },
+  { key: 'digest', label: '定时汇报', desc: '按汇报间隔发一份总结' },
+  { key: 'revoked', label: '凭证被吊销', desc: '有账号被官方吊销了授权' },
+  { key: 'invalid', label: '凭证失效', desc: '有账号的凭证过期或无效' },
+  { key: 'account_down', label: '账号不能用了', desc: '某个账号变成不可用' },
+  { key: 'account_up', label: '账号恢复了', desc: '某个账号重新可用' },
 ]
 
 function notifyConfig(value: NotifyConfig | undefined): NotifyConfig {
@@ -113,7 +113,7 @@ export function NotifyPane({
       })
     },
     onSuccess: async () => {
-      toast.success('测试 Telegram 已发送')
+      toast.success('测试消息已发到 Telegram')
       await status.refetch()
     },
     onError: (error: Error) => toast.error(error.message),
@@ -130,7 +130,7 @@ export function NotifyPane({
     <>
       <Card>
         <CardHeader className='flex flex-row items-center justify-between gap-3'>
-          <CardTitle>通知状态</CardTitle>
+          <CardTitle>通知现在的状态</CardTitle>
           <Button
             variant='outline'
             size='sm'
@@ -177,24 +177,27 @@ export function NotifyPane({
 
       <Card>
         <CardHeader>
-          <CardTitle>通知策略</CardTitle>
+          <CardTitle>什么时候提醒</CardTitle>
         </CardHeader>
         <CardContent className='divide-y'>
-          <SettingRow label='启用通知' desc='按账号池状态与事件规则发送通知'>
+          <SettingRow label='开启通知' desc='按下面的规则在出事时提醒你'>
             <Switch
               checked={config.enabled}
               aria-label='启用通知'
               onCheckedChange={(enabled) => patch({ enabled })}
             />
           </SettingRow>
-          <SettingRow label='启动即检查' desc='网关重启后立即检查一次账号池'>
+          <SettingRow
+            label='服务启动后马上检查一次'
+            desc='服务重启后立刻看一遍账号状态'
+          >
             <Switch
               checked={config.run_on_start}
-              aria-label='启动即检查'
+              aria-label='服务启动后马上检查一次'
               onCheckedChange={(run_on_start) => patch({ run_on_start })}
             />
           </SettingRow>
-          <SettingRow label='检查间隔' desc='秒，最小 15'>
+          <SettingRow label='多久检查一次' desc='单位秒，最少 15'>
             <NumberField
               ariaLabel='检查间隔（秒）'
               value={config.interval_sec}
@@ -203,7 +206,10 @@ export function NotifyPane({
               onChange={(interval_sec) => patch({ interval_sec })}
             />
           </SettingRow>
-          <SettingRow label='通知冷却' desc='秒，同类事件的最小发送间隔'>
+          <SettingRow
+            label='同一类提醒至少隔多久'
+            desc='单位秒，避免同一件事反复刷屏'
+          >
             <NumberField
               ariaLabel='通知冷却（秒）'
               value={config.cooldown_sec}
@@ -212,7 +218,7 @@ export function NotifyPane({
               onChange={(cooldown_sec) => patch({ cooldown_sec })}
             />
           </SettingRow>
-          <SettingRow label='汇报间隔' desc='秒，最小 300'>
+          <SettingRow label='定时汇报间隔' desc='单位秒，最少 300'>
             <NumberField
               ariaLabel='汇报间隔（秒）'
               value={config.digest_sec}
@@ -221,7 +227,10 @@ export function NotifyPane({
               onChange={(digest_sec) => patch({ digest_sec })}
             />
           </SettingRow>
-          <SettingRow label='最小可用数' desc='低于该数量触发账号池偏低'>
+          <SettingRow
+            label='能用的账号最少几个'
+            desc='低于这个数就发「能用的账号太少」提醒'
+          >
             <NumberField
               ariaLabel='最小可用数'
               value={config.min_available}
@@ -231,11 +240,11 @@ export function NotifyPane({
             />
           </SettingRow>
           <SettingRow
-            label='控制台地址'
-            desc='通知消息中的回跳链接，留空使用后端地址'
+            label='管理台网址'
+            desc='通知消息里的「打开管理台」链接。留空则自动使用服务地址'
           >
             <Input
-              aria-label='控制台地址'
+              aria-label='管理台网址'
               className='w-full min-w-56 sm:w-80'
               maxLength={200}
               placeholder={location.origin}
@@ -248,7 +257,7 @@ export function NotifyPane({
 
       <Card>
         <CardHeader>
-          <CardTitle>事件</CardTitle>
+          <CardTitle>哪些事要提醒</CardTitle>
         </CardHeader>
         <CardContent className='divide-y'>
           {EVENT_FIELDS.map((field) => (
@@ -276,7 +285,10 @@ export function NotifyPane({
           </Button>
         </CardHeader>
         <CardContent className='divide-y'>
-          <SettingRow label='启用 Telegram' desc='保存后纳入定时通知通道'>
+          <SettingRow
+            label='通过 Telegram 提醒'
+            desc='保存后开始用 Telegram 发提醒'
+          >
             <Switch
               checked={telegram.enabled}
               aria-label='启用 Telegram'
@@ -306,7 +318,10 @@ export function NotifyPane({
               }
             />
           </SettingRow>
-          <SettingRow label='Chat ID' desc='个人 ID 或以 -100 开头的群 ID'>
+          <SettingRow
+            label='Chat ID'
+            desc='发给谁：你的个人 ID，或 -100 开头的群 ID'
+          >
             <Input
               aria-label='Chat ID'
               className='w-full min-w-56 sm:w-80'

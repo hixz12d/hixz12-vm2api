@@ -34,6 +34,7 @@ import { HealthPane } from '@/features/settings/health-pane'
 import { KernelRoutingPane } from '@/features/settings/kernel-routing-pane'
 import { LogsPane } from '@/features/settings/logs-pane'
 import {
+  SETTINGS_TAB_INTROS,
   SETTINGS_TAB_LABELS,
   settingsTabId,
   type SettingsTabId,
@@ -198,7 +199,7 @@ export function SettingsPage() {
 
   return (
     <PageHeader title={VIEW_TITLES.settings}>
-      <div className='md:grid md:grid-cols-[10.5rem_1fr] md:gap-8'>
+      <div className='md:grid md:grid-cols-[13rem_1fr] md:gap-8'>
         <SettingsNav active={tab} />
         <div className={cn('mt-4 min-w-0 md:mt-0', showSaveBar && 'pb-16')}>
           <QueryGate
@@ -210,6 +211,14 @@ export function SettingsPage() {
               key={`${tab}:${discardKey}`}
               className='animate-settings-pane-in space-y-3'
             >
+              <header className='mb-1'>
+                <h3 className='text-lg font-semibold tracking-tight'>
+                  {SETTINGS_TAB_LABELS[tab]}
+                </h3>
+                <p className='mt-1 max-w-[65ch] text-sm text-muted-foreground'>
+                  {SETTINGS_TAB_INTROS[tab]}
+                </p>
+              </header>
               {tab === 'sticky' ? (
                 <StickyPane
                   value={sticky}
@@ -259,12 +268,12 @@ export function SettingsPage() {
                   />
                   <Card>
                     <CardHeader>
-                      <CardTitle>配额</CardTitle>
+                      <CardTitle>额度用完时</CardTitle>
                     </CardHeader>
                     <CardContent className='divide-y'>
                       <SettingRow
-                        label='5h 打满阻断'
-                        desc='过闸写入受限并切号，不拨调度关'
+                        label='5 小时额度用完就换账号'
+                        desc='账号标为「暂时受限」并换别的账号，额度恢复后自动回来'
                       >
                         <Switch
                           checked={quota.block_on_5h !== false}
@@ -277,8 +286,8 @@ export function SettingsPage() {
                         />
                       </SettingRow>
                       <SettingRow
-                        label='7d 打满阻断'
-                        desc='过闸写入受限并切号，不拨调度关'
+                        label='7 天额度用完就换账号'
+                        desc='账号标为「暂时受限」并换别的账号，额度恢复后自动回来'
                       >
                         <Switch
                           checked={quota.block_on_7d !== false}
@@ -290,7 +299,10 @@ export function SettingsPage() {
                           }
                         />
                       </SettingRow>
-                      <SettingRow label='周仓拆分'>
+                      <SettingRow
+                        label='7 天额度分成两半用'
+                        desc='Max 账号的 7 天额度一半留给 Fable 模型，一半给其他模型'
+                      >
                         <Switch
                           checked={
                             !!(

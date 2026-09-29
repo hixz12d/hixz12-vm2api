@@ -58,7 +58,7 @@ export function AboutPane() {
         toast.error(error.message)
         if (command) {
           copyText(command)
-            .then(() => toast.success('已复制宿主机命令'))
+            .then(() => toast.success('升级命令已复制'))
             .catch(() => undefined)
         }
         return
@@ -67,7 +67,7 @@ export function AboutPane() {
         error instanceof TypeError ||
         /failed to fetch|network|load failed/i.test(error.message)
       ) {
-        toast.success('控制面可能正在重启，稍后刷新本页')
+        toast.success('服务正在重启，稍等一会儿再刷新本页')
         return
       }
       toast.error(error.message)
@@ -86,7 +86,7 @@ export function AboutPane() {
     <div className='space-y-3'>
       <Card>
         <CardHeader className='flex flex-row items-center justify-between space-y-0'>
-          <CardTitle>版本</CardTitle>
+          <CardTitle>当前版本</CardTitle>
           <Button
             size='sm'
             variant='outline'
@@ -110,7 +110,7 @@ export function AboutPane() {
           ) : null}
           <dl className='grid gap-2 text-sm sm:grid-cols-2'>
             <div>
-              <dt className='text-muted-foreground'>当前</dt>
+              <dt className='text-muted-foreground'>正在用</dt>
               <dd className='font-mono'>{data?.current_tag || '—'}</dd>
             </div>
             <div>
@@ -132,10 +132,10 @@ export function AboutPane() {
           ) : null}
           {data?.needs_wrap_cli_sync ? (
             <Alert>
-              <AlertTitle>需要重装槽内 kernel</AlertTitle>
+              <AlertTitle>升级后还要重装账号里的内核</AlertTitle>
               <AlertDescription>
-                此跨度 changelog 提到 wrap-cli/sync。控制面升完后到内核页重装
-                kernel，或给 install.sh 加 --sync-wrap。
+                这次更新涉及内核。升级完管理台后，到「高级 →
+                内核」页重装一次，或者升级命令加上 --sync-wrap。
               </AlertDescription>
             </Alert>
           ) : null}
@@ -159,8 +159,7 @@ export function AboutPane() {
         </CardHeader>
         <CardContent className='space-y-3'>
           <p className='text-sm text-muted-foreground'>
-            在宿主机执行。保留 .env / vms / data，不 docker rm
-            槽。控制面源码在镜像里，真正升级走宿主机 git tag。
+            在服务器上执行下面的命令升级。会保留配置（.env）、账号数据（vms、data），不会删除任何账号的运行环境。
           </p>
           <pre className='overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs'>
             {data?.upgrade_command ||
@@ -195,7 +194,7 @@ export function AboutPane() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Changelog</CardTitle>
+          <CardTitle>更新内容</CardTitle>
         </CardHeader>
         <CardContent className='space-y-4'>
           {entries.length === 0 ? (
@@ -214,7 +213,7 @@ export function AboutPane() {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`升级到 ${data?.latest_tag || ''}？`}
-        desc='会重建控制面容器，面板短暂不可用。不删除槽位，不改 .env / vms / data。'
+        desc='会重建管理服务的容器，这段时间管理台和对外接口都会暂时打不开。不会删除账号，也不改配置和数据。如果你用的是双实例轮换部署，请按部署文档手动升级，不要点这里。'
         confirmText='开始升级'
         cancelBtnText='取消'
         destructive

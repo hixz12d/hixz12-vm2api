@@ -18,16 +18,19 @@ export function StickyPane({ value: sticky, onChange }: StickyPaneProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>粘性</CardTitle>
+        <CardTitle>固定账号</CardTitle>
       </CardHeader>
       <CardContent className='divide-y'>
-        <SettingRow label='启用' desc='同一来源的请求在 TTL 内固定回同一账号'>
+        <SettingRow
+          label='开启'
+          desc='同一段对话的请求在保持时间内交给同一个账号'
+        >
           <Switch
             checked={sticky.enabled !== false}
             onCheckedChange={(enabled) => onChange({ ...sticky, enabled })}
           />
         </SettingRow>
-        <SettingRow label='模式'>
+        <SettingRow label='按什么认定「同一段对话」' desc='一般选「对话」'>
           <Select
             value={String(sticky.mode || 'conversation')}
             onValueChange={(mode) => onChange({ ...sticky, mode })}
@@ -36,15 +39,15 @@ export function StickyPane({ value: sticky, onChange }: StickyPaneProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value='conversation'>会话</SelectItem>
-              <SelectItem value='session'>登录态</SelectItem>
-              <SelectItem value='ip'>IP</SelectItem>
+              <SelectItem value='conversation'>对话</SelectItem>
+              <SelectItem value='session'>登录身份</SelectItem>
+              <SelectItem value='ip'>来源 IP</SelectItem>
             </SelectContent>
           </Select>
         </SettingRow>
         <SettingRow
-          label='出站 session'
-          desc='重建：入站 session 只作调度身份，出站由网关赋值。透传会把客户端 session 原样发给上游。'
+          label='发给官方的会话编号'
+          desc='重新生成（推荐）：下游传来的会话编号只用来挑账号，发给官方时换成本服务生成的。原样转发：把下游的会话编号直接发给官方。'
         >
           <Select
             value={String(sticky.outbound_session || 'rebuild')}
@@ -56,12 +59,15 @@ export function StickyPane({ value: sticky, onChange }: StickyPaneProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value='rebuild'>重建</SelectItem>
-              <SelectItem value='passthrough'>透传</SelectItem>
+              <SelectItem value='rebuild'>重新生成</SelectItem>
+              <SelectItem value='passthrough'>原样转发</SelectItem>
             </SelectContent>
           </Select>
         </SettingRow>
-        <SettingRow label='TTL' desc='粘性绑定的存活时长，到期重新选号'>
+        <SettingRow
+          label='保持多久'
+          desc='超过这个时间没有新请求，就重新挑账号'
+        >
           <Select
             value={String(sticky.ttl_seconds ?? 86400)}
             onValueChange={(ttlSeconds) =>

@@ -4,7 +4,6 @@ import { guestIdentityState } from '@/lib/guest-identity'
 import { isCodexVm } from '@/lib/vm-kind'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
 import { TabsContent } from '@/components/ui/tabs'
 import {
   Tooltip,
@@ -51,10 +50,10 @@ export function VmOpsTab(props: VmOpsTabProps) {
     <TabsContent value='ops' className='space-y-3 pt-4'>
       <Card>
         <CardHeader className='pb-2'>
-          <CardTitle className='text-sm'>容器</CardTitle>
+          <CardTitle className='text-sm'>运行环境</CardTitle>
         </CardHeader>
         <CardContent className='divide-y pt-0'>
-          <Field label='容器'>
+          <Field label='环境编号'>
             <span className='font-mono text-xs'>
               {String(
                 (vm.runtime as Record<string, unknown> | undefined)
@@ -64,10 +63,10 @@ export function VmOpsTab(props: VmOpsTabProps) {
               )}
             </span>
           </Field>
-          <Field label='guest'>
+          <Field label='机器名'>
             <span className='font-mono text-xs'>{guest.hostname}</span>
           </Field>
-          <Field label='特征采集'>
+          <Field label='设备特征'>
             <span>{guest.status}</span>
             {guest.collectedAt ? (
               <time
@@ -87,108 +86,150 @@ export function VmOpsTab(props: VmOpsTabProps) {
         onSave={onTimezoneSave}
         onFollowProxy={onTimezoneFollowProxy}
       />
-      <div className='flex flex-wrap gap-2'>
-        <Button
-          size='sm'
-          variant='outline'
+      <OpsGroup title='常用' desc='账号出问题时先试这里，都不会删除数据。'>
+        <OpsButton
+          label='刷新凭证'
+          hint={
+            refreshBlocked ||
+            '用刷新令牌换一张新的访问凭证。凭证快过期或刚报错时用。'
+          }
+          disabled={!canRefresh}
+          onClick={() => onAction('/oauth/refresh', {})}
+        />
+        <OpsButton
+          label={gpt ? '重新加载 Codex 程序' : '重新加载程序'}
+          hint='让这个账号换上最新版本的程序。加载的几秒里，它正在处理的请求可能失败。'
+          onClick={() => onAction('/reload')}
+        />
+        <OpsButton
+          label='设为当前调度账号'
+          hint='手动指定下一批请求优先用这个账号。'
           onClick={() => onAction('/activate')}
-        >
-          设为活跃
-        </Button>
-        <Button size='sm' variant='outline' onClick={() => onAction('/reload')}>
-          {gpt ? '重载 Codex kernel' : '重载 worker'}
-        </Button>
-        <Button
-          size='sm'
-          variant='outline'
+        />
+      </OpsGroup>
+
+      <OpsGroup
+        title='设备特征'
+        desc='让这台机器看起来和官方客户端一致。一般导入凭证时会自动做好，只有提示特征缺失时才需要手动点。'
+      >
+        <OpsButton
+          label='重新读取机器特征'
+          hint='重新读取这台机器的语言、时区、机器编号等信息。'
           onClick={() => onAction('/collect-identity')}
-        >
-          采集特征
-        </Button>
+        />
         {gpt ? null : (
           <>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button
-                    size='sm'
-                    variant='outline'
-                    disabled={!officialCc}
-                    onClick={() =>
-                      onAction('/official-cc-bootstrap', {
-                        force: true,
-                        manual: true,
-                      })
-                    }
-                  >
-                    执行官方初装
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              {!officialCc ? (
-                <TooltipContent>
-                  官方初装只支持完整 OAuth 凭证，当前槽为{' '}
-                  {credTypeLabel(credType)}
-                </TooltipContent>
-              ) : null}
-            </Tooltip>
-            <Button
-              size='sm'
-              variant='outline'
+            <OpsButton
+              label='重跑官方初装'
+              hint={
+                officialCc
+                  ? '在运行环境里重新装一遍官方 Claude Code。'
+                  : `官方初装只支持完整 OAuth 凭证，这个账号是 ${credTypeLabel(credType)}。`
+              }
+              disabled={!officialCc}
+              onClick={() =>
+                onAction('/official-cc-bootstrap', {
+                  force: true,
+                  manual: true,
+                })
+              }
+            />
+            <OpsButton
+              label='按官方配置对齐特征'
+              hint='用官方客户端生成的配置文件校准设备特征。'
               onClick={() => onAction('/reconcile-fingerprint', {})}
-            >
-              对齐官方指纹
-            </Button>
+            />
           </>
         )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span>
-              <Button
-                size='sm'
-                variant='outline'
-                disabled={!canRefresh}
-                onClick={() => onAction('/oauth/refresh', {})}
-              >
-                刷新凭证
-              </Button>
-            </span>
-          </TooltipTrigger>
-          {refreshBlocked ? (
-            <TooltipContent>{refreshBlocked}</TooltipContent>
-          ) : null}
-        </Tooltip>
-      </div>
+      </OpsGroup>
+
       {gpt ? null : (
-        <>
-          <Separator />
-          <div className='flex flex-wrap gap-2'>
-            <Button
-              size='sm'
-              variant='outline'
-              onClick={() => onAction('/wrap-cli/promote')}
-            >
-              晋升母本
-            </Button>
-            <Button
-              size='sm'
-              variant='outline'
-              onClick={() => onAction('/wrap-cli/repair')}
-            >
-              重装 kernel
-            </Button>
-          </div>
-        </>
+        <OpsGroup
+          title='内核'
+          desc='内核是账号里真正发请求的程序。只在内核报错或你要换版本时用。'
+        >
+          <OpsButton
+            label='重装这个账号的内核'
+            hint='重新装一遍这个账号的内核文件。'
+            onClick={() => onAction('/wrap-cli/repair')}
+          />
+          <OpsButton
+            label='把这个账号的内核设为模板'
+            hint='以后给其他账号安装内核时，照这个账号的版本来装。不会复制凭证和出口代理。'
+            onClick={() => onAction('/wrap-cli/promote')}
+          />
+        </OpsGroup>
       )}
-      <Separator />
-      <div className='flex flex-wrap gap-2'>
+
+      <OpsGroup
+        title='危险操作'
+        desc='会清掉数据，点了会再让你输入账号编号确认。'
+        danger
+      >
         <Button size='sm' variant='outline' onClick={onReset}>
-          重置
+          清空重建运行环境…
         </Button>
         <Button size='sm' variant='destructive' onClick={onDelete}>
-          删除此槽位
+          删除这个账号…
         </Button>
-      </div>
+      </OpsGroup>
     </TabsContent>
+  )
+}
+
+function OpsGroup({
+  title,
+  desc,
+  danger,
+  children,
+}: {
+  title: string
+  desc: string
+  danger?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <section
+      className={
+        danger
+          ? 'rounded-md border border-destructive/40 px-4 py-3'
+          : 'rounded-md border border-brass-dim px-4 py-3'
+      }
+    >
+      <h3 className='text-sm font-semibold'>{title}</h3>
+      <p className='mt-0.5 text-xs text-muted-foreground'>{desc}</p>
+      <div className='mt-3 flex flex-wrap gap-2'>{children}</div>
+    </section>
+  )
+}
+
+/** 带说明的操作按钮：悬停或聚焦时说清楚点了会怎样。 */
+function OpsButton({
+  label,
+  hint,
+  disabled,
+  onClick,
+}: {
+  label: string
+  hint: string
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span>
+          <Button
+            size='sm'
+            variant='outline'
+            disabled={disabled}
+            onClick={onClick}
+          >
+            {label}
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className='max-w-72'>{hint}</TooltipContent>
+    </Tooltip>
   )
 }

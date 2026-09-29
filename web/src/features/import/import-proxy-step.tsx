@@ -94,7 +94,7 @@ export function ImportProxyStep({ vmId }: { vmId: string }) {
         body: JSON.stringify({ vm_id: vmId }),
       }),
     onSuccess: async () => {
-      toast.success('已绑到本槽')
+      toast.success('代理已绑好')
       await refresh()
     },
     onError: (error: Error) => toast.error(importErrorMessage(error)),
@@ -109,7 +109,7 @@ export function ImportProxyStep({ vmId }: { vmId: string }) {
     const text = (el?.value || '').trim()
     if (!text) return true
     if (!vmId) {
-      toast.error('请先选择空槽')
+      toast.error('请先选一个账号位置')
       return false
     }
     setBusy(true)
@@ -120,7 +120,7 @@ export function ImportProxyStep({ vmId }: { vmId: string }) {
       })
       if (el) el.value = ''
       if (d.bound?.id || d.bound?.bound_vm_id) {
-        toast.success('已写入 SOCKS5 并绑到本槽')
+        toast.success('新代理已添加并绑好')
         await refresh()
         return true
       }
@@ -142,11 +142,11 @@ export function ImportProxyStep({ vmId }: { vmId: string }) {
             body: JSON.stringify({ vm_id: vmId }),
           }
         )
-        toast.success('该条已在池中，已绑到本槽')
+        toast.success('这条代理已经存在，直接绑好了')
         await refresh()
         return true
       }
-      toast.error('未能绑到本槽')
+      toast.error('代理没能绑上，请换一条再试')
       return false
     } catch (error) {
       toast.error(importErrorMessage(error as Error))
@@ -174,9 +174,9 @@ export function ImportProxyStep({ vmId }: { vmId: string }) {
               placeholder={
                 proxies.length
                   ? bound
-                    ? '已绑定，可改选'
-                    : '选择 SOCKS5'
-                  : '代理池为空'
+                    ? '已绑好，可以改选'
+                    : '选一条代理'
+                  : '还没有代理，在下面粘贴一条'
               }
             />
           </SelectTrigger>
@@ -193,7 +193,7 @@ export function ImportProxyStep({ vmId }: { vmId: string }) {
                   disabled={!here && (full || bad)}
                 >
                   {proxyOptionLabel(p, poolLimit)}
-                  {full ? ' · 已绑满' : ''}
+                  {full ? ' · 已满，不能再绑' : ''}
                 </SelectItem>
               )
             })}

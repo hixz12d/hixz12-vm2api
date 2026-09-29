@@ -90,16 +90,16 @@ export function VmAccountTab(props: VmAccountTabProps) {
       <div className='grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]'>
         <Card>
           <CardHeader className='pb-2'>
-            <CardTitle className='text-sm'>导入凭证</CardTitle>
+            <CardTitle className='text-sm'>导入或更换凭证</CardTitle>
           </CardHeader>
           <CardContent className='pt-0'>
             {blocked ? (
               <div className='space-y-3'>
                 <p className='text-sm text-muted-foreground'>
-                  该槽需要已绑定且健康的 SOCKS5 才能换票。
+                  要先给这个账号绑一条能用的出口代理，才能导入凭证。
                 </p>
                 <Button size='sm' onClick={onNeedProxy}>
-                  去绑定代理
+                  去绑出口代理
                 </Button>
               </div>
             ) : gpt ? (
@@ -120,13 +120,13 @@ export function VmAccountTab(props: VmAccountTabProps) {
         <div className='space-y-3'>
           <Card>
             <CardHeader className='pb-2'>
-              <CardTitle className='text-sm'>账号</CardTitle>
+              <CardTitle className='text-sm'>当前凭证</CardTitle>
             </CardHeader>
             <CardContent className='divide-y pt-0'>
-              <Field label='类型' compact>
+              <Field label='凭证类型' compact>
                 {credType === 'none' ? '—' : credTypeLabel(credType)}
               </Field>
-              <Field label='状态' compact>
+              <Field label='有效期' compact>
                 <StatusMark tone={credExpiry(vm)} variant='pill' />
               </Field>
               {claudeTier(vm).key !== 'none' ? (
@@ -144,19 +144,19 @@ export function VmAccountTab(props: VmAccountTabProps) {
                 </Field>
               ) : (
                 <>
-                  <Field label='Access' compact>
+                  <Field label='访问令牌' compact>
                     {vm.has_token ? '已绑定' : '—'}
                   </Field>
-                  <Field label='Refresh' compact>
+                  <Field label='刷新令牌' compact>
                     {vm.has_refresh ? '已绑定' : '—'}
                   </Field>
-                  <Field label='过期' compact>
+                  <Field label='过期时间' compact>
                     {fmtExpiresAt(vm.expires_at)}
                   </Field>
                 </>
               )}
               {gpt ? null : (
-                <Field label='上游认证' compact>
+                <Field label='请求头写法' compact>
                   <div className='flex items-center gap-1'>
                     <span>{authSchemeLabel(authSchemeOf(vm))}</span>
                     {vm.auth_scheme ? null : (
@@ -168,7 +168,7 @@ export function VmAccountTab(props: VmAccountTabProps) {
                   </div>
                 </Field>
               )}
-              <Field label={gpt ? 'ChatGPT 账号' : 'UUID'} compact>
+              <Field label={gpt ? 'ChatGPT 账号' : '账号编号'} compact>
                 {gpt ? (
                   <span className='text-sm'>
                     {String(
@@ -181,13 +181,13 @@ export function VmAccountTab(props: VmAccountTabProps) {
                   </span>
                 )}
               </Field>
-              <Field label='Org' compact>
+              <Field label='组织编号' compact>
                 <span className='font-mono text-xs'>
                   {String(vm.org_uuid || '—')}
                 </span>
               </Field>
               {gpt ? null : (
-                <Field label='来源' compact>
+                <Field label='凭证来源' compact>
                   {String(vm.oauth_source || '—')}
                 </Field>
               )}
@@ -224,14 +224,14 @@ export function VmAccountTab(props: VmAccountTabProps) {
           <div className='grid grid-cols-2 gap-3'>
             <Card>
               <CardHeader className='pb-2'>
-                <CardTitle className='text-sm'>探测</CardTitle>
+                <CardTitle className='text-sm'>最近一次额度查询</CardTitle>
               </CardHeader>
               <CardContent className='divide-y pt-0'>
                 <Field label='时间' compact>
                   <span className='font-mono text-xs'>
                     {probe.at || probe.probed_at
                       ? fmtExpiresAt(probe.at || probe.probed_at)
-                      : '未探测'}
+                      : '还没查过'}
                   </span>
                 </Field>
                 <Field label='来源' compact>
@@ -249,7 +249,7 @@ export function VmAccountTab(props: VmAccountTabProps) {
                   </Field>
                 ) : null}
                 {gpt ? null : (
-                  <Field label='超额' compact>
+                  <Field label='超额用量' compact>
                     {extraUsageText(acc.extra_usage ?? vm.extra_usage)}
                   </Field>
                 )}
@@ -257,7 +257,7 @@ export function VmAccountTab(props: VmAccountTabProps) {
             </Card>
             <Card>
               <CardHeader className='pb-2'>
-                <CardTitle className='text-sm'>今日</CardTitle>
+                <CardTitle className='text-sm'>今天</CardTitle>
               </CardHeader>
               <CardContent className='space-y-2 pt-0'>
                 <div className='grid grid-cols-3 gap-2 text-center'>
@@ -270,13 +270,17 @@ export function VmAccountTab(props: VmAccountTabProps) {
                     </div>
                   </div>
                   <div>
-                    <div className='text-[11px] text-muted-foreground'>入</div>
+                    <div className='text-[11px] text-muted-foreground'>
+                      输入 Token
+                    </div>
                     <div className='text-sm font-semibold tabular-nums'>
                       {fmtNum(acc.tokens_in ?? vm.tokens_in)}
                     </div>
                   </div>
                   <div>
-                    <div className='text-[11px] text-muted-foreground'>出</div>
+                    <div className='text-[11px] text-muted-foreground'>
+                      输出 Token
+                    </div>
                     <div className='text-sm font-semibold tabular-nums'>
                       {fmtNum(acc.tokens_out ?? vm.tokens_out)}
                     </div>
@@ -286,7 +290,7 @@ export function VmAccountTab(props: VmAccountTabProps) {
                   label='缓存命中'
                   value={todayHit ?? 0}
                   kind='remain'
-                  hint={`${fmtNum(todayReadCache)} 读 / ${fmtNum(todayWriteCache)} 写`}
+                  hint={`${fmtNum(todayReadCache)} 读缓存 / ${fmtNum(todayWriteCache)} 写缓存`}
                 />
                 {gpt ? null : (
                   <Meter

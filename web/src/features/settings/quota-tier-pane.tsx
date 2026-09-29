@@ -67,13 +67,12 @@ export function QuotaTierPane({
   return (
     <Card>
       <CardHeader className='pb-2'>
-        <CardTitle className='text-sm'>分档配额</CardTitle>
+        <CardTitle className='text-sm'>按套餐设置上限</CardTitle>
       </CardHeader>
       <CardContent className='space-y-4'>
         <p className='text-xs text-muted-foreground'>
-          只编当前档的 <code>tiers.*</code>。过 5h/7d
-          硬闸写入受限并切号，不是调度关。 会话满员仍拒新请求，胶囊写「5h 限制 /
-          会话已满」。
+          Pro 和 Max
+          账号分开设置。用到额度上限后，账号标为「暂时受限」并换别的账号；对话数满了会拒绝新请求。
         </p>
 
         <Tabs value={tier} onValueChange={(v) => setTier(v as QuotaTierKey)}>
@@ -89,7 +88,7 @@ export function QuotaTierPane({
 
         <div className='grid gap-4 sm:grid-cols-2'>
           <div className='space-y-1.5'>
-            <Label htmlFor='tier-5h'>5h 硬闸</Label>
+            <Label htmlFor='tier-5h'>5 小时额度用到多少就停</Label>
             <Select
               value={String(limit5h)}
               onValueChange={(v) => set({ limit_5h: Number(v) / 100 })}
@@ -108,7 +107,7 @@ export function QuotaTierPane({
           </div>
 
           <div className='space-y-1.5'>
-            <Label htmlFor='tier-7d'>7d 硬闸</Label>
+            <Label htmlFor='tier-7d'>7 天额度用到多少就停</Label>
             <Select
               value={String(limit7d)}
               onValueChange={(v) => set({ limit_7d: Number(v) / 100 })}
@@ -127,7 +126,7 @@ export function QuotaTierPane({
           </div>
 
           <div className='space-y-1.5'>
-            <Label htmlFor='tier-conc'>账号并发</Label>
+            <Label htmlFor='tier-conc'>每个账号同时处理几个请求</Label>
             <Select
               value={String(conc)}
               onValueChange={(v) => set({ max_concurrency: Number(v) })}
@@ -146,7 +145,7 @@ export function QuotaTierPane({
           </div>
 
           <div className='space-y-1.5'>
-            <Label htmlFor='tier-rpm'>账号 RPM</Label>
+            <Label htmlFor='tier-rpm'>每个账号每分钟最多几个请求</Label>
             <Select
               value={String(rpm)}
               onValueChange={(v) => set({ max_rpm: Number(v) })}
@@ -165,7 +164,7 @@ export function QuotaTierPane({
           </div>
 
           <div className='space-y-1.5'>
-            <Label htmlFor='tier-sessions'>最大会话</Label>
+            <Label htmlFor='tier-sessions'>每个账号最多几段对话</Label>
             <Select
               value={String(sessions)}
               onValueChange={(v) => set({ max_sessions: Number(v) })}
@@ -184,7 +183,7 @@ export function QuotaTierPane({
           </div>
 
           <div className='space-y-1.5'>
-            <Label htmlFor='tier-idle'>会话空闲</Label>
+            <Label htmlFor='tier-idle'>对话多久没动算结束</Label>
             <Select
               value={String(idle)}
               onValueChange={(v) => set({ session_idle_min: Number(v) })}
@@ -204,8 +203,8 @@ export function QuotaTierPane({
         </div>
 
         <p className='text-xs text-muted-foreground'>
-          RPM 满了排队等窗口，不切号。过 5h/7d 闸写入受限并切号，不是调度关。 0
-          为不限制。机器页改过并发 / RPM 的槽位保持手动值。
+          每分钟请求数满了会排队等一会儿，不换账号。0
+          表示不限。在账号详情里单独改过的账号，保留它自己的设置。
         </p>
       </CardContent>
     </Card>

@@ -47,11 +47,22 @@ function optLabel(kind: 'conc' | 'quota' | 'rpm' | 'days', n: number): string {
   return String(n)
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string
+  hint?: string
+  children: ReactNode
+}) {
   return (
     <div className='space-y-1'>
       <Label>{label}</Label>
       {children}
+      {hint ? (
+        <p className='text-[11px] text-muted-foreground'>{hint}</p>
+      ) : null}
     </div>
   )
 }
@@ -150,8 +161,8 @@ export function KeyLimitsDialog({
         <DialogHeader>
           <DialogTitle>
             {mode === 'create'
-              ? '生成密钥'
-              : `并发控制 · ${initial?.name || initial?.id || ''}`}
+              ? '新建 Key'
+              : `Key 设置 · ${initial?.name || initial?.id || ''}`}
           </DialogTitle>
         </DialogHeader>
         {mode === 'edit' && initial ? (
@@ -159,22 +170,22 @@ export function KeyLimitsDialog({
             <span className='font-mono'>
               {initial.key_prefix || initial.prefix || initial.id}
             </span>
-            {initial.inflight ? ` · 进行中 ${initial.inflight}` : ''}
+            {initial.inflight ? ` · ${initial.inflight} 个请求进行中` : ''}
           </p>
         ) : null}
         <div className='grid gap-3 sm:grid-cols-2'>
           {mode === 'create' ? (
-            <Field label='名称'>
+            <Field label='名称' hint='自己认得出就行，例如 sub2api-max'>
               <Input
                 value={draft.name}
-                placeholder='client-a'
+                placeholder='sub2api-max'
                 onChange={(e) =>
                   setDraft((d) => ({ ...d, name: e.target.value }))
                 }
               />
             </Field>
           ) : null}
-          <Field label='分类'>
+          <Field label='类型' hint='一般选「走账号分组」'>
             <Select
               value={draft.category}
               onValueChange={(v) =>
@@ -189,12 +200,12 @@ export function KeyLimitsDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value='oauth'>OAuth 槽位</SelectItem>
-                <SelectItem value='api'>API 直连</SelectItem>
+                <SelectItem value='oauth'>走账号分组</SelectItem>
+                <SelectItem value='api'>API 直连（不走分组）</SelectItem>
               </SelectContent>
             </Select>
           </Field>
-          <Field label='账号分组'>
+          <Field label='账号分组' hint='这个 Key 只会用这个分组里的账号'>
             <Select
               value={String(draft.group_id ?? 1)}
               disabled={!canAssignGroup || draft.category === 'api'}
@@ -223,7 +234,7 @@ export function KeyLimitsDialog({
               </SelectContent>
             </Select>
           </Field>
-          <Field label='并发'>
+          <Field label='同时请求数' hint='最多同时处理几个请求'>
             <NumSelect
               kind='conc'
               value={draft.max_concurrency}
@@ -231,7 +242,7 @@ export function KeyLimitsDialog({
               onChange={(n) => setDraft((d) => ({ ...d, max_concurrency: n }))}
             />
           </Field>
-          <Field label='请求额度'>
+          <Field label='次数上限' hint='总共最多调用多少次'>
             <NumSelect
               kind='quota'
               value={draft.quota_requests}
@@ -239,7 +250,7 @@ export function KeyLimitsDialog({
               onChange={(n) => setDraft((d) => ({ ...d, quota_requests: n }))}
             />
           </Field>
-          <Field label='USD 额度'>
+          <Field label='金额上限（美元）' hint='0 表示不限'>
             <Input
               type='number'
               min={0}
@@ -250,7 +261,7 @@ export function KeyLimitsDialog({
               }
             />
           </Field>
-          <Field label='RPM'>
+          <Field label='每分钟请求数' hint='每分钟最多几个请求'>
             <NumSelect
               kind='rpm'
               value={draft.rpm}
@@ -259,7 +270,7 @@ export function KeyLimitsDialog({
             />
           </Field>
           {mode === 'create' ? (
-            <Field label='有效期'>
+            <Field label='有效期' hint='到期后自动失效'>
               <NumSelect
                 kind='days'
                 value={draft.expires_in_days}
@@ -290,7 +301,7 @@ export function KeyLimitsDialog({
             }
             loading={pending}
           >
-            {mode === 'create' ? '生成' : '保存'}
+            {mode === 'create' ? '生成 Key' : '保存'}
           </Button>
         </DialogFooter>
       </DialogContent>

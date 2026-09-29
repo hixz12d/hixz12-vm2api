@@ -353,7 +353,7 @@ export function CreateVmDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>创建槽位</DialogTitle>
+          <DialogTitle>新建空账号</DialogTitle>
         </DialogHeader>
         <CreateVmFields
           defaultAfter={defaultAfter}

@@ -58,7 +58,7 @@ function CredentialWeightRow({ vm }: { vm: Vm }) {
     },
     onError: (error: Error) => {
       setSelection(currentSelection)
-      toast.error(error.message || '调度等级更新失败')
+      toast.error(error.message || '优先级没有保存成功')
     },
   })
 
@@ -159,11 +159,11 @@ export function CredentialWeightPane() {
     >
       <Card>
         <CardHeader>
-          <CardTitle>凭证调度等级</CardTitle>
+          <CardTitle>账号优先级</CardTitle>
           <CardDescription className='max-w-3xl leading-5'>
-            等级越高越先参与普通调度。自动模式按 Claude 7D 重置倒计时计算 1～7
-            级；手动模式可设 1～10 级。健康粘性会话仍优先，同等级内继续使用原
-            WRR 权重。
+            等级越高，新请求越先派给它。自动：按 7 天额度还有多久重置算出 1～7
+            级（快重置的先用，免得额度浪费）。手动：可以设 1～10
+            级。已经固定了账号的对话不受影响。
           </CardDescription>
         </CardHeader>
         <CardContent className='divide-y'>
@@ -173,7 +173,7 @@ export function CredentialWeightPane() {
             ))
           ) : (
             <EmptyState
-              reason='暂无凭证槽，请先导入凭证后再配置调度等级。'
+              reason='还没有导入凭证的账号，先导入再来设置优先级。'
               actionLabel='导入凭证'
               to='/import'
             />

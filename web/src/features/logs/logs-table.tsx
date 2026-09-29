@@ -103,7 +103,7 @@ export function LogsTableHeader({
         ) : null}
         {showIngress ? (
           <>
-            <HeadCell className='min-w-[110px] flex-[1.1]'>入站 Key</HeadCell>
+            <HeadCell className='min-w-[110px] flex-[1.1]'>调用 Key</HeadCell>
             <HeadCell className='min-w-[90px] flex-[0.8]'>IP</HeadCell>
           </>
         ) : null}

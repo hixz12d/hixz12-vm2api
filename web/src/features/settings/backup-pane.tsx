@@ -27,7 +27,7 @@ export function BackupPane() {
   const create = useMutation({
     mutationFn: () => api('/api/panel/backups', { method: 'POST', body: '{}' }),
     onSuccess: async () => {
-      toast.success('已创建备份')
+      toast.success('备份已创建')
       await qc.invalidateQueries({ queryKey: backupsQueryOptions().queryKey })
     },
     onError: (error: Error) => toast.error(error.message),
@@ -51,19 +51,20 @@ export function BackupPane() {
   return (
     <Card>
       <CardHeader className='flex flex-row items-center justify-between'>
-        <CardTitle>备份</CardTitle>
+        <CardTitle>配置备份</CardTitle>
         <Button
           size='sm'
           onClick={() => create.mutate()}
           disabled={create.isPending}
           loading={create.isPending}
         >
-          创建
+          立即备份
         </Button>
       </CardHeader>
       <CardContent className='space-y-4'>
         <p className='text-sm text-muted-foreground'>
-          恢复须 confirm: true。恢复期间协议口 503。
+          恢复备份会用备份里的内容覆盖现在的配置。恢复过程中，下游的调用会暂时失败（返回
+          503），恢复完自动好。
         </p>
         <RawConfigFields
           value={cfg.data as Record<string, unknown> | undefined}
@@ -72,7 +73,7 @@ export function BackupPane() {
           <TableHeader>
             <TableRow>
               <TableHead>ID</TableHead>
-              <TableHead>时间</TableHead>
+              <TableHead>备份时间</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -106,8 +107,8 @@ export function BackupPane() {
         <ConfirmDialog
           open={!!restoreId}
           onOpenChange={() => setRestoreId('')}
-          title='确认恢复备份'
-          desc='恢复会覆盖当前状态，期间协议口返回 503。必须显式确认。'
+          title='用这份备份覆盖现在的配置？'
+          desc='现在的配置会被备份里的内容替换，无法撤销（建议先点「立即备份」留一份）。恢复过程中下游调用会暂时失败。'
           confirmText='确认恢复'
           cancelBtnText='取消'
           destructive
@@ -117,7 +118,7 @@ export function BackupPane() {
               body: JSON.stringify({ confirm: true }),
             })
               .then(async () => {
-                toast.success('已开始恢复')
+                toast.success('已开始恢复，稍等片刻再刷新')
                 setRestoreId('')
                 await qc.invalidateQueries({ queryKey: ['panel'] })
               })

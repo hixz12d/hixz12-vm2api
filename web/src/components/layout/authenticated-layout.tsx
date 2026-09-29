@@ -7,16 +7,20 @@ import { SearchProvider } from '@/context/search-provider'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { AppHeader } from '@/components/layout/app-header'
 import { AppSidebar } from '@/components/layout/app-sidebar'
+import type { NavLamps } from '@/components/layout/types'
 import { SkipToMain } from '@/components/skip-to-main'
 
 type AuthenticatedLayoutProps = {
   children?: ReactNode
   headerActions?: ReactNode
+  /** 侧栏导航项上的状态灯，由路由层组合业务数据后传入。 */
+  navLamps?: NavLamps
 }
 
 export function AuthenticatedLayout({
   children,
   headerActions,
+  navLamps,
 }: AuthenticatedLayoutProps) {
   const defaultOpen = getCookie('sidebar_state') !== 'false'
   return (
@@ -24,7 +28,7 @@ export function AuthenticatedLayout({
       <LayoutProvider>
         <SidebarProvider defaultOpen={defaultOpen}>
           <SkipToMain />
-          <AppSidebar />
+          <AppSidebar lamps={navLamps} />
           <SidebarInset
             className={cn(
               // Set content container, so we can use container queries

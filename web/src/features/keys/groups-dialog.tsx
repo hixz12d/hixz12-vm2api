@@ -40,7 +40,8 @@ export function GroupsDialog({
           <DialogTitle>账号分组</DialogTitle>
         </DialogHeader>
         <p className='text-sm text-muted-foreground'>
-          密钥只使用绑定分组内的槽位账号。组内无可用账号时返回错误，不会跨组回退。一个账号可以加入多个分组。
+          每个 Key
+          只会用它所接分组里的账号；组里没有能用的账号时直接报错，不会借用别的分组。同一个账号可以同时放进多个分组。
         </p>
         {q.isLoading && <p>正在加载分组…</p>}
         {q.error && <p role='alert'>{q.error.message}</p>}
@@ -82,7 +83,7 @@ export function GroupsDialog({
                               q.data.slots.find((slot) => slot.id === id)
                                 ?.name || id
                           )
-                          .join('、') || '暂无账号'}
+                          .join('、') || '组里还没有账号'}
                       </p>
                     </div>
                     <Button
@@ -167,7 +168,7 @@ function GroupEditor({
         启用分组
       </label>
       <fieldset className='space-y-2 rounded-md border p-3'>
-        <legend className='px-1 text-sm font-medium'>账号成员</legend>
+        <legend className='px-1 text-sm font-medium'>组里的账号</legend>
         {slots.map((slot) => (
           <label key={slot.id} className='flex items-center gap-2'>
             <Checkbox
@@ -182,22 +183,23 @@ function GroupEditor({
             />
             <span>{slot.name}</span>
             <span className='text-xs text-muted-foreground'>
-              {slot.status === 'running' ? '运行中' : '未运行'}
+              {slot.status === 'running' ? '运行中' : '已停止'}
             </span>
           </label>
         ))}
         {!slots.length && (
-          <p className='text-sm text-muted-foreground'>暂无槽位账号</p>
+          <p className='text-sm text-muted-foreground'>还没有账号，先去导入</p>
         )}
       </fieldset>
       {!members.length && (
         <p className='text-sm text-muted-foreground'>
-          该分组为空，绑定它的密钥将无法调用任何槽位。
+          组里没有账号，接到这个分组的 Key 会调用失败。
         </p>
       )}
       {initial && (
         <p className='text-xs text-muted-foreground'>
-          更改成员或停用分组后，已绑定密钥的后续请求立即按新配置调度；已开始的请求正常完成。
+          保存后马上生效：之后的新请求按新的账号名单分配，已经在处理的请求不受影响。停用分组会让接到它的
+          Key 全部调用失败。
         </p>
       )}
       <div className='flex justify-end gap-2'>
