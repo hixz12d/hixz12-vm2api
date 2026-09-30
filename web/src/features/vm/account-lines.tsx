@@ -209,6 +209,7 @@ function AccountLine({
               used={usedPctOf(vm, '5h')}
               reset={vm.reset_5h}
               now={now}
+              showIdleReset
               extra={
                 costs.h5 ? (
                   <span className='tabular-nums opacity-80'>

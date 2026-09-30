@@ -28,6 +28,8 @@ export function fablePlanDenied(
 ): boolean {
   if (!fb) return false
   if (fb.plan_denied) return true
+  // 后端已按官方用量确认有 Fable（ok=true）时，残留的旧 403 不算无权限。
+  if (fb.ok === true) return false
   const st = Number(fb.status || 0)
   const err = String(fb.error || fb.type || '')
   if (st === 401 || /oauth|authentication/i.test(err)) return false

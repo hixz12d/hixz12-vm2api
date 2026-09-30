@@ -155,6 +155,7 @@ function AccountLine({
           used={line.used5h}
           reset={vm.reset_5h}
           now={now}
+          showIdleReset
         />
         <QuotaScale
           label='7 天'

@@ -1,4 +1,4 @@
-import { resetCountdown } from '@/lib/fable-status'
+import { expiresAtToMs, resetCountdown } from '@/lib/fable-status'
 import { cn } from '@/lib/utils'
 
 /**
@@ -97,6 +97,7 @@ export function QuotaScale({
   reset,
   now,
   extra,
+  showIdleReset,
 }: {
   label: string
   used: number
@@ -104,6 +105,8 @@ export function QuotaScale({
   now: number
   /** 标签行右侧的补充信息（例如这个窗口花了多少钱）。 */
   extra?: React.ReactNode
+  /** 已用为 0 但窗口已打开（重置时间在未来）时也显示倒计时，用于 5 小时窗口。 */
+  showIdleReset?: boolean
 }) {
   const left = Math.max(0, 100 - used)
   const tone =
@@ -114,7 +117,10 @@ export function QuotaScale({
       : used >= 85
         ? 'bg-lamp-amber'
         : 'bg-foreground/55'
-  const countdown = used > 0 ? resetCountdown(reset, now) : null
+  const countdown =
+    used > 0 || (showIdleReset && expiresAtToMs(reset) > now)
+      ? resetCountdown(reset, now)
+      : null
   return (
     <div className='min-w-0'>
       <div className='flex items-baseline justify-between gap-2 text-[11px] text-muted-foreground'>
