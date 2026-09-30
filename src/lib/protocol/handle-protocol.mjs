@@ -111,7 +111,7 @@ import {
   pinConversationCacheTtl,
   resolveCacheTtl,
 } from './cache-ttl.mjs'
-import { trackCachePrefix } from './cache-prefix.mjs'
+import { describeCacheContinuity, trackCachePrefix } from './cache-prefix.mjs'
 import { ensureClaudeWebSearch, shouldInjectClaudeWebSearch } from './web-search.mjs'
 import { dispatchStreamInference } from '../transport/kernel-router.mjs'
 import { syncClaudeKernelConfigsFromFile } from '../transport/rust-kernel-supervisor.mjs'
@@ -344,6 +344,7 @@ export function createHandleProtocol(deps) {
       outbound_body: null,
       outbound_headers: null,
       outbound_summary: null,
+      cache_continuity: null,
       vm_id: null,
       account_id: null,
       workspace: 'client',
@@ -992,6 +993,7 @@ export function createHandleProtocol(deps) {
               stream: upstreamStream,
               repaired,
               dataplane: resolveKernelDataplane(selected.vm, routingNow),
+              cacheTtl: requestedCacheTtl,
             })
             hopBody = await materializeRemoteImageSources(hopBody)
             if (identity) {
@@ -1006,6 +1008,8 @@ export function createHandleProtocol(deps) {
                 epoch: attemptStartedAt,
               })
             }
+            preserveCacheBreakpoints = true
+            cacheTtl = requestedCacheTtl
             if (getRouting()?.logging?.mode === 'debug') logBag.outbound_body = hopBody
 
             // 0注入 hides CLI billing + env and the standing Node left in the leftover.
@@ -1026,6 +1030,16 @@ export function createHandleProtocol(deps) {
             logBag.official_cc_inference = 'cli-hop'
             logBag.provider = 'local_cli'
             logBag.outbound_summary = summarizeBody(hopBody)
+            logBag.cache_continuity = describeCacheContinuity({
+              inbound,
+              outbound: hopBody,
+              layer: 'node_object',
+              ttl: requestedCacheTtl,
+              sessionId: attemptSessionId,
+              vmId: selected.vmId,
+              accountId: selected.accountId,
+              requestId: logCtx.request_id,
+            })
             noteCachePrefix(selected, attemptSessionId, hopBody)
             return { body: hopBody, meta: { toolNames: {}, sessionId: attemptSessionId, cliHop: true } }
           }
@@ -1085,6 +1099,16 @@ export function createHandleProtocol(deps) {
           if (getRouting()?.logging?.mode === 'debug') logBag.outbound_body = prepared.body
           logBag.outbound_headers = redactHeaders(prepared.headers || {})
           logBag.outbound_summary = summarizeBody(prepared.body)
+          logBag.cache_continuity = describeCacheContinuity({
+            inbound,
+            outbound: prepared.body,
+            layer: 'node_object',
+            ttl: cacheTtl,
+            sessionId: attemptSessionId,
+            vmId: selected.vmId,
+            accountId: selected.accountId,
+            requestId: logCtx.request_id,
+          })
           noteCachePrefix(selected, attemptSessionId, prepared.body)
           return { body: prepared.body, meta: { toolNames: prepared.toolNames, sessionId: attemptSessionId } }
         },

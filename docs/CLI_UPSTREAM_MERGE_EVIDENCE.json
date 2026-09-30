@@ -1,0 +1,455 @@
+{
+  "upstream": "76f6a1e91fa3d776356fdb0d268c46bb0f00edfd",
+  "patch": "caller-system-v2",
+  "official_bun_runtime_sections_match": true,
+  "graph_flags": 7,
+  "embedded_entry": "/$bunfs/root/cli.js",
+  "unchanged_functions": {
+    "splitSysPromptPrefix": "ad67ca4543e2dbf519f19e9accf50b7dd1e14dbe5b5cb1c52d152323f4ad745a",
+    "getCacheControl": "81dcb08624eab80c172ca71e7cd15703924473e401e4e3056fd59a185d69931a",
+    "buildSystemPromptBlocks": "f9892ac222a2ad5cd676cb8af3ea6526557eb1675d08acd6e90a01790b1e73ac",
+    "fillMissingCacheTtl": "75fa6a54fdf0aa6867c291536c2b855b751c71e7aa30a3677efbe9f069f18993",
+    "applyKinOwnedCacheMarkers": "f76dba3c90be3a78faa0f87574d9f678827f96a5a301ac056520ee155520f5e0",
+    "capCacheMarkers": "38e0ee8ff6a1cec4bbd0305e6400e6b709bc6361318a40f2b8a676beb875964a",
+    "finalizeZeroBilling": "d6aca6814c435f57eaf53d1370a3b8e5ffd225128059902bafefab372934e333",
+    "withCchPlaceholder": "faf44efd13fd4f7123b5319400f6928723addcf478081c667fe79b42a21e4527"
+  },
+  "cli_native": {
+    "scope": "Node prepareCliHopBody -> rebuilt CLI native protocol -> loopback mock; actual Rust kernel and production not exercised",
+    "cpu": "150000 100000",
+    "cases": [
+      {
+        "layout": "zero",
+        "ttl": "5m",
+        "model": "claude-sonnet-5-5",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "5m"
+          },
+          {
+            "section": "tools",
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "5m"
+          }
+        ],
+        "result": "passed"
+      },
+      {
+        "layout": "zero",
+        "ttl": "5m",
+        "model": "claude-haiku-4-5-20251001",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "5m"
+          },
+          {
+            "section": "tools",
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "5m"
+          }
+        ],
+        "result": "passed"
+      },
+      {
+        "layout": "zero",
+        "ttl": "1h",
+        "model": "claude-sonnet-5-5",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "1h"
+          },
+          {
+            "section": "tools",
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "1h"
+          }
+        ],
+        "result": "passed"
+      },
+      {
+        "layout": "zero",
+        "ttl": "1h",
+        "model": "claude-haiku-4-5-20251001",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "1h"
+          },
+          {
+            "section": "tools",
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "1h"
+          }
+        ],
+        "result": "passed"
+      },
+      {
+        "layout": "identity",
+        "ttl": "5m",
+        "model": "claude-sonnet-5-5",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "5m"
+          },
+          {
+            "section": "system",
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "5m"
+          }
+        ],
+        "result": "passed"
+      },
+      {
+        "layout": "identity",
+        "ttl": "5m",
+        "model": "claude-haiku-4-5-20251001",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "5m"
+          },
+          {
+            "section": "system",
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "5m"
+          }
+        ],
+        "result": "passed"
+      },
+      {
+        "layout": "identity",
+        "ttl": "1h",
+        "model": "claude-sonnet-5-5",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "1h"
+          },
+          {
+            "section": "system",
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "1h"
+          }
+        ],
+        "result": "passed"
+      },
+      {
+        "layout": "identity",
+        "ttl": "1h",
+        "model": "claude-haiku-4-5-20251001",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "1h"
+          },
+          {
+            "section": "system",
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "1h"
+          }
+        ],
+        "result": "passed"
+      }
+    ]
+  },
+  "cc_native": {
+    "scope": "Node prepareCliHopBody -> rebuilt CLI native protocol -> loopback mock; actual Rust kernel and production not exercised",
+    "cpu": "150000 100000",
+    "cases": [
+      {
+        "layout": "zero",
+        "ttl": "5m",
+        "model": "claude-sonnet-5-5",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "5m"
+          }
+        ],
+        "result": "passed"
+      },
+      {
+        "layout": "zero",
+        "ttl": "5m",
+        "model": "claude-haiku-4-5-20251001",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "5m"
+          }
+        ],
+        "result": "passed"
+      },
+      {
+        "layout": "zero",
+        "ttl": "1h",
+        "model": "claude-sonnet-5-5",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "1h"
+          }
+        ],
+        "result": "passed"
+      },
+      {
+        "layout": "zero",
+        "ttl": "1h",
+        "model": "claude-haiku-4-5-20251001",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "1h"
+          }
+        ],
+        "result": "passed"
+      },
+      {
+        "layout": "identity",
+        "ttl": "5m",
+        "model": "claude-sonnet-5-5",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "5m"
+          },
+          {
+            "section": "system",
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "5m"
+          }
+        ],
+        "result": "passed"
+      },
+      {
+        "layout": "identity",
+        "ttl": "5m",
+        "model": "claude-haiku-4-5-20251001",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "5m"
+          },
+          {
+            "section": "system",
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "5m"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "5m"
+          }
+        ],
+        "result": "passed"
+      },
+      {
+        "layout": "identity",
+        "ttl": "1h",
+        "model": "claude-sonnet-5-5",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "1h"
+          },
+          {
+            "section": "system",
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "1h"
+          }
+        ],
+        "result": "passed"
+      },
+      {
+        "layout": "identity",
+        "ttl": "1h",
+        "model": "claude-haiku-4-5-20251001",
+        "markers": [
+          {
+            "section": "system",
+            "ttl": "1h"
+          },
+          {
+            "section": "system",
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 2,
+            "ttl": "1h"
+          },
+          {
+            "section": "messages",
+            "index": 4,
+            "ttl": "1h"
+          }
+        ],
+        "result": "passed"
+      }
+    ]
+  },
+  "backend_existing_checks_passed": 366,
+  "frontend_existing_checks_passed": 30,
+  "web_build": "passed",
+  "ui": {
+    "scope": "local prebuilt console with synthetic read-only API fixtures",
+    "results": [
+      {
+        "viewport": "desktop",
+        "menu_new_actions": true,
+        "horizontal_overflow": false
+      },
+      {
+        "viewport": "mobile",
+        "menu_new_actions": true,
+        "horizontal_overflow": false
+      }
+    ],
+    "page_errors": [],
+    "detector_findings": [],
+    "mobile_menu_not_obscured": true
+  },
+  "old_research_artifacts_unchanged": true,
+  "production_deployed": false,
+  "actual_kernel_new_binary_verified": false,
+  "legacy_patch_reproduction": "passed",
+  "subagent_identity_root_checks": "passed"
+}

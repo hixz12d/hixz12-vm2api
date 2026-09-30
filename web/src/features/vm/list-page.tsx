@@ -38,6 +38,7 @@ import { clearVmRestriction } from '@/features/vm/clear-restriction'
 import { CreateVmDialog } from '@/features/vm/create-vm-dialog'
 import { VmListSkeleton } from '@/features/vm/list-skeleton'
 import { vmsListQueryOptions } from '@/features/vm/queries'
+import { VmActionsProvider } from '@/features/vm/vm-actions-provider'
 import {
   filterVms,
   KindFilterChips,
@@ -278,65 +279,53 @@ export function VmListPage() {
             </div>
           </div>
         </div>
-        {list.length ? (
-          view === 'lines' ? (
-            <AccountLines
-              vms={list}
-              accounts={accounts}
-              onClearCooldown={(vm) => clearCooldown.mutate(vm)}
-              onReset={(vm) => {
-                setResetInput('')
-                setResetTarget(vm)
-              }}
-              onDelete={(vm) => {
-                setDeleteInput('')
-                setDeleteTarget(vm)
-              }}
-            />
-          ) : view === 'grid' ? (
-            <VmCards
-              vms={list}
-              accounts={accounts}
-              onClearCooldown={(vm) => clearCooldown.mutate(vm)}
-              onReset={(vm) => {
-                setResetInput('')
-                setResetTarget(vm)
-              }}
-              onDelete={(vm) => {
-                setDeleteInput('')
-                setDeleteTarget(vm)
-              }}
-            />
+        <VmActionsProvider
+          accounts={accounts}
+          onReset={(vm) => {
+            setResetInput('')
+            setResetTarget(vm)
+          }}
+          onDelete={(vm) => {
+            setDeleteInput('')
+            setDeleteTarget(vm)
+          }}
+        >
+          {list.length ? (
+            view === 'lines' ? (
+              <AccountLines
+                vms={list}
+                accounts={accounts}
+                onClearCooldown={(vm) => clearCooldown.mutate(vm)}
+                onReset={(vm) => {
+                  setResetInput('')
+                  setResetTarget(vm)
+                }}
+                onDelete={(vm) => {
+                  setDeleteInput('')
+                  setDeleteTarget(vm)
+                }}
+              />
+            ) : view === 'grid' ? (
+              <VmCards vms={list} accounts={accounts} />
+            ) : (
+              <VmTable vms={list} accounts={accounts} />
+            )
           ) : (
-            <VmTable
-              vms={list}
-              accounts={accounts}
-              onClearCooldown={(vm) => clearCooldown.mutate(vm)}
-              onReset={(vm) => {
-                setResetInput('')
-                setResetTarget(vm)
-              }}
-              onDelete={(vm) => {
-                setDeleteInput('')
-                setDeleteTarget(vm)
+            <EmptyState
+              reason={
+                vms.length
+                  ? '没有符合当前筛选或搜索的账号。'
+                  : '还没有账号。点右上角「导入账号」开始。'
+              }
+              actionLabel={vms.length ? '清除筛选' : undefined}
+              onAction={() => {
+                setFilter('all')
+                setQ('')
+                setKind('all')
               }}
             />
-          )
-        ) : (
-          <EmptyState
-            reason={
-              vms.length
-                ? '没有符合当前筛选或搜索的账号。'
-                : '还没有账号。点右上角「导入账号」开始。'
-            }
-            actionLabel={vms.length ? '清除筛选' : undefined}
-            onAction={() => {
-              setFilter('all')
-              setQ('')
-              setKind('all')
-            }}
-          />
-        )}
+          )}
+        </VmActionsProvider>
       </QueryGate>
       <ConfirmDialog
         open={!!resetTarget}

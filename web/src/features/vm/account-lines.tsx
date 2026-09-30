@@ -15,6 +15,7 @@ import {
   vmCooldownTitle,
 } from '@/lib/vm-status'
 import { vmTodayStats, vmWeekOutcome, vmWindowCosts } from '@/lib/vm-usage'
+import { vmTotalCost } from '@/lib/vm-usage'
 import { useNow } from '@/hooks/use-now'
 import { Button } from '@/components/ui/button'
 import {
@@ -39,6 +40,7 @@ import {
   vmSchedulableProps,
 } from '@/features/vm/schedulable-switch'
 import { fableRow } from '@/features/vm/usage-meter'
+import { useVmActions } from '@/features/vm/vm-actions-context'
 
 /** 账号的灯：坏了红、要留意琥珀；正常、主动暂停、没凭证都不亮。 */
 export function accountLamp(vm: Vm): {
@@ -113,6 +115,7 @@ function AccountLine({
   onDelete?: (vm: Vm) => void
   onClearCooldown?: (vm: Vm) => void
 }) {
+  const actions = useVmActions()
   const { lamp, text, idle } = accountLamp(vm)
   const plan = planOf(vm)
   const today = vmTodayStats(vm, accounts)
@@ -232,7 +235,7 @@ function AccountLine({
           次 · {fmtUsd(today.today, 2)}
         </div>
         <div className='mt-0.5'>
-          累计 {fmtUsd(vm.total_cost, 2)}
+          累计 {fmtUsd(vmTotalCost(vm, accounts), 2)}
           {week.known && week.fail > 0 ? (
             <span className='text-lamp-amber'>
               {' '}
@@ -261,6 +264,19 @@ function AccountLine({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align='end' className='w-56'>
+              <DropdownMenuItem onSelect={() => actions.openDetail(vm)}>
+                查看详情卡
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => actions.openTest(vm)}>
+                测试连接
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => actions.openStats(vm)}>
+                查看统计
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => actions.openReauth(vm)}>
+                重新授权
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               {onClearCooldown && cooling ? (
                 <DropdownMenuItem onSelect={() => onClearCooldown(vm)}>
                   解除冷却，马上恢复接请求

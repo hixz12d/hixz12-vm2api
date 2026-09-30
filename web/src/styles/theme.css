@@ -117,6 +117,11 @@
   --tier-codex-solid: var(--cord-codex);
   --tier-codex-solid-fg: oklch(0.985 0.005 195);
   --tier-none-border: oklch(0.5 0.06 76 / 30%);
+  --lane-console-bg: oklch(0.68 0.13 41);
+  --lane-console-fg: oklch(0.2 0.03 41);
+  --lane-api-bg: oklch(1 0 0);
+  --lane-api-border: oklch(0.78 0.006 258);
+  --lane-api-fg: oklch(0.2 0.01 258);
 
   --text-tertiary: oklch(0.52 0.02 72);
   --hairline: oklch(0.5 0.06 76 / 18%);
@@ -255,6 +260,11 @@
   --tier-codex-solid: var(--cord-codex);
   --tier-codex-solid-fg: oklch(0.18 0.02 195);
   --tier-none-border: oklch(0.683 0.087 76 / 24%);
+  --lane-console-bg: oklch(0.68 0.13 41);
+  --lane-console-fg: oklch(0.16 0.03 41);
+  --lane-api-bg: oklch(1 0 0 / 12%);
+  --lane-api-border: oklch(1 0 0 / 65%);
+  --lane-api-fg: oklch(0.98 0 0);
 
   --text-tertiary: oklch(0.66 0.018 78);
   --hairline: oklch(0.683 0.087 76 / 16%);

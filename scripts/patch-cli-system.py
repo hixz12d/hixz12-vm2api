@@ -12,7 +12,8 @@ import struct
 from pathlib import Path
 
 BASELINES = {
-    "cli-node": "7d5366daf48ae71c96dce3ede9151ddf332056006f0d57e9ad9e188923083a10",
+    "legacy-cli-node": "7d5366daf48ae71c96dce3ede9151ddf332056006f0d57e9ad9e188923083a10",
+    "cli-node": "085573950cf8f67b396266e868a24576b899bc3d7c6db8d865a6062dcbe84ae2",
     "cc-node": "6fef71bdda7ad0929681711efee472552635f88b0a6ead51f711d10e03f55ca5",
 }
 
@@ -25,8 +26,10 @@ def replace_once(source, before, after):
 
 
 def patch(source, name):
-    prompt = "systemPrompt2" if name == "cli-node" else "systemPrompt"
+    prompt = "systemPrompt2" if name == "legacy-cli-node" else "systemPrompt"
     if name == "cli-node":
+        return patch_current_cli(source)
+    if name == "legacy-cli-node":
         source = replace_once(source, '''    const persona = layoutSystemBlocks({
       attribution: billingFromSystemPrompt(systemPrompt2) || getAttributionHeader()
     });
@@ -126,6 +129,47 @@ async function runSingleProcessSlots() {''')
         source = replace_once(source, '''    await runSingleProcessSlots2();''', '''    init_config();
     enableConfigs();
     await runSingleProcessSlots2();''')
+    return source
+
+
+def patch_current_cli(source):
+    """v1.3.85 already preserves caller system; retain fork filtering/config only."""
+    start = source.index('function leftoverFromSystemPrompt(systemPrompt) {')
+    end = source.index('\nfunction isDefaultAgentField(', start)
+    source = replace_once(source, source[start:end], r'''function leftoverFromSystemPrompt(systemPrompt) {
+  const parts = [];
+  for (const block of systemPrompt) {
+    const text = (block || "").trim();
+    if (!text)
+      continue;
+    if (/^x-anthropic-billing-header:[^\r\n]*$/i.test(text))
+      continue;
+    if (text === IDENTITY)
+      continue;
+    if (/^# Environment\r?\n[ \t]*(?:-[ \t]*)?Time ?zone:[^\r\n]+$/i.test(text))
+      continue;
+    parts.push(block);
+  }
+  return parts.length ? parts.join("\n\n") : undefined;
+}''')
+    source = replace_once(source, 'function getSystemLayout() {', '''function readKinRequestConfig() {
+  try {
+    return JSON.parse(__require("fs").readFileSync(process.env.KIN_KERNEL_CONFIG || "/run/kin/kernel.json", "utf8"));
+  } catch {
+    return {};
+  }
+}
+function getKinRequestLayout() {
+  const layout = readKinRequestConfig().system_layout;
+  return layout === "zero" || layout === "identity" ? layout : getSystemLayout();
+}
+function getSystemLayout() {''')
+    source = replace_once(source, '  const layout = getSystemLayout();', '  const layout = getKinRequestLayout();')
+    source = replace_once(source, '  const kinSystemLayout = getSystemLayout();', '  const kinSystemLayout = getKinRequestLayout();')
+    source = replace_once(source, 'function getKinTimezone() {', '''function getKinTimezone() {
+  const configured = readKinRequestConfig().timezone;
+  if (typeof configured === "string" && configured.trim())
+    return configured.trim();''')
     return source
 
 
