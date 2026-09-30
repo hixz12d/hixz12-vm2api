@@ -179,6 +179,14 @@ export type Vm = {
   fable?: Record<string, unknown>
   weekly_split?: Record<string, unknown>
   account_tier?: string
+  /** 套餐来源：`profile` = 官方资料，`usage` = 额度推断，`default` = 默认值。旧后端缺省。 */
+  account_tier_source?: 'profile' | 'usage' | 'default' | null
+  /** 最近一次由官方资料或完整额度数据确认套餐的时间（ISO）。 */
+  account_tier_checked_at?: string | null
+  /** 最近一次官方额度查询成功为 true；失败或从没查过为 false；GPT 账号为 null。旧后端缺省按已确认处理。 */
+  tier_confirmed?: boolean | null
+  /** 账号本身出问题（OAuth 不允许、账号停用等）；临时错误不填。 */
+  account_issue?: { code: string; text: string; since?: string | null } | null
   /** Complete official usage: true = Max, false = Pro, null = unconfirmed. */
   usage_has_fable?: boolean | null
   /** anthropic | openai。缺省按 Claude 槽展示。 */

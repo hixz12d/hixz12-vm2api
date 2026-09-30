@@ -486,6 +486,12 @@ export function isAccountRestrictionReason(reason) {
   return isQuotaWindowReason(reason) || /^(account_quota_exhausted|rate_limited)$/i.test(String(reason || ''))
 }
 
+/** 5h / 7d quota-class cooldown that 同步账号 / test success may clear. Not rpm, model, overload, auth, proxy. */
+export function isQuotaClassCooldownReason(reason) {
+  if (!reason) return false
+  return isAccountRestrictionReason(reason) || /^rate_limited_unknown$/i.test(String(reason))
+}
+
 /** Old Extra auto-off that is not an operator lock. */
 export function isLeftoverQuotaScheduleOff(vm = {}, scheduleDisabledReason = null) {
   if (vm?.schedule_manual === true) return false

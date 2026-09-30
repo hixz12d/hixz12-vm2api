@@ -163,6 +163,7 @@ function userVmPathAllowed(method, path) {
       rest === 'cooldown/clear' ||
       rest === 'circuit/reset' ||
       rest === 'probe' ||
+      rest === 'sync' ||
       rest === 'test-chat' ||
       rest === 'count-tokens' ||
       rest === 'start' ||

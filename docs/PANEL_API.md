@@ -33,6 +33,7 @@
 | GET | `/vms/:id` | 详情 + 调度等级 + 代理健康 + `billing.today/window_5h/window_7d/by_model/usage_stats`（`usage_stats` = 近 30 个上海自然日的按日用量 + 模型 / 入站路径排名，日界同 `billing.today`） + `account.runtime_window` |
 | PATCH | `/vms/:id` | 热改并发、模型白名单、槽策略、`schedule_level` 或 `timezone`（不重启槽）。`timezone` 为任意有效 IANA 名称，会钉住该槽（后续绑定不覆盖）；`timezone_follow_proxy: true` 重新跟随已绑代理的出口时区 |
 | POST | `/vms/:id/probe` | 槽 SOCKS5 探官方 `/usage` + Fable（Pro 跳过 Fable） |
+| POST | `/vms/:id/sync` | 同步账号，无请求体：Claude 先经槽读官方 profile 定套餐 → 强制 `/probe` → 官方 5h / 7d 都未用完时只解除额度类冷却。返回 `{ vm_id, ok, account_tier, account_tier_source, steps: { profile, usage, cooldown }, account_issue, probe }`；`ok` 即额度查询是否成功，查询失败仍 HTTP 200。`steps.profile` GPT 为 `null`；`steps.cooldown` = `{ cleared, before, kept }`，`kept` 为 `usage_not_ok` / `quota_rejected` / 非额度类原因（如 `rpm_limited`）/ 被 5h·7d 安全线重新施加的 `quota_5h*` / `quota_7d*` |
 | POST | `/vms/:id/schedulable` | `{ schedulable }` 是否入池；不改容器 |
 | POST | `/vms/:id/cooldown/clear` | 清账号/模型冷却、粘性钉和 `/usage` 429 旗标，重新入池 |
 | POST | `/vms/:id/test-chat` | loopback `POST /v1/messages`，master 可钉槽；官方 CC 入站 + 4 块 system。默认 prompt `hello` |
@@ -71,6 +72,15 @@
 | GET | `/oauth` | 全槽脱敏 credential |
 
 `cred_status`：`无凭证` / `可用` / `5h 警告` / `5h 限制` / `7d 警告` / `7d 限制` / `普通限制` / `不可用` / `被吊销` / `探测失败`。Fable 不可用 / 7d_oi / 家族冷却不抬账号级限制。等级：官方 `/usage` 有 Fable 模型或真实 7d_oi = Max；无 Fable 的 `plan_denied` = Pro。落盘 pro 不能盖掉 usage 里的 Fable。
+
+`GET /vms` 与 `GET /vms/:id` 的套餐与账号状态字段（GPT 账号均为 `null`）：
+
+| 字段 | 说明 |
+|------|------|
+| `account_tier_source` | `profile`（官方资料）/ `usage`（额度推断）/ `default` / `null`。`profile` 的 pro/max 优先于额度推断，只能被新的 profile 结果改写 |
+| `account_tier_checked_at` | 最近一次由 profile 或完整额度数据确认套餐的时间（ISO），从未确认为 `null` |
+| `tier_confirmed` | 最近一次官方额度查询（`last_probe`）成功为 `true`，失败或从未查过为 `false` |
+| `account_issue` | `{ code, text, since }` 或 `null`。`code`：`oauth_not_allowed`（OAuth 登录被拒）/ `account_disabled`（账号或组织停用）；按最近一次 probe 错误、`refresh_error` 识别，网络、代理、429、5xx 等临时错误不算 |
 
 `account.runtime_window`：`rate_limited_at` / `rate_limit_reset_at` / `overload_until` / `session_window_start|end|status`。
 

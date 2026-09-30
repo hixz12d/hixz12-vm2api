@@ -348,6 +348,16 @@ function extractText(body) {
   }
 }
 
+/** Seconds → 人话时长: "x 小时 y 分" / "y 分钟" / "不到 1 分钟". */
+function humanWaitText(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0))
+  if (total < 60) return '不到 1 分钟'
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  if (hours >= 1) return `${hours} 小时 ${minutes} 分`
+  return `${minutes} 分钟`
+}
+
 function extractError(result, { wrapHop = true } = {}) {
   const body = result?.body
   const err = body?.error && typeof body.error === 'object' ? body.error : {}
@@ -357,7 +367,17 @@ function extractError(result, { wrapHop = true } = {}) {
   let message = extractText(body) || 'upstream error'
   const code = String(err.code || '')
   const blob = code + message
-  if (!wrapHop && /ENOENT|bin_missing|codex-kernel|codex_kernel/i.test(blob)) {
+  // Local scheduler refusal (pool_overloaded / all_accounts_busy): never reached Anthropic.
+  const localBlock = code === 'pool_overloaded' || /all_accounts_busy/i.test(blob)
+  if (localBlock) {
+    const retrySec = /^\d+$/.test(String(headers['retry-after'] ?? '').trim())
+      ? Number(headers['retry-after'])
+      : Number(result?.retryAfterSec) || 0
+    message =
+      retrySec > 0
+        ? `本地调度拦截：这个账号在本地冷却中，约 ${humanWaitText(retrySec)} 后自动恢复。没有发到 Anthropic。可在账号菜单点"解除冷却"或"同步账号"。`
+        : '本地调度拦截：这个账号暂时不可用（并发已满或冷却中），没有发到 Anthropic。'
+  } else if (!wrapHop && /ENOENT|bin_missing|codex-kernel|codex_kernel/i.test(blob)) {
     message = 'Codex kernel 未就绪。GPT 槽走独立 kernel，不是 wrap cli-hop。'
   } else if (wrapHop && /GLIBC_2\.3[89]|glibc 2\.36|ld-linux.*not found/i.test(blob)) {
     message =
@@ -401,6 +421,10 @@ function extractError(result, { wrapHop = true } = {}) {
             ? 'wrap_connection_error'
             : 'upstream_error'),
     message,
+  }
+  if (localBlock) {
+    out.code = 'pool_overloaded'
+    out.local = true
   }
   if (retry) out.retry_after = retry
   if (requestId) out.request_id = requestId

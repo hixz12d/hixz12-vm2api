@@ -10,6 +10,13 @@
 - 管理台保留定制色板、账号线视图、状态灯及分组删除，融合上游详情卡、操作菜单、统计、平台选项及品牌链接。默认账号线视图也提供新增操作。
 - 管理员仅豁免用户级并发限制；API Key、账号额度和分组限制不放开。没有数据库迁移、依赖或生产持久配置变更。
 
+## 账号同步
+
+- 新增 `POST /api/panel/vms/:id/sync`（`panel-api.mjs` 的 `buildSyncOne`，`user` 角色与 `/probe` 同样放行，见 `panel-acl.mjs`）：官方 profile 定套餐 → 强制查额度 → 官方确认 5h / 7d 都有额度时只解除额度类冷却。"查一遍额度"和后台探测不解除冷却。
+- 官方 profile 套餐优先于额度推断（`account_tier_source: profile`）：`persistAccountTier` 只让新 profile 改写 profile 套餐，`usage` 只刷新 `account_tier_checked_at`；`inferClaudeTier` 不再用 `usage_has_fable` 覆盖 profile；`buildProbeOne` 查完额度把号池套餐写回 profile。列表/详情新增 `account_tier_source`、`account_tier_checked_at`、`tier_confirmed`、`account_issue`（`account-issue.mjs`）。
+- 主 Key `x-kin-vm` 指定账号的请求（含管理台测试）跳过额度类本地冷却，成功后解除额度类冷却并重判 5h / 7d 安全线；模型级、RPM、过载、认证类冷却和并发上限不变，不跨组回退。额度类口径为 `availability.isQuotaClassCooldownReason`，`AccountRuntimeRepo.QUOTA_CLASS_COOLDOWN` 复制同一正则，改口径需两处同步。
+- 合并上游时注意冲突点：`pool-scheduler.mjs` 的 `account_cooldown` 等待与 `clearQuotaCooldownAfterPinSuccess`、`failover-runner.mjs` pin 成功收尾、`claude-tier.mjs`、`vm-registry.mjs` 的 `persistAccountTier`、`vm-test-chat.mjs` 的 `extractError`（本地拦截返回 `code: pool_overloaded`、`local: true`）。
+
 ## v1.3.79 基线
 
 同步上游 `291dee4`（v1.3.79）。上游重写了历史，本次以此前已合入的 v1.3.73 文件树作为三方合并基线，保留 fork 历史并将当前上游提交作为合并父节点；未重写 fork 的已发布提交。

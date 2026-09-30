@@ -22,6 +22,18 @@ function fmtNum(n: unknown): string {
   return Number.isFinite(v) ? v.toLocaleString() : '—'
 }
 
+/** 重试等待秒数 → 人话：约 x 小时 y 分 / 约 y 分钟 / n 秒。 */
+function fmtRetryAfter(sec: number): string {
+  const s = Math.max(0, Math.ceil(Number(sec) || 0))
+  if (s >= 3600) {
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    return `约 ${h} 小时${m ? ` ${m} 分` : ''}后可重试`
+  }
+  if (s >= 60) return `约 ${Math.round(s / 60)} 分钟后可重试`
+  return `${s} 秒后可重试`
+}
+
 /**
  * 测试对话的结果面板：状态头 → 回复正文 → usage → 错误 → 阶段化执行日志。
  * 镜像 index.html `renderVmTestPanel()` 的结果区（3880-3891）。
@@ -131,6 +143,11 @@ export function TestChatResultCard({
               {result.error.message || '未知错误'}
             </p>
             <p className='flex flex-wrap gap-2 text-xs text-muted-foreground'>
+              {result.error.local ? (
+                <Badge variant='outline' className='px-1.5 py-0 text-[10px]'>
+                  本地拦截（未发到 Anthropic）
+                </Badge>
+              ) : null}
               {result.error.code ? <span>code {result.error.code}</span> : null}
               {result.error.request_id ? (
                 <span className='font-mono'>
@@ -138,7 +155,7 @@ export function TestChatResultCard({
                 </span>
               ) : null}
               {result.error.retry_after != null ? (
-                <span>{result.error.retry_after}s 后可重试</span>
+                <span>{fmtRetryAfter(result.error.retry_after)}</span>
               ) : null}
             </p>
           </div>

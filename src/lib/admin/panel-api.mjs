@@ -44,8 +44,11 @@ import {
   evaluateAccount,
   credStatusFromAvailability,
   isLeftoverQuotaScheduleOff,
+  isQuotaClassCooldownReason,
   resolveScheduleState,
 } from '../pool/availability.mjs'
+import { detectAccountIssue } from './account-issue.mjs'
+import { tierFromOauthProfile } from '../oauth/official-cc-stats.mjs'
 import { isLeftoverGrantRevokeRuntime, viewRuntimeWithoutLeftoverRevoke } from '../pool/schedule-eligibility.mjs'
 import {
   isOfficialUsageRateLimited,
@@ -904,10 +907,14 @@ export async function buildProbeOne({
     qAfter.status_5h ||
     qAfter.utilization_7d != null ||
     !!(passive?.five_hour || passive?.seven_day)
+  // Official profile tier (vm.json) wins over usage inference; ingestOAuthUsage may rewrite unified.
+  const profileHeld =
+    vm.claude?.account_tier_source === 'profile' && (vm.claude?.account_tier === 'pro' || vm.claude?.account_tier === 'max')
   const tier = inferClaudeTier(
     {
       has_token: true,
-      account_tier: after?.unified?.account_tier || null,
+      account_tier: profileHeld ? vm.claude.account_tier : after?.unified?.account_tier || null,
+      account_tier_source: profileHeld ? 'profile' : after?.unified?.account_tier_source || null,
       fable: qAfter.fable,
       utilization_7d_oi: qAfter.utilization_7d_oi,
       reset_7d_oi: qAfter.reset_7d_oi,
@@ -917,7 +924,11 @@ export async function buildProbeOne({
     qAfter,
   ).key
   const completeUsage = result.ok === true && result.limits_present === true
-  if (completeUsage && (result.account_tier === 'pro' || result.account_tier === 'max')) {
+  if (profileHeld) {
+    // ingestOAuthUsage may have re-inferred unified.account_tier; keep the pool on the profile tier.
+    accountQuota.setAccountTier(accountId, vm.claude.account_tier, { source: 'profile' })
+    if (completeUsage) persistAccountTier(cfg.paths.project, id, vm.claude.account_tier, { source: 'usage' })
+  } else if (completeUsage && (result.account_tier === 'pro' || result.account_tier === 'max')) {
     accountQuota.setAccountTier(accountId, result.account_tier, { source: 'usage' })
     persistAccountTier(cfg.paths.project, id, result.account_tier, { source: 'usage' })
   } else if (completeUsage && (tier === 'pro' || tier === 'max')) {
@@ -988,7 +999,7 @@ export async function buildProbeOne({
     cred_status: credStatusFromAvailability(availability),
     fable: result.usage_scope_missing ? q.fable || null : after?.unified?.fable || result.fable || q.fable || null,
     fable_probed: includeFable && !skipHop && !result.usage_scope_missing,
-    account_tier: completeUsage ? result.account_tier || tier : tier,
+    account_tier: completeUsage && !profileHeld ? result.account_tier || tier : tier,
     probed_at: result.probed_at,
     ok: !!(result.ok || passive || (rateLimited && cachedWindow)),
     rate_limited: rateLimited,
@@ -1030,6 +1041,182 @@ export async function buildProbeAll({ cfg, accountQuota, hop = true, force = tru
     }
   }
   return ok({ items, total: items.length })
+}
+
+function syncWindowBlocked(w) {
+  const status = String(w?.status || '').toLowerCase()
+  const util = Number(w?.utilization)
+  return status === 'rejected' || status === 'rate_limited' || (Number.isFinite(util) && util >= 1)
+}
+
+/**
+ * POST /api/panel/vms/:id/sync — 同步账号：官方 profile 定套餐 → 强制查额度 →
+ * 官方确认 5h / 7d 都有额度时只解除额度类冷却（不碰 model_states、rpm、认证、代理）。
+ */
+export async function buildSyncOne({
+  cfg,
+  accountQuota,
+  stickyRouter = null,
+  poolScheduler = null,
+  id,
+  slotOauth = null,
+} = {}) {
+  const vm = getVm(cfg.paths.project, id)
+  if (!vm) {
+    return fail(
+      makeError({
+        type: ErrorType.NOT_FOUND,
+        code: ErrorCode.VM_NOT_FOUND,
+        message: `VM '${id}' not found`,
+        status: 404,
+      }),
+    )
+  }
+  const gpt = isCodexVm(vm)
+  const project = cfg.paths.project
+
+  // 1. Official profile → authoritative tier (Claude only).
+  let profileStep = null
+  let profileError = null
+  if (!gpt) {
+    profileStep = { ok: false, tier: null, error: null }
+    if (!vmHasClaudeCredential(vm)) {
+      profileError = 'no_oauth_token'
+    } else {
+      try {
+        const call = slotOauth || (await import('../transport/slot-oauth.mjs')).runSlotOauth
+        const exec = {
+          vmId: vm.id,
+          homeDir: path.join(project, 'vms', vm.id, 'cli-home'),
+          oauth: vm.claude,
+          vm,
+        }
+        const res = await call(exec, 'profile', { timeoutMs: 30000 })
+        if (res?.ok) {
+          const tier = tierFromOauthProfile(res.body)
+          profileStep.ok = true
+          profileStep.tier = tier || null
+          if (tier === 'pro' || tier === 'max') {
+            const accountId = vm.claude?.account_uuid || vm.id
+            try {
+              accountQuota.setAccountTier(accountId, tier, { source: 'profile' })
+            } catch {}
+            persistAccountTier(project, vm.id, tier, { source: 'profile' })
+          }
+        } else {
+          const err = res?.body?.error
+          profileError =
+            (typeof err === 'string' ? err : err?.message || err?.code) || (res ? `http_${res.status || 0}` : 'profile_unavailable')
+        }
+      } catch (error) {
+        profileError = String(error?.message || error || 'profile_failed').slice(0, 300)
+      }
+    }
+    profileStep.error = profileError
+  }
+
+  // 2. Forced official usage probe (same as 查一次额度).
+  let probe = null
+  try {
+    const one = await buildProbeOne({ cfg, accountQuota, id, hop: true, force: true })
+    if (one?.status) {
+      const err = one.body?.error || {}
+      probe = { ok: false, error: err.message || err.code || 'probe_failed', code: err.code || null }
+    } else {
+      probe = one?.data || null
+    }
+  } catch (error) {
+    probe = { ok: false, error: String(error?.message || error || 'probe_failed').slice(0, 300) }
+  }
+  const usageOk = probe?.ok === true
+  const usageStep = { ok: usageOk, error: usageOk ? null : probe?.error || 'probe_failed' }
+
+  // 3. Clear quota-class cooldown only when official usage confirms both windows are open.
+  const cooldown = { cleared: false, before: null, kept: null }
+  const confirmed =
+    usageOk &&
+    probe.via !== 'passive-headers' &&
+    probe.source !== PASSIVE_HEADER_SOURCE &&
+    probe.rate_limited !== true &&
+    !!probe.five_hour &&
+    !!probe.seven_day
+  if (!confirmed) {
+    cooldown.kept = 'usage_not_ok'
+  } else if (syncWindowBlocked(probe.five_hour) || syncWindowBlocked(probe.seven_day)) {
+    cooldown.kept = 'quota_rejected'
+  } else {
+    const live = getVm(project, vm.id) || vm
+    const acc = findAccount(accountQuota, live)
+    const keys = [...new Set([live.account_uuid, live.claude?.account_uuid, acc?.account_id, live.id].filter(Boolean))]
+    const repo = accountQuota?.runtimeRepo
+    for (const key of keys) {
+      try {
+        const r = repo?.clearQuotaCooldown?.(key, { vmId: live.id })
+        if (r?.cleared) {
+          cooldown.cleared = true
+          cooldown.before = cooldown.before || r.reason || null
+        } else if (r?.reason && !isQuotaClassCooldownReason(r.reason)) {
+          cooldown.kept = cooldown.kept || r.reason
+        }
+      } catch {}
+    }
+    // vm.json park: only a quota-class reason is ours to drop (auth / rpm parks stay).
+    const vmReason = live.claude?.temp_unschedulable_reason || live.temp_unschedulable_reason || null
+    if (vmReason && isQuotaClassCooldownReason(vmReason)) {
+      try {
+        clearRecoverableVmCooldown(path.join(project, 'vms', `${live.id}.json`))
+        cooldown.cleared = true
+        cooldown.before = cooldown.before || vmReason
+      } catch {}
+    } else if (vmReason) {
+      cooldown.kept = cooldown.kept || vmReason
+    }
+    if (cooldown.cleared) {
+      for (const key of keys) {
+        try {
+          stickyRouter?.unbindByAccount?.({ accountId: key, vmId: live.id })
+        } catch {}
+      }
+      const fresh = getVm(project, live.id) || live
+      try {
+        // 5h / 7d safety line is re-evaluated here and re-applied if still over.
+        const sched = poolScheduler?.syncQuotaSchedule?.(fresh, acc)
+        if (sched && (sched.action === 'restrict' || sched.action === 'restore') && sched.reason) {
+          cooldown.cleared = false
+          cooldown.kept = sched.reason
+        }
+      } catch {}
+      try {
+        poolScheduler?.notifyCapacity?.(acc?.account_id || fresh.claude?.account_uuid || fresh.id)
+      } catch {}
+    }
+  }
+
+  const after = getVm(project, vm.id) || vm
+  const accountTier = gpt
+    ? 'codex'
+    : probe?.account_tier || after.claude?.account_tier || (vmHasClaudeCredential(after) ? 'pro' : 'none')
+  const accountIssue = gpt
+    ? null
+    : detectAccountIssue({
+        profileError,
+        probeError: usageOk ? null : probe?.error || null,
+        refreshError: after.claude?.refresh_error || null,
+        probedAt: probe?.probed_at || new Date().toISOString(),
+      })
+  return ok({
+    vm_id: id,
+    ok: usageOk,
+    account_tier: accountTier,
+    account_tier_source: gpt ? null : after.claude?.account_tier_source || null,
+    steps: {
+      profile: profileStep,
+      usage: usageStep,
+      cooldown,
+    },
+    account_issue: accountIssue,
+    probe,
+  })
 }
 
 export function buildUsage({ accountQuota, cfg, requestLog = null }) {
@@ -1440,6 +1627,7 @@ function enrichVm(v, accountQuota, active, extras = {}) {
         {
           has_token: hasToken,
           account_tier: v.account_tier || q.account_tier,
+          account_tier_source: v.account_tier_source || null,
           fable: q.fable,
           utilization_7d_oi: q.utilization_7d_oi,
           reset_7d_oi: q.reset_7d_oi,
@@ -1609,6 +1797,16 @@ function enrichVm(v, accountQuota, active, extras = {}) {
         }
       : null,
     account_tier: tierKey,
+    account_tier_source: isCodex ? null : v.account_tier_source || null,
+    account_tier_checked_at: isCodex ? null : v.account_tier_checked_at || null,
+    tier_confirmed: isCodex ? null : q.last_probe?.ok === true,
+    account_issue: isCodex
+      ? null
+      : detectAccountIssue({
+          probeError: q.last_probe?.error || null,
+          refreshError: v.refresh_error || v.claude?.refresh_error || runtime?.refresh_error || null,
+          probedAt: q.last_probe?.at || null,
+        }),
     usage_has_fable: isCodex ? null : q.usage_has_fable,
     availability,
     cred_status: credStatusFromAvailability(availability),

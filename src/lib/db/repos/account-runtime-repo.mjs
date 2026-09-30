@@ -294,6 +294,36 @@ export class AccountRuntimeRepo {
     })
   }
 
+  /** Same scope as availability.isQuotaClassCooldownReason (copied to avoid an import chain). */
+  static QUOTA_CLASS_COOLDOWN = /^(quota_5h|quota_7d)|^(account_quota_exhausted|rate_limited|rate_limited_unknown)$/i
+
+  /**
+   * 同步账号 / test success: drop only 5h / 7d quota-class cooldown.
+   * model_states, overload_until and rpm / auth / proxy cools stay.
+   */
+  clearQuotaCooldown(accountId, { vmId = null } = {}) {
+    const current = this.get(accountId)
+    if (!current) return { cleared: false, reason: null }
+    const reason = current.cooldown_reason || null
+    const clear = () =>
+      this.upsert({
+        ...current,
+        vm_id: current.vm_id || vmId,
+        status: 'ready',
+        cooldown_until: null,
+        cooldown_reason: null,
+        rate_limit_reset_at: null,
+      })
+    if (reason) {
+      if (!AccountRuntimeRepo.QUOTA_CLASS_COOLDOWN.test(reason)) return { cleared: false, reason }
+      return { cleared: !!clear(), reason }
+    }
+    if (current.rate_limit_reset_at && current.rate_limit_reset_at > Date.now()) {
+      return { cleared: !!clear(), reason: 'rate_limited' }
+    }
+    return { cleared: false, reason: null }
+  }
+
   clearExpired(now = Date.now()) {
     for (const state of this.list()) {
       if (!state.vm_id) continue

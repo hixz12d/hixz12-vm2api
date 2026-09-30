@@ -3,7 +3,7 @@ import type { UsageAccountRow } from '@/types/panel-usage'
 import type { Vm } from '@/types/panel-vm'
 import { MoreHorizontal } from 'lucide-react'
 import { credTypeLabel, credTypeOf } from '@/lib/cred-type'
-import { fmtNum, fmtUsd, usedPctOf } from '@/lib/format'
+import { fmtExpiresAt, fmtNum, fmtUsd, usedPctOf } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { isCodexVm } from '@/lib/vm-kind'
 import {
@@ -57,12 +57,36 @@ export function accountLamp(vm: Vm): {
   return { lamp: null, text: '正常', idle: false }
 }
 
-function planOf(vm: Vm): { label: string; cord: CordKey } {
+function planOf(vm: Vm): { label: string; cord: CordKey; title?: string } {
   if (isCodexVm(vm)) return { label: 'GPT', cord: 'codex' }
   const t = claudeTier(vm)
-  if (t.key === 'max') return { label: 'Claude Max', cord: 'max' }
-  if (t.key === 'pro') return { label: 'Claude Pro', cord: 'pro' }
-  return { label: 'Claude', cord: 'other' }
+  const base =
+    t.key === 'max'
+      ? { label: 'Claude Max', cord: 'max' as CordKey }
+      : t.key === 'pro'
+        ? { label: 'Claude Pro', cord: 'pro' as CordKey }
+        : { label: 'Claude', cord: 'other' as CordKey }
+  if (t.key !== 'max' && t.key !== 'pro') return base
+  const title = vm.account_tier_checked_at
+    ? `上次确认：${fmtExpiresAt(vm.account_tier_checked_at)}`
+    : '尚未确认'
+  // tier_confirmed 缺省（旧后端）按已确认处理。
+  if (vm.tier_confirmed === false)
+    return { label: `${base.label}（未确认）`, cord: 'other', title }
+  return { ...base, title }
+}
+
+/** 账号行状态文字的悬停提示。 */
+function statusTitle(vm: Vm, tripped: boolean): string | undefined {
+  if (vm.account_issue) {
+    const since = vm.account_issue.since
+      ? `（${fmtExpiresAt(vm.account_issue.since)} 起）`
+      : ''
+    return `账号异常${since}：${vm.account_issue.text}`
+  }
+  if (tripped) return vmCircuitTitle(vm)
+  if (vmCooldown(vm)) return vmCooldownTitle(vm)
+  return undefined
 }
 
 /**
@@ -152,7 +176,9 @@ function AccountLine({
             ) : null}
           </div>
           <div className='mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1'>
-            <Cord cord={plan.cord} name={plan.label} />
+            <span className='inline-flex min-w-0' title={plan.title}>
+              <Cord cord={plan.cord} name={plan.label} />
+            </span>
             {credLabel ? (
               <span className='text-xs text-muted-foreground'>{credLabel}</span>
             ) : null}
@@ -167,13 +193,7 @@ function AccountLine({
                   ? 'text-lamp-amber'
                   : 'text-muted-foreground'
             )}
-            title={
-              tripped
-                ? vmCircuitTitle(vm)
-                : vmCooldown(vm)
-                  ? vmCooldownTitle(vm)
-                  : undefined
-            }
+            title={statusTitle(vm, tripped)}
           >
             {text}
             {fable?.kind === 'note' ? ` · Fable ${fable.text}` : ''}

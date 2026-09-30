@@ -800,6 +800,12 @@ export class FailoverRunner {
         }
         if (verifiedSuccess(result)) {
           this.scheduler.markSuccess(selected, { workerStatus: result.workerStatus || null, countUsage })
+          if (pinVmId) {
+            // Master pin proved the account live: drop only its quota-class park.
+            try {
+              this.scheduler.clearQuotaCooldownAfterPinSuccess?.(selected)
+            } catch {}
+          }
           if (isFableModel(model) && typeof this.onFableSuccess === 'function') {
             try {
               this.onFableSuccess({ selected, model })

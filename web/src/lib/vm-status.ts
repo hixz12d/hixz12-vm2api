@@ -272,6 +272,15 @@ export function vmCooldownTitle(vm: Vm): string {
 
 export function accountStatus(vm: Vm | undefined): StatusTone {
   if (parkedGrantDeath(vm) || vmRevoked(vm)) return invalidCredTone(vm)
+  // 账号本身出问题（OAuth 不允许、停用等）先于限制 / 暂停调度显示。
+  if (vm?.account_issue) {
+    return {
+      cls: 'bad',
+      key: 'bad',
+      text: '账号异常：' + vm.account_issue.text,
+      label: '账号异常',
+    }
+  }
   const restricted = restrictionTone(vm)
   if (restricted) return { ...restricted, label: restricted.text }
 
@@ -621,9 +630,16 @@ export function claudeTier(vm: Vm | undefined): StatusTone {
     return { key: 'codex', label: plan, cls: 'codex', text: plan }
   }
   if (!vm?.has_token) return { key: 'none', label: '—', cls: 'none', text: '—' }
+  const raw = String(vm.account_tier || '').toLowerCase()
+  // 官方资料（profile）给出的套餐最权威，不被额度推断覆盖。
+  if (vm.account_tier_source === 'profile') {
+    if (raw === 'max')
+      return { key: 'max', label: 'Max', cls: 'max', text: 'Max' }
+    if (raw === 'pro')
+      return { key: 'pro', label: 'Pro', cls: 'pro', text: 'Pro' }
+  }
   if (vm.usage_has_fable === false)
     return { key: 'pro', label: 'Pro', cls: 'pro', text: 'Pro' }
-  const raw = String(vm.account_tier || '').toLowerCase()
   const oi = vm.utilization_7d_oi
   const oiN =
     oi == null ? null : Number(oi) > 1.5 ? Number(oi) / 100 : Number(oi)

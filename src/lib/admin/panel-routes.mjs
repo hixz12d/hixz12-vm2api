@@ -1779,6 +1779,19 @@ export function createPanelHandler(ctx) {
         if (result.status) return json(res, result.status, result.body)
         return json(res, 200, result)
       }
+      // POST /api/panel/vms/:id/sync — 同步账号：profile 定套餐 → 查额度 → 解除额度类冷却
+      if (req.method === 'POST' && /^\/api\/panel\/vms\/[^/]+\/sync$/.test(p)) {
+        const id = p.split('/')[4]
+        const result = await panel.buildSyncOne({
+          cfg,
+          accountQuota,
+          stickyRouter,
+          poolScheduler: ctx.poolScheduler,
+          id,
+        })
+        if (result.status) return json(res, result.status, result.body)
+        return json(res, 200, result)
+      }
       if (req.method === 'POST' && /^\/api\/panel\/vms\/[^/]+\/openai-quota\/refresh$/.test(p)) {
         const id = p.split('/')[4]
         const result = await panel.buildOpenaiQuotaRefresh({ cfg, id })

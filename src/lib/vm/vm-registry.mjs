@@ -85,6 +85,8 @@ export function summarizeVm(vm, projectRoot = null) {
     refresh_error: kind.kind === 'codex' ? null : vm.claude?.refresh_error || null,
     account_tier:
       kind.kind === 'codex' ? 'codex' : vm.claude?.account_tier || (hasAccessPresence(vm.claude) ? 'pro' : null),
+    account_tier_source: kind.kind === 'codex' ? null : vm.claude?.account_tier_source || null,
+    account_tier_checked_at: kind.kind === 'codex' ? null : vm.claude?.account_tier_checked_at || null,
     has_session_key: false,
     max_concurrency: vm.policy?.maxConcurrency ?? 2,
     max_rpm: vm.policy?.maxRpm ?? 0,
@@ -138,6 +140,10 @@ export function getActiveVmId(projectRoot) {
   }
 }
 
+/**
+ * Official profile is authoritative: only a newer profile result may change a
+ * `profile` tier. `usage` still refreshes account_tier_checked_at; `default` never does.
+ */
 export function persistAccountTier(projectRoot, vmId, tier, { source = null } = {}) {
   const key = String(tier || '').toLowerCase()
   if (key !== 'pro' && key !== 'max') return null
@@ -145,11 +151,21 @@ export function persistAccountTier(projectRoot, vmId, tier, { source = null } = 
   if (!fs.existsSync(file)) return null
   const vm = JSON.parse(fs.readFileSync(file, 'utf8'))
   vm.claude = vm.claude || {}
-  if (vm.claude.account_tier_source === 'profile' && source !== 'profile' && source !== 'usage') return vm
-  if (vm.claude.account_tier === key && (vm.claude.account_tier_source || null) === source) return vm
+  const confirms = source === 'profile' || source === 'usage'
+  const profileHeld = vm.claude.account_tier_source === 'profile' && source !== 'profile'
+  if (profileHeld && !confirms) return vm
+  const now = new Date().toISOString()
+  if (profileHeld || (vm.claude.account_tier === key && (vm.claude.account_tier_source || null) === source)) {
+    if (!confirms) return vm
+    vm.claude.account_tier_checked_at = now
+    vm.updated_at = now
+    atomicWriteJson(file, vm, { mode: 0o600 })
+    return vm
+  }
   vm.claude.account_tier = key
   vm.claude.account_tier_source = source
-  vm.updated_at = new Date().toISOString()
+  if (confirms) vm.claude.account_tier_checked_at = now
+  vm.updated_at = now
   atomicWriteJson(file, vm, { mode: 0o600 })
   return vm
 }

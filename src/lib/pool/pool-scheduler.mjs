@@ -25,6 +25,7 @@ import {
   evaluateAccount,
   isAccountRestrictionReason,
   isLeftoverQuotaScheduleOff,
+  isQuotaClassCooldownReason,
   isQuotaWindowReason,
 } from './availability.mjs'
 import { listQuotaFromHeaders } from './quota-window.mjs'
@@ -683,7 +684,10 @@ export class PoolScheduler {
       const next = Number(until) || 0
       if (next > now) availableAt = availableAt ? Math.min(availableAt, next) : next
     }
-    if (state && cooldownActive(state.cooldown_until, now) && !leftoverNoRefreshPark) {
+    // Master pin is a live diagnostic: a local quota-class park must not stop it
+    // reaching Anthropic. Other parks (rpm, overload, auth) still wait.
+    const pinQuotaBypass = pinned && isQuotaClassCooldownReason(state?.cooldown_reason)
+    if (state && cooldownActive(state.cooldown_until, now) && !leftoverNoRefreshPark && !pinQuotaBypass) {
       markWait('account_cooldown', state.cooldown_until)
     }
     const modelKey = normalizeModel(model)
@@ -1337,6 +1341,33 @@ export class PoolScheduler {
         clearVmAuthCooldown(vmJsonPath(this.projectRoot, candidate.vmId))
       } catch {}
     }
+  }
+
+  /**
+   * Master pin reached Anthropic and succeeded: the account is live again, so a
+   * leftover 5h / 7d quota-class park (incl. rate_limit_reset_at) goes.
+   * model_states and rpm / auth / proxy cools stay. syncQuotaSchedule then
+   * re-judges the quota safety line (>= 95% restricts again) and lifts a
+   * stale VM-level quota restriction when the account is accepted.
+   */
+  clearQuotaCooldownAfterPinSuccess(selected) {
+    if (!selected?.accountId) return { cleared: false, reason: null }
+    let outcome = { cleared: false, reason: null }
+    try {
+      outcome = this.runtimeRepo?.clearQuotaCooldown?.(selected.accountId, { vmId: selected.vmId }) || outcome
+    } catch {}
+    if (this.projectRoot && selected.vmId) {
+      try {
+        const vm = getVm(this.projectRoot, selected.vmId)
+        if (vm) this.syncQuotaSchedule(vm)
+      } catch {}
+    }
+    if (outcome.cleared) {
+      try {
+        this.notifyCapacity(selected.accountId)
+      } catch {}
+    }
+    return outcome
   }
 
   markCooldown(candidate, { until, reason, model = null, status = 'cooldown' } = {}) {

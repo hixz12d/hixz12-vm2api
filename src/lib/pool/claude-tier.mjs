@@ -31,14 +31,20 @@ export function hasClaudeFableUsage(vm = {}, quota = {}) {
 /**
  * Claude-only: official /usage 有 Fable 模型或真实 7d_oi=Max。
  * 落盘 pro / Fable hop 拒绝不能盖掉 usage 里的 Fable。
+ * 官方 profile 定下的套餐（account_tier_source=profile）优先于 usage 推断。
  * Shared by the panel and the pool picker so they cannot drift.
  */
 export function inferClaudeTier(vm = {}, quota = {}) {
   const hasToken = !!(vm.has_token || vm.has_access)
   if (!hasToken) return { key: 'none', label: null }
+  const stored = String(vm.account_tier || quota.account_tier || '').toLowerCase()
+  if (vm.account_tier_source === 'profile') {
+    const profileTier = String(vm.account_tier || '').toLowerCase()
+    if (profileTier === 'max') return { key: 'max', label: 'Max' }
+    if (profileTier === 'pro') return { key: 'pro', label: 'Pro' }
+  }
   const q = quotaView(vm, quota)
   if (q.usage_has_fable === false) return { key: 'pro', label: 'Pro' }
-  const stored = String(vm.account_tier || quota.account_tier || '').toLowerCase()
   if (hasClaudeFableUsage(vm, quota) || stored === 'max') {
     return { key: 'max', label: 'Max' }
   }

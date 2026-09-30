@@ -60,7 +60,12 @@ import { VmOverviewTab } from '@/features/vm/detail-overview-tab'
 import { VmProxyTab } from '@/features/vm/detail-proxy-tab'
 import { VmDetailSkeleton } from '@/features/vm/detail-skeleton'
 import { VmTestTab } from '@/features/vm/detail-test-tab'
-import { probeOutcome, type ProbeCheck } from '@/features/vm/probe-status'
+import {
+  probeOutcome,
+  syncOutcome,
+  type ProbeCheck,
+  type SyncResult,
+} from '@/features/vm/probe-status'
 import { vmQueryOptions, vmSeedQueryOptions } from '@/features/vm/queries'
 import {
   SchedulableSwitch,
@@ -127,7 +132,11 @@ export function VmDetailPage() {
     mutationFn: ({ path, body }: { path: string; body?: unknown }) =>
       postVm(id, path, body),
     onSuccess: async (data, vars) => {
-      if (vars.path === '/probe') {
+      if (vars.path === '/sync') {
+        const result = (data || {}) as SyncResult
+        if (result.ok === true) toast.success(syncOutcome(result))
+        else toast.error(syncOutcome(result))
+      } else if (vars.path === '/probe') {
         const probe = data as ProbeCheck
         if (probe.ok === true) toast.success(probeOutcome(probe))
         else toast.error(probeOutcome({ ...probe, ok: false }))
@@ -339,11 +348,11 @@ export function VmDetailPage() {
               <Button
                 size='sm'
                 variant='outline'
-                onClick={() => act.mutate({ path: '/probe', body: {} })}
-                loading={act.isPending && act.variables?.path === '/probe'}
-                title='向官方查一次这个账号的额度和凭证是否有效'
+                onClick={() => act.mutate({ path: '/sync', body: {} })}
+                loading={act.isPending && act.variables?.path === '/sync'}
+                title='重新读取官方套餐和额度；官方确认有额度时解除额度冷却'
               >
-                查一次额度
+                同步账号
               </Button>
               {vmRunning(vm) ? (
                 <Button
