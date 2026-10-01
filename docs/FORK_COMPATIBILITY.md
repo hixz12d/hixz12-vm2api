@@ -55,9 +55,11 @@
 
 ### 标题请求与会话队列
 
-采用上游调用方 session 提取方式，标题请求不再派生独立子会话；同一 caller session 的标题与主任务使用相同调度 key。因此标题可能等待主任务结束。删除 fork 的标题识别模块和独立 `SessionQueue`，采用上游 `FailoverRunner.sessionTails` 队列。
+采用上游调用方 session 提取方式，标题请求不再派生独立子会话；同一 caller session 的标题与主任务使用相同调度 key。删除 fork 的标题识别模块和独立 `SessionQueue`，采用上游 `FailoverRunner.sessionTails` 队列。
 
-队列仅保留一处有回归测试的修复：清理 session key 必须等待整个 tail（含全部前序任务）完成。上游在取消最后一个等待者时立即删 key，会让新请求越过仍在执行的前序任务。修复只移动清理时机，不改变上游选号、重试和会话绑定策略。
+队列保留两处 fork 修复：
+- 清理 session key 必须等待整个 tail（含全部前序任务）完成。上游在取消最后一个等待者时立即删 key，会让新请求越过仍在执行的前序任务。
+- 排队设上限 `failover.session_queue_max_wait_ms`（缺省 15000，0 为不限）：超时后本次请求与前序并行执行，日志打 `[session-queue]`，绑定与选号策略不变。原因：中间层（如 Sub2API）丢掉 `x-claude-code-agent-id` 时，并行子代理都落到主会话 key 上，会排在几分钟的长回合后面，超过 Nginx 600 秒被 504。合并上游时注意 `failover-runner.mjs` 的 `waitForSessionTurn`。
 
 ### 流式响应
 

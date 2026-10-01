@@ -30,6 +30,8 @@ const DEFAULTS = {
   same_account_retry_max_hop_ms: 10_000,
   signature_repair: false,
   empty_response_backoff_ms: 60_000,
+  // Longest a request waits behind an earlier one of the same session; 0 = no cap.
+  session_queue_max_wait_ms: 15_000,
 }
 
 function clone(value) {
@@ -198,22 +200,37 @@ function sleepWithSignal(ms, signal) {
   })
 }
 
-function waitForSessionTurn(previous, signal) {
-  if (!signal) return previous.catch(() => {})
-  if (signal.aborted)
+/**
+ * Resolves false when the previous same-session request finished, true when
+ * maxWaitMs ran out first. A caller whose sub-agent marker was stripped on the
+ * way in looks like its own main session; waiting for a long turn would stall
+ * it for minutes, so after the cap it runs alongside instead.
+ */
+function waitForSessionTurn(previous, signal, maxWaitMs = 0) {
+  if (signal?.aborted)
     return Promise.reject(Object.assign(new Error('Request was cancelled'), { code: 'request_cancelled' }))
   return new Promise((resolve, reject) => {
+    let timer = null
+    const cleanup = () => {
+      if (timer) clearTimeout(timer)
+      signal?.removeEventListener?.('abort', onAbort)
+    }
     const onAbort = () => {
       cleanup()
       reject(Object.assign(new Error('Request was cancelled'), { code: 'request_cancelled' }))
     }
-    const cleanup = () => signal.removeEventListener?.('abort', onAbort)
-    signal.addEventListener?.('abort', onAbort, { once: true })
+    signal?.addEventListener?.('abort', onAbort, { once: true })
+    if (maxWaitMs > 0) {
+      timer = setTimeout(() => {
+        cleanup()
+        resolve(true)
+      }, maxWaitMs)
+    }
     previous
       .catch(() => {})
       .then(() => {
         cleanup()
-        resolve()
+        resolve(false)
       })
   })
 }
@@ -449,8 +466,17 @@ export class FailoverRunner {
       if (this.sessionTails.get(sessionKey) === tail) this.sessionTails.delete(sessionKey)
     })
     try {
-      await waitForSessionTurn(previous, args.signal)
+      const overflowed = await waitForSessionTurn(
+        previous,
+        args.signal,
+        Number(this.config.session_queue_max_wait_ms) || 0,
+      )
       const sessionQueueMs = Date.now() - queuedAt
+      if (overflowed) {
+        console.warn(
+          `[session-queue] request ${args.requestId || '-'} waited ${sessionQueueMs}ms behind its session; running alongside`,
+        )
+      }
       if (!args.pinVmId) {
         const retryAfterMs = this.emptyResponseBackoff.remaining(backoffKey, args.canonicalBody)
         if (retryAfterMs > 0) {
