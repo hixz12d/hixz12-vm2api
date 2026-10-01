@@ -61,6 +61,10 @@
 - 清理 session key 必须等待整个 tail（含全部前序任务）完成。上游在取消最后一个等待者时立即删 key，会让新请求越过仍在执行的前序任务。
 - 排队设上限 `failover.session_queue_max_wait_ms`（缺省 15000，0 为不限）：超时后本次请求与前序并行执行，日志打 `[session-queue]`，绑定与选号策略不变。原因：中间层（如 Sub2API）丢掉 `x-claude-code-agent-id` 时，并行子代理都落到主会话 key 上，会排在几分钟的长回合后面，超过 Nginx 600 秒被 504。合并上游时注意 `failover-runner.mjs` 的 `waitForSessionTurn`。
 
+### 执行位全忙时的 CLI 回收
+
+上游在 `kernel-router.mjs` 的 `runHop` 里遇到 `slot_busy` 就立即回收（SIGKILL）槽位 CLI，假定忙着的执行位都是泄漏的。fork 只在本控制面对该槽位没有在途请求（`wrapHopInflight === 0`）时才回收；有在途请求说明执行位是真在用，回收会把正在输出的长回合全部打断（表现为 `native cli stdout closed`、几分钟后 502）。有回归测试 `slot_busy with live hops on the VM does not recycle the CLI`。合并上游时保留这个条件。
+
 ### 流式响应
 
 传输层、SSE 组装和 kernel router 采用上游实现。按可见输出与 stop reason 判断完整性，不再额外强制收到 `message_stop`；保留上游额度错误还原、空响应重试和回收行为。

@@ -135,6 +135,41 @@ test('waitForReadySlot with zero budget does an immediate check only', async () 
   assert.ok(Date.now() - started < 80)
 })
 
+unixTest('slot_busy with live hops on the VM does not recycle the CLI', async () => {
+  resetWrapRecycleState()
+  const previous = process.env.KIN_KERNEL_BIN
+  process.env.KIN_KERNEL_BIN = '/bin/true'
+  const exec = { vmId: 'vm-busy-live', vm: { id: 'vm-busy-live', inference_engine: 'rust' } }
+  const recycled = []
+  const hop = () =>
+    dispatchStreamInference({
+      exec,
+      body: { model: 'claude-haiku-4-5-20251001', messages: [{ role: 'user', content: 'hi' }] },
+      routing: { inference: { engine: 'rust' } },
+      ensureRust: async () => ({ ok: false, reason: 'slot_busy' }),
+      recycleWrap: (target) => {
+        recycled.push(target?.vmId)
+        return { ok: true, skipped: false }
+      },
+    })
+  try {
+    beginWrapHop(exec)
+    try {
+      const result = await hop()
+      assert.equal(result.status, 503)
+      assert.deepEqual(recycled, [], 'busy slots held by live hops are real work')
+    } finally {
+      endWrapHop(exec)
+    }
+    await hop()
+    assert.deepEqual(recycled, ['vm-busy-live'], 'with no live hop, busy slots are leaked and get recycled')
+  } finally {
+    resetWrapRecycleState()
+    if (previous == null) delete process.env.KIN_KERNEL_BIN
+    else process.env.KIN_KERNEL_BIN = previous
+  }
+})
+
 test('rust health cache hits within TTL and misses when disabled', () => {
   clearRustHealthCache()
   const exec = { vmId: 'vm-cache' }

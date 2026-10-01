@@ -279,7 +279,11 @@ async function runHop({ mode, opts }) {
     if (ready?.ok) {
       reason = ready.reason || 'configured_rust'
     } else {
-      if (ready?.reason === 'slot_busy') releaseLeakedSlots(opts.exec, opts.recycleWrap)
+      // Busy slots are leaked only when no hop of ours is running. With live
+      // hops they are real work; recycling SIGKILLs every in-flight stream.
+      if (ready?.reason === 'slot_busy' && wrapHopInflight(opts.exec) === 0) {
+        releaseLeakedSlots(opts.exec, opts.recycleWrap)
+      }
       return {
         ...rustUnavailableResult(ready),
         wanted_engine: 'rust',
