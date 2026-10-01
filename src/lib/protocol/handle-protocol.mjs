@@ -69,7 +69,12 @@ import {
 } from '../core/errors.mjs'
 import { resolveWorkspaceMode, isOfficialClaudeClient } from './workspace-mode.mjs'
 import { officialMessagesBody } from './anthropic-messages.mjs'
-import { prepareOutboundEnvelope, prepareCliHopBody } from './outbound-attempt.mjs'
+import {
+  prepareOutboundEnvelope,
+  prepareCliHopBody,
+  pickSafeguardsBeta,
+  autoModeServerEnabled,
+} from './outbound-attempt.mjs'
 import { loadVmIdentity, OFFICIAL_CLI_VERSION } from '../identity/vm-identity.mjs'
 import { touchTelemetrySession } from '../vm/worker-telemetry.mjs'
 import {
@@ -994,6 +999,8 @@ export function createHandleProtocol(deps) {
               repaired,
               dataplane: resolveKernelDataplane(selected.vm, routingNow),
               cacheTtl: requestedCacheTtl,
+              safeguardsBeta: pickSafeguardsBeta(req.headers['anthropic-beta']),
+              autoModeServer: autoModeServerEnabled(routingNow),
             })
             hopBody = await materializeRemoteImageSources(hopBody)
             if (identity) {

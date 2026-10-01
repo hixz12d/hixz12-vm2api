@@ -157,6 +157,41 @@ function stabilizeMessageBudgets(body) {
   return changed ? { ...body, messages } : body
 }
 
+/** The one caller beta that rides with `safeguards` (Claude Code auto mode). */
+export const SAFEGUARDS_BETA_RE = /^dangerous-tool-use-\d{4}-\d{2}-\d{2}$/
+
+/** First `dangerous-tool-use-YYYY-MM-DD` in the caller's anthropic-beta header(s), or ''. */
+export function pickSafeguardsBeta(betaHeader) {
+  const values = Array.isArray(betaHeader) ? betaHeader : [betaHeader]
+  for (const value of values) {
+    for (const token of String(value ?? '').split(',')) {
+      const beta = token.trim()
+      if (SAFEGUARDS_BETA_RE.test(beta)) return beta
+    }
+  }
+  return ''
+}
+
+/** routing.compatibility.auto_mode_server: missing or anything but `false` means on. */
+export function autoModeServerEnabled(routing) {
+  return routing?.compatibility?.auto_mode_server !== false
+}
+
+/**
+ * Auto mode server checks: keep the caller's `safeguards` and hand the slot CLI
+ * its beta in-body (`kin_safeguards_beta`; the kernel drops envelope headers).
+ * Both or neither. A caller-sent `kin_safeguards_beta` is never trusted.
+ */
+function applyCliHopSafeguards(body, safeguards, { safeguardsBeta, autoModeServer }) {
+  delete body.safeguards
+  delete body.kin_safeguards_beta
+  const beta = typeof safeguardsBeta === 'string' ? safeguardsBeta.trim() : ''
+  if (autoModeServer === false || !Array.isArray(safeguards) || !SAFEGUARDS_BETA_RE.test(beta)) return body
+  body.safeguards = safeguards
+  body.kin_safeguards_beta = beta
+  return body
+}
+
 /**
  * Caller fields plus Node-owned message breakpoints.
  * CLI owns persona layout and system/tools markers; kernel only forwards.
@@ -171,16 +206,20 @@ function stabilizeMessageBudgets(body) {
  */
 export function prepareCliHopBody(
   canonicalBody,
-  { stream = true, repaired = false, dataplane, cacheTtl = DEFAULT_CACHE_TTL } = {},
+  {
+    stream = true,
+    repaired = false,
+    dataplane,
+    cacheTtl = DEFAULT_CACHE_TTL,
+    safeguardsBeta = '',
+    autoModeServer = true,
+  } = {},
 ) {
   let body = officialMessagesBody(canonicalBody, { stream })
+  const safeguards = body.safeguards
+  delete body.safeguards
+  delete body.kin_safeguards_beta
   delete body.metadata
-  // Wrap CLI (Claude Code) throws a fatal "max_output_tokens" error if response reaches max_tokens.
-  // Probes, ping tests, and third-party UI connection checks send max_tokens: 1 (or small numbers).
-  // Ensure a safe minimum for cli-hop so output finishes with end_turn rather than hitting max_tokens.
-  if (body.max_tokens != null && Number(body.max_tokens) <= 64) {
-    body.max_tokens = 1024
-  }
   const leftover = stripCliOwnedSystem(body.system)
   if (leftover == null) delete body.system
   else body.system = leftover
@@ -209,7 +248,7 @@ export function prepareCliHopBody(
   body = stripIllegalCacheControlFields(body)
   body = removeCacheControlFields(body)
   body = applyMessageBreakpoints(body, normalizeCacheTtl(cacheTtl), 'rewrite')
-  return body
+  return applyCliHopSafeguards(body, safeguards, { safeguardsBeta, autoModeServer })
 }
 /** Wrap CLI process is spawned as sonnet-5/adaptive. Haiku rejects thinking. */
 export function pinHaikuCliThinking(body = {}) {

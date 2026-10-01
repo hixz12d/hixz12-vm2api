@@ -102,6 +102,21 @@ export function HealthPane(props: HealthPaneProps) {
               />
             </div>
           </SettingRow>
+          <SettingRow
+            label='Claude Code auto mode 服务端检查'
+            desc='开启后 auto mode 的安全检查由 Anthropic 在同一请求里完成，不额外消耗额度；遇到 auto mode 拒绝执行等异常时关闭，客户端会退回自己检查。'
+          >
+            <Switch
+              checked={compatibility.auto_mode_server !== false}
+              onCheckedChange={(checked) =>
+                onCompatibilityChange({
+                  ...compatibility,
+                  auto_mode_server: checked,
+                })
+              }
+              aria-label='Claude Code auto mode 服务端检查'
+            />
+          </SettingRow>
         </CardContent>
       </Card>
       <HealthCacheCard

@@ -14,6 +14,7 @@ import {
   Settings,
   Shield,
   Sparkles,
+  UserCog,
   Users,
 } from 'lucide-react'
 import type { NavGroup, NavItem, SidebarData } from '../types'
@@ -41,6 +42,7 @@ const ALL_GROUPS: NavGroup[] = [
       { title: VIEW_TITLES.usage, url: '/usage', icon: Gauge },
       { title: VIEW_TITLES.logs, url: '/logs', icon: ScrollText },
       { title: VIEW_TITLES.settings, url: '/settings', icon: Settings },
+      { title: VIEW_TITLES.users, url: '/users', icon: UserCog },
     ],
   },
   {

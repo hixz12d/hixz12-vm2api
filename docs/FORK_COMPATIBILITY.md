@@ -1,14 +1,18 @@
 # Fork 运行兼容性
 
-## 当前策略：优先采用上游 v1.3.85
+## 当前策略：优先采用上游 v1.3.88
 
-融合上游 `76f6a1e`（v1.3.85 及 main 后续管理员并发修复）。保留 fork 历史与定制管理台，源码、预编译前端及 CLI 补丁同步维护。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
+融合上游 `259dbbd`（v1.3.88，含 v1.3.86–v1.3.87）。保留 fork 历史与定制管理台，源码、预编译前端及 CLI 补丁同步维护。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
 
-- 采用 Sonnet 5.5 工具/结构化输出兼容、Node 会话 TTL 与消息断点、缓存连续性诊断、30 日账号统计和 Claude/GPT 创建入口。
+- 采用 #191（cli-hop 的 `stop_reason=max_tokens` 视为正常截断）：Node 删除旧 `max_tokens<=64 → 1024` 规避分支，`compatibility.min_max_tokens` 下限仍生效。该修复依赖新 `cli-node`：仓内 `cli-node` 以上游 v1.3.88 为基线打 `caller-system-v3+safeguards-v1` 补丁，Node 与 CLI 必须一起上线。
+- auto mode 服务端检查（fork 定制）：cli-hop 上 `prepareCliHopBody` 只在 `compatibility.auto_mode_server` 非 `false`、调用方 `safeguards` 为数组、`anthropic-beta` 含 `dangerous-tool-use-YYYY-MM-DD` 时保留 `safeguards` 并写内部字段 `kin_safeguards_beta`，否则两者都删；`cli-node` 补丁把 beta 并入出站 `anthropic-beta`，不外发内部字段。只放行这一个调用方 beta。合并上游时注意 `outbound-attempt.mjs`、`handle-protocol.mjs` 的 cli-hop 调用处。
+- 采用 #190：新 `bin/kin-egress` 拒绝自转发直连；`egress.mjs` 就绪检查改用 `ss -ltn`，运行环境需有 `ss`。
+- 采用上游管理台用户管理（`/api/panel/users`、`#/users`，侧栏「记录与设置」组）。管理员在管理台改过密码后以 SQLite `users` 为准，`.env` 的 `VM2API_ADMIN_PASSWORD` 对该账号不再生效。
+- 采用上游集群 SSH / 远程 Docker（`src/lib/cluster/*`、WebSocket 终端、迁移 `026_cluster_nodes.sql`、依赖 `ssh2`、`ws`、`@xterm/xterm`）。本 fork 部署保持闲置，不添加远程节点；可选环境变量 `VM2API_CLUSTER_SOCKET_DIR` 不设置走默认。
 - Claude Code 带 `x-claude-code-agent-id` 时优先使用上游稳定子会话 ID，父会话仍为原始 root；无此头时保留 fork specialist 指纹隔离。分组候选和 family 检查、智能评分、取消、空响应退避继续保留。
-- 新 cli-node 基于当前上游重建，保留客户端 Environment/Notes 原文和 kernel.json 档位/时区热读；cc-node 和两个 Rust 内核保持原版本。补丁维护与验证边界以 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md) 为准。
-- 管理台保留定制色板、账号线视图、状态灯及分组删除，融合上游详情卡、操作菜单、统计、平台选项及品牌链接。默认账号线视图也提供新增操作。
-- 管理员仅豁免用户级并发限制；API Key、账号额度和分组限制不放开。没有数据库迁移、依赖或生产持久配置变更。
+- cc-node 和两个 Rust 内核保持原版本。CLI 补丁维护与验证边界以 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md) 为准。
+- 管理台保留定制色板、账号线视图、状态灯及分组删除，融合上游详情卡、操作菜单、统计、平台选项、品牌链接、用户与集群页面。`web/dist` 由合并后源码重建。
+- 管理员仅豁免用户级并发限制；API Key、账号额度和分组限制不放开。
 
 ## 账号同步
 
@@ -140,6 +144,8 @@ v1.3.56（Fable 权益探测标记 Max）只在上游分支 `cursor/fix-supervis
 - 智能评分与设备亲和同时存在时，采用上游顺序：设备主 VM 可预留时优先，否则再按号池策略（含 `smart`）选号。
 
 ## 同步历史
+
+- `upstream/main 259dbbd`：同步至 v1.3.88（#191、#190、用户管理、集群 SSH / 远程 Docker），保留分组隔离、账号同步与定制管理台；`cli-node` 暂留 fork 版本待重打补丁。
 
 - `v1.3.64 cd76b57`：同步 v1.3.61–v1.3.64 的内核异常恢复、凭证调度、套餐与额度判定、GPT 用量展示及 OAuth 换票服务。保留分组隔离、智能评分、原子安装与槽位资源限制。镜像改为检查 `kin-oauth-auth` 的 JSON 错误协议；OAuth 测试改为覆盖生产子进程接口，不依赖上游未发布的 `auth.js`。控制面与 wrap kernel 需要更新，槽位须依次同步；不新增数据库迁移。
 

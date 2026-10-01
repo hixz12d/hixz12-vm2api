@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.88（fork 合并）— 2026-10-01
+
+- 同步上游 v1.3.86–v1.3.88（#191 输出上限截断、#190 出口自转发、管理台用户管理、集群 SSH / 远程 Docker）。分组隔离、账号同步、智能评分和定制管理台继续保留；用户、集群页面接入定制导航。集群功能合并但不添加远程节点。
+- `cli-node` 以上游 v1.3.88 为基线重打补丁 `caller-system-v3+safeguards-v1`（含 #191 修复），cc-node 与 Rust 内核不变。
+- Claude Code auto mode 走 Anthropic 服务端安全检查：cli-hop 透传调用方 `safeguards` 和配套 beta `dangerous-tool-use-YYYY-MM-DD`，回复保留 `safeguard_results`；`compatibility.auto_mode_server`（缺省开）可在设置里关闭，关闭后客户端退回本地分类器。
+
 ## 1.3.79-fork.1 — 2026-09-29
 
 - cli-hop（wrap / cc / crag）保留调用方顶层 system，槽位只追加网关时区，不再注入槽位 cwd、平台、OS 和 Notes。仓内 `cli-node`、`cc-node` 应用 `caller-system-v1` 补丁（见 `docs/CLI_SYSTEM_PATCH.md`）。
@@ -24,12 +30,36 @@
 - 同步上游 v1.3.53–v1.3.55。family 绑定只在 API Key 分组内生效：分组变更后旧 family VM 不再强制本次请求，锁定检查也不会把请求带出分组。
 - 修复上游 family 锁定重选时未释放已预留席位和 native slot 的问题；同一 family VM 重选仍失败时返回 `family_vm_unavailable`，不再循环。
 - 取消统一为上游 `client_cancelled`（499），fork 的响应断开检测（`res.close` 且未正常结束）继续生效。空跳同号重试保留 `retryAccountId` 约束。
-## Unreleased
+
+## 1.3.88 — 2026-10-01
+
+- 修复 #191 / #94：cli-hop 的 `stop_reason=max_tokens` 是正常截断，不再被槽内 CLI 转为 API 错误；保留内容、真实 usage 和 `message_delta` / `message_stop`，不触发自动重试。交互式 CLI 的输出上限恢复提示不变。移除 Node 的旧 `max_tokens<=64 → 1024` 规避分支；可配置的 `compatibility.min_max_tokens` 下限仍生效。
+- 修复 #190：kin-egress 拒绝原目标等于当前连接本地监听地址的直连流量，避免本机 / 同内网 SOCKS 对私网 direct 时形成自转发环路。控制面的启动等待和健康探测改用 `ss` 检查 LISTEN 状态，不再连接透明转发端口。
+- 更新预编译 `kin-egress` 和 `cli-node`；Rust kernel、web 控制台及其他二进制源码不变。本次仅包含上述两项修复及回归测试，不包含另一个任务的集群 / 槽位放置改动。
+
+已部署机升级：更新 Node 控制面、宿主机 / 远端出口的 `kin-egress` 和槽内 `share/wrap-cli/cli-node`，重启相关进程。仅改 Node 或版本号不能修复旧二进制；Rust kernel 无需重编。
+
+## 1.3.87 — 2026-09-30
+
+- 恢复面板用户管理（撤回 `3420f8a`）。admin 在侧栏「用户」页（`#/users`）新建、编辑角色/启用/自建配额、删除用户；每行「改密码」弹窗带确认密码与 8–128 位校验。改他人密码立即踢掉该用户全部会话；改自己密码保留当前会话、踢掉其它设备。`GET/POST/PATCH/DELETE /api/panel/users` 仅 admin / master key。
+- 改密后 SQLite `users` 为准，`VM2API_ADMIN_PASSWORD` 不再能登录同名账号。
+- 集群页接入 VPS 改为 SSH：控制面主动拨出（本机在 NAT 后可用，远端在 NAT 后可经已接入节点跳转），首连核对并固定主机指纹。常驻连接带 keepalive 和指数退避重连；指纹不符或认证失败停住等人工重连。凭证按 `VM2API_DB_SECRET` 加密落库。
+- 集群节点弹出式管理面板：xterm 终端（一次性票据 WebSocket）、远端 Docker（经 SSH 转发 docker.sock：信息、一键安装、建容器、启停重启、日志、删除）、连接详情。本机另开 unix socket 桥，`docker -H unix://<data>/cluster/<id>/docker.sock` 可直接用本机 docker CLI 管远端。去掉集群页示意行。
+- 集群页本机面板新增「链路」：控制面运行形态（进程 / 容器 host|bridge）、监听地址、公网出口与是否在 NAT 后（由已连接节点观测，不依赖第三方 IP 服务）、面板端口是否公网可达、本机 Docker 与槽容器数、集群出站就绪数。`GET /api/panel/cluster/local`。
+- 新依赖 `ssh2`、`ws`（Node）和 `@xterm/xterm`（web）；新迁移 `026_cluster_nodes`。
+
+已部署机升级：更新 Node 控制面（`src/`、`package*.json`）和 `web/dist`，本机 Node 部署先 `npm ci --omit=dev`（新增 `ssh2`、`ws`；镜像构建已包含），重启一次 Node。
+
+## 1.3.86 — 2026-09-30
 
 - 控制台侧栏左上角品牌区重做：vm2api 标识 + 放大的版本徽标（链到对应 GitHub Release）+ GitHub 仓库链接；移除 `Anthropic` / `GPT` 平台标签。侧栏折叠为图标时只留标识。
 - 登录后每天首次打开控制台，右下角弹出一次 GitHub Star 提示，10 秒后自动隐藏（悬停/聚焦时暂停，可手动关闭）。按本地日期记在 `localStorage` 的 `vm2api_star_hint_day`，当天不再出现。
 - `web/dist` 随本版重编。
 - 管理员（`role=admin`）不再受用户级并发上限（`users.concurrency`）约束；普通用户上限不变。
+- GPT-6.1 Sol 按官方价计费。标准档每百万 token：输入 $2、缓存读 $0.10、缓存写 $2.50、输出 $10。输入超过 272K 时整单按 2 倍输入和缓存、1.5 倍输出；Flex 为该档一半，Fast 为两倍。
+- Codex 额度查询的 `chatgpt-account-id` 优先用 access token 里的账号 ID。导入记录没有账号 ID 时也会带上。
+
+已部署机升级：更新 Node 控制面（`src/`）和 `web/dist`，重启一次 Node。不改 kernel / cli-node，不必 `wrap-cli/sync`。不要 `docker rm` 槽。不要覆盖 live `routing.json`。
 
 ## 1.3.85 — 2026-09-30
 

@@ -2,9 +2,9 @@
 
 ## 当前状态
 
-源码融合上游 `76f6a1e`（v1.3.85 + main 后续修复）。仓内 `cli-node` 基于新版上游重新提取、应用 `caller-system-v2` 并用官方 Bun 重建；`cc-node` 保持已验证的 `caller-system-v1` 二进制。两个 Rust 内核未变。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准；下文记录的是本地融合验证。
+源码融合上游 `259dbbd`（v1.3.88）。仓内 `cli-node` 基于该上游重新提取，应用 `caller-system-v3+safeguards-v1` 并用官方 Bun 重建；`cc-node` 保持已验证的 `caller-system-v1` 二进制。两个 Rust 内核未变。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准；下文记录的是本地验证。
 
-唯一补丁实现是 `scripts/patch-cli-system.py`，固定输入源码 SHA-256；未知上游版本拒绝应用。`cli-node` 对应当前上游，`cc-node` 对应原固定基线，`legacy-cli-node` 可复现旧版补丁。逐文件基线和成品哈希见 [PATCH.json](../share/wrap-cli/PATCH.json)。
+唯一补丁实现是 `scripts/patch-cli-system.py`，固定输入源码 SHA-256；未知上游版本拒绝应用。`cli-node` 对应当前上游，`cli-node-v1.3.85` 可复现上一版，`cc-node` 对应原固定基线，`legacy-cli-node` 可复现旧版补丁。逐文件基线和成品哈希见 [PATCH.json](../share/wrap-cli/PATCH.json)。
 
 ## 修复契约
 
@@ -15,30 +15,40 @@
 - cc-node 保留 native/crag 配置初始化、workload/debug 引用修复；crag 仅还原首个传输用 `<system>` 块，普通 user 中的同名标签不提升为 system，工具续轮保留当前槽位 system，新任务重置。
 - 常驻约束采用上游默认关闭语义：缺 map/key 为关闭，显式 true 才开启。关闭后不得残留前一请求约束。
 
+## auto mode 服务端检查（safeguards）
+
+Claude Code auto mode 在请求体带 `safeguards`、在 `anthropic-beta` 带 `dangerous-tool-use-YYYY-MM-DD`，服务端在 `message_delta.delta.safeguard_results` 返回结论。内核不转发信封请求头，所以 Node 把该 beta 放进 hop body 的内部字段 `kin_safeguards_beta`。
+
+- cli-node 只有在 `safeguards` 是数组、且 `kin_safeguards_beta` 匹配 `^dangerous-tool-use-\d{4}-\d{2}-\d{2}$` 时，才把 `safeguards` 原样放进出站请求体，并把该 beta 并入出站 `anthropic-beta`（去重）。任一条件不满足则两者都不发。`kin_safeguards_beta` 从不发给 Anthropic。
+- 回复方向不需要补丁：内核与 CLI 原样转出 `message_delta`，`safeguard_results` 保留。
+- 补丁只新增 `kinSafeguardsFromRequest` 并在 `runJob` → 出站参数之间传一个 `kinSafeguards` 选项，不改缓存和计费函数。
+- 内核会把 job JSON 按键名重新排序后交给 CLI，`safeguards` 的值不变、键顺序会变。
+
 ## 缓存与预览
 
 采用上游 v1.3.83 的 Node 消息断点：清洗 caller cache_control 后重建最后消息和符合条件的倒数第二 user 断点，使用会话 pin 的 TTL；native CLI 保留消息标记并处理 system/tools 断点。新 cli-node 的 `applyKinOwnedCacheMarkers`、`capCacheMarkers` 等缓存和计费函数未被 fork 补丁修改，与当前上游源码逐字一致。
 
-cc-node 二进制未更新；已用合并后的 Node 请求准备路径复核其 5m / 1h 双消息断点、总断点数不超过 4。这里验证的是隔离模拟请求的出站形状，不代表真实缓存命中、费用或长期稳定性。
+cc-node 二进制未更新，其 5m / 1h 双消息断点、总断点数不超过 4 的验证沿用上一次融合结果（git 历史中的证据文件）。这里验证的是隔离模拟请求的出站形状，不代表真实缓存命中、费用或长期稳定性。
 
 管理台最终 system 预览继续采用 fork 的 CLI 分段逻辑；调用方内容用占位符表示。请求头覆盖、真实正文与最终 wire 应以请求抓取为准，不能把预览当作缓存证据。system 或断点变化可能导致首次冷缓存。
 
 ## 本次验证
 
-验证环境为本地 Linux Docker，无外网，根文件系统只读，CPU 硬上限实读 `150000 100000`（1.5 核），使用虚构 API Key 与容器内 HTTP 模拟上游。
+验证环境为本地 Linux Docker，无外网，根文件系统只读，CPU 硬上限实读 `150000 100000`（1.5 核），使用虚构凭据与容器内 HTTP 模拟上游。
 
-- 新 cli-node 与原 cc-node 各 8 组请求，共 16 组：zero / identity × 5m / 1h × Sonnet 5.5 / Haiku。
-- 使用合并后的真实 `prepareCliHopBody`，经 CLI native 协议发请求；检查调用方 Windows 环境及首尾空白、配置热读、无槽位环境注入、缓存标记、完整 SSE 至 `message_stop`。
-- 新产物与官方 Bun 的 `.text` / `.rodata` 一致；单入口 `/$bunfs/root/cli.js`、graph flags=7 已核对。
-- 后端相关既有检查 366 项通过；前端相关既有检查 30 项通过。前端产物从融合后的源码生成。
+- 经实际 Rust 内核（`kin-kernel --gateway-worker`，local_cli / wrap / 2 槽位）调用新 cli-node；请求体由合并后的真实 `prepareCliHopBody` 生成。
+- 内核黑盒：内核交给 CLI 的任务保留 `safeguards` 与 `kin_safeguards_beta`，返回给调用方的 SSE 保留 `safeguard_results`。
+- safeguards：两者都有时上游收到相同的 `safeguards` 和一次该 beta；Node 开关关闭、缺 beta、缺 safeguards，以及直接构造的只有一个字段、beta 不带日期、safeguards 非数组，上游都没有这两项；任何情况下上游都看不到 `kin_safeguards_beta`。
+- 回归：调用方 Windows 环境及首尾空白原样保留、无槽位环境注入、5m / 1h 缓存标记、SSE 到 `message_stop`、`kernel.json` 热读（档位与时区）；#191：上游 `stop_reason=max_tokens` 正常结束，无错误事件。
+- 新产物与官方 Bun 的 `.text` / `.rodata` 一致；单入口 `/$bunfs/root/cli.js`、graph flags=7 已核对；上述缓存和计费函数与上游 v1.3.88 源码逐字一致；`cli-node-v1.3.85` 模式仍能复现上一版补丁源码。
 
-本次证据见 [CLI_UPSTREAM_MERGE_EVIDENCE.json](CLI_UPSTREAM_MERGE_EVIDENCE.json)。旧版实际 Rust 内核联调证据保留在 [CLI_SYSTEM_PATCH_EVIDENCE.json](CLI_SYSTEM_PATCH_EVIDENCE.json)，不能当作本次新二进制的验证结果。
+本次证据见 [CLI_UPSTREAM_MERGE_EVIDENCE.json](CLI_UPSTREAM_MERGE_EVIDENCE.json)。旧版实际 Rust 内核联调证据保留在 [CLI_SYSTEM_PATCH_EVIDENCE.json](CLI_SYSTEM_PATCH_EVIDENCE.json)。
 
-未验证：新二进制经实际 Rust 内核的完整调用、生产 `/v1/messages`、真实 Windows Claude Code、真实缓存命中率和长时间观察。
+未验证：生产 `/v1/messages`、真实 Anthropic 对该 beta 与 `safeguards` 的响应、真实 Windows Claude Code auto mode、真实缓存命中率和长时间观察。
 
 ## 维护与复现
 
-当前 cli-node 原始文件从 `76f6a1e91fa3d776356fdb0d268c46bb0f00edfd:share/wrap-cli/cli-node` 导出；cc-node 原始文件从 `336729010c6040236bdcd507923737eb4abb1178:share/wrap-cli/cc-node` 导出。使用二进制安全导出，不通过旧 PowerShell 文本重定向。
+当前 cli-node 原始文件从 `259dbbdc79aa85158a29f3fbf5df372d66fd2577:share/wrap-cli/cli-node` 导出；cc-node 原始文件从 `336729010c6040236bdcd507923737eb4abb1178:share/wrap-cli/cc-node` 导出。使用二进制安全导出，不通过旧 PowerShell 文本重定向。
 
 提取工具 `../scripts/research/extract-cli-bundle.py` 支持同一 Bun 格式的带/不带 shebang 两种入口；正式旧研究产物 `../artifacts/cli-node-rebuild/` 保持原样。
 

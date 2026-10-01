@@ -33,6 +33,7 @@ describe('sidebar permissions', () => {
         '/settings',
         '/system',
         '/usage',
+        '/users',
         '/vm',
         '/wrap',
       ].sort()
