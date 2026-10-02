@@ -24,8 +24,8 @@ const TIER_DEFAULTS: Record<QuotaTierKey, QuotaTierPolicy> = {
   max: { max_concurrency: 4, max_rpm: 0, limit_5h: 0.95, limit_7d: 0.95 },
 }
 
-const SESSION_STEPS = [0, 1, 2, 4, 8, 12, 16, 20]
-const IDLE_STEPS: [number, string][] = [
+export const SESSION_STEPS = [0, 1, 2, 4, 8, 12, 16, 20]
+export const IDLE_STEPS: [number, string][] = [
   [1, '1 分钟'],
   [5, '5 分钟'],
   [15, '15 分钟'],
@@ -33,7 +33,7 @@ const IDLE_STEPS: [number, string][] = [
   [60, '1 小时'],
 ]
 // 30–100% in 5-point steps, matching the legacy ratio slider's snap-down rule
-const RATIO_STEPS = Array.from({ length: 15 }, (_, i) => 30 + i * 5)
+export const RATIO_STEPS = Array.from({ length: 15 }, (_, i) => 30 + i * 5)
 
 function snapRatio(v: unknown, fallback: number): number {
   const n = Number(v)
@@ -204,7 +204,7 @@ export function QuotaTierPane({
 
         <p className='text-xs text-muted-foreground'>
           每分钟请求数满了会排队等一会儿，不换账号。0
-          表示不限。在账号详情里单独改过的账号，保留它自己的设置。
+          表示不限。在账号详情里单独改过并发、每分钟请求数或配额的账号，改过的项保留它自己的设置。
         </p>
       </CardContent>
     </Card>

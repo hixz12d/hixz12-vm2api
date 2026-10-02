@@ -170,14 +170,15 @@ unixTest('a generic uncommitted error follows upstream empty-hop handling withou
   assert.equal(recycled, 0)
 })
 
-unixTest('a kernel wrap connection error still recycles the CLI', async () => {
+unixTest('a kernel wrap connection error fails the hop without recycling the CLI', async () => {
   const { result, recycled } = await runStream([
     start,
     { type: 'error', error: { type: 'api_error', message: 'provider error: Connection error' } },
   ])
   assert.equal(result.ok, false)
   assert.equal(result.terminalState, 'incomplete')
-  assert.equal(recycled, 1)
+  // v1.3.91: the kernel and watchdog own bounded recovery; a request never recycles.
+  assert.equal(recycled, 0)
 })
 
 unixTest('a provider rate limit survives assembly without exposing a partial stream or recycling', async () => {

@@ -12,6 +12,7 @@ import {
   isCompleteAssistantMessage,
   isIncompleteAssistantMessage,
   incompleteAssistantClientError,
+  KERNEL_FAILURE_STATUS,
 } from '../core/errors.mjs'
 import { hasRefreshPresence, readWorkerCredentialFile } from '../oauth/oauth-credentials.mjs'
 import { ensureWorkerCredential } from '../transport/go-worker-client.mjs'
@@ -235,9 +236,15 @@ function waitForSessionTurn(previous, signal, maxWaitMs = 0) {
   })
 }
 
+/** The kernel named why the hop failed: report that, not a generic incomplete. */
+function hasKernelFailureCode(result) {
+  return Object.hasOwn(KERNEL_FAILURE_STATUS, String(result?.body?.error?.code || ''))
+}
+
 function isUnfinishedLastResult(result, policy) {
   if (!result) return false
   if (policy?.reason === 'incomplete_assistant') return true
+  if (hasKernelFailureCode(result)) return false
   if (result.terminalState === 'incomplete') return true
   return isIncompleteAssistantMessage(result)
 }
@@ -299,8 +306,9 @@ function executionsOf(result) {
 }
 
 function incompleteHopResult(result, policy, extras = {}) {
+  const failed = hasKernelFailureCode(result) ? { ...result, ok: false } : incompleteAssistantClientError(result)
   return {
-    ...incompleteAssistantClientError(result),
+    ...failed,
     via: result?.via || 'pool-failover',
     finalState: 'incomplete',
     policy,

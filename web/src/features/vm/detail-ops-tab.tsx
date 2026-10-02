@@ -12,6 +12,8 @@ import {
 } from '@/components/ui/tooltip'
 import { Field } from '@/features/vm/detail-section-primitives'
 import { VmEnvironmentCard } from '@/features/vm/environment-card'
+import { NodeChip } from '@/features/vm/node-chip'
+import { isRemoteVm, REMOTE_UNSUPPORTED_TEXT } from '@/features/vm/placement'
 
 type VmOpsTabProps = {
   vm: Vm
@@ -46,6 +48,7 @@ export function VmOpsTab(props: VmOpsTabProps) {
 
   const gpt = isCodexVm(vm)
   const guest = guestIdentityState(vm)
+  const remote = isRemoteVm(vm)
   return (
     <TabsContent value='ops' className='space-y-3 pt-4'>
       <Card>
@@ -53,6 +56,9 @@ export function VmOpsTab(props: VmOpsTabProps) {
           <CardTitle className='text-sm'>运行环境</CardTitle>
         </CardHeader>
         <CardContent className='divide-y pt-0'>
+          <Field label='服务器'>
+            <NodeChip nodeId={vm.node_id} className='text-[11px]' />
+          </Field>
           <Field label='环境编号'>
             <span className='font-mono text-xs'>
               {String(
@@ -63,6 +69,16 @@ export function VmOpsTab(props: VmOpsTabProps) {
               )}
             </span>
           </Field>
+          {(vm.runtime as Record<string, unknown> | undefined)
+            ?.egress_container ? (
+            <Field label='出口容器'>
+              <span className='font-mono text-xs'>
+                {String(
+                  (vm.runtime as Record<string, unknown>).egress_container
+                )}
+              </span>
+            </Field>
+          ) : null}
           <Field label='机器名'>
             <span className='font-mono text-xs'>{guest.hostname}</span>
           </Field>
@@ -122,11 +138,13 @@ export function VmOpsTab(props: VmOpsTabProps) {
             <OpsButton
               label='重跑官方初装'
               hint={
-                officialCc
-                  ? '在运行环境里重新装一遍官方 Claude Code。'
-                  : `官方初装只支持完整 OAuth 凭证，这个账号是 ${credTypeLabel(credType)}。`
+                remote
+                  ? REMOTE_UNSUPPORTED_TEXT
+                  : officialCc
+                    ? '在运行环境里重新装一遍官方 Claude Code。'
+                    : `官方初装只支持完整 OAuth 凭证，这个账号是 ${credTypeLabel(credType)}。`
               }
-              disabled={!officialCc}
+              disabled={!officialCc || remote}
               onClick={() =>
                 onAction('/official-cc-bootstrap', {
                   force: true,
@@ -150,12 +168,18 @@ export function VmOpsTab(props: VmOpsTabProps) {
         >
           <OpsButton
             label='重装这个账号的内核'
-            hint='重新装一遍这个账号的内核文件。'
+            hint={remote ? REMOTE_UNSUPPORTED_TEXT : '重新装一遍这个账号的内核文件。'}
+            disabled={remote}
             onClick={() => onAction('/wrap-cli/repair')}
           />
           <OpsButton
             label='把这个账号的内核设为模板'
-            hint='以后给其他账号安装内核时，照这个账号的版本来装。不会复制凭证和出口代理。'
+            hint={
+              remote
+                ? REMOTE_UNSUPPORTED_TEXT
+                : '以后给其他账号安装内核时，照这个账号的版本来装。不会复制凭证和出口代理。'
+            }
+            disabled={remote}
             onClick={() => onAction('/wrap-cli/promote')}
           />
         </OpsGroup>

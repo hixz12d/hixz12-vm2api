@@ -60,6 +60,7 @@ import { VmOverviewTab } from '@/features/vm/detail-overview-tab'
 import { VmProxyTab } from '@/features/vm/detail-proxy-tab'
 import { VmDetailSkeleton } from '@/features/vm/detail-skeleton'
 import { VmTestTab } from '@/features/vm/detail-test-tab'
+import { NodeChip } from '@/features/vm/node-chip'
 import {
   probeOutcome,
   syncOutcome,
@@ -203,7 +204,7 @@ export function VmDetailPage() {
   const pool = proxies.data?.proxies || []
   const boundId = String(proxy.id || vm.proxy_id || '')
   const free = pool.filter((p) => {
-    if (!p.enabled || p.status === 'dead') return false
+    if (!p.enabled || p.status === 'dead' || p.blocked_reason) return false
     const ids = p.bound_vm_ids || (p.bound_vm_id ? [p.bound_vm_id] : [])
     return !ids.includes(id) && ids.length < (p.bind_limit || 5)
   })
@@ -314,6 +315,7 @@ export function VmDetailPage() {
             <Lamp tone={lamp.lamp} className='size-3' />
             <LabelStrip className='text-sm'>{vm.name || vm.id}</LabelStrip>
             <PlatformChip vm={vm} />
+            <NodeChip nodeId={vm.node_id} className='text-[11px]' />
             {claudeTier(vm).key !== 'none' ? (
               <StatusMark tone={claudeTier(vm)} variant='pill' />
             ) : null}

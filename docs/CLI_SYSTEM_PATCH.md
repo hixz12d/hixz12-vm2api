@@ -2,9 +2,9 @@
 
 ## 当前状态
 
-源码融合上游 `259dbbd`（v1.3.88）。仓内 `cli-node` 基于该上游重新提取，应用 `caller-system-v3+safeguards-v1` 并用官方 Bun 重建；`cc-node` 保持已验证的 `caller-system-v1` 二进制。两个 Rust 内核未变。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准；下文记录的是本地验证。
+源码融合上游 `6a32923`（v1.3.91）。仓内 `cli-node` 基于该上游重新提取，应用 `caller-system-v3+safeguards-v1` 并用官方 Bun 重建；`cc-node` 保持已验证的 `caller-system-v1` 二进制。`kin-kernel` 采用上游 v1.3.91 原版。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准；下文记录的是本地验证。
 
-唯一补丁实现是 `scripts/patch-cli-system.py`，固定输入源码 SHA-256；未知上游版本拒绝应用。`cli-node` 对应当前上游，`cli-node-v1.3.85` 可复现上一版，`cc-node` 对应原固定基线，`legacy-cli-node` 可复现旧版补丁。逐文件基线和成品哈希见 [PATCH.json](../share/wrap-cli/PATCH.json)。
+唯一补丁实现是 `scripts/patch-cli-system.py`，固定输入源码 SHA-256；未知上游版本拒绝应用。`cli-node` 对应当前上游，`cli-node-v1.3.88`、`cli-node-v1.3.85` 可复现前两版，`cc-node` 对应原固定基线，`legacy-cli-node` 可复现旧版补丁。逐文件基线和成品哈希见 [PATCH.json](../share/wrap-cli/PATCH.json)。
 
 ## 修复契约
 
@@ -21,7 +21,7 @@ Claude Code auto mode 在请求体带 `safeguards`、在 `anthropic-beta` 带 `d
 
 - cli-node 只有在 `safeguards` 是数组、且 `kin_safeguards_beta` 匹配 `^dangerous-tool-use-\d{4}-\d{2}-\d{2}$` 时，才把 `safeguards` 原样放进出站请求体，并把该 beta 并入出站 `anthropic-beta`（去重）。任一条件不满足则两者都不发。`kin_safeguards_beta` 从不发给 Anthropic。
 - 回复方向不需要补丁：内核与 CLI 原样转出 `message_delta`，`safeguard_results` 保留。
-- 补丁只新增 `kinSafeguardsFromRequest` 并在 `runJob` → 出站参数之间传一个 `kinSafeguards` 选项，不改缓存和计费函数。
+- 补丁只新增 `kinSafeguardsFromRequest` 并在 `runJob` → 出站参数之间传一个 `kinSafeguards` 选项，不改缓存和计费函数。v1.3.91 的 `queryKinMessagesWithStreaming` 参数末尾多了 `onError`，补丁锚点随之调整，改动内容与 v1.3.88 逐行相同。
 - 内核会把 job JSON 按键名重新排序后交给 CLI，`safeguards` 的值不变、键顺序会变。
 
 ## 缓存与预览
@@ -34,13 +34,14 @@ cc-node 二进制未更新，其 5m / 1h 双消息断点、总断点数不超过
 
 ## 本次验证
 
-验证环境为本地 Linux Docker，无外网，根文件系统只读，CPU 硬上限实读 `150000 100000`（1.5 核），使用虚构凭据与容器内 HTTP 模拟上游。
+验证环境为本地 Linux Docker，无外网，根文件系统只读，CPU 限制 1.5 核，使用虚构凭据与容器内 HTTP 模拟上游。
 
-- 经实际 Rust 内核（`kin-kernel --gateway-worker`，local_cli / wrap / 2 槽位）调用新 cli-node；请求体由合并后的真实 `prepareCliHopBody` 生成。
-- 内核黑盒：内核交给 CLI 的任务保留 `safeguards` 与 `kin_safeguards_beta`，返回给调用方的 SSE 保留 `safeguard_results`。
+- 经上游 v1.3.91 实际 Rust 内核（`kin-kernel --gateway-worker`，随附 glibc239，local_cli / wrap / 2 槽位）调用新 cli-node；请求体由合并后的真实 `prepareCliHopBody` 生成。
+- 返回给调用方的 SSE 保留 `safeguard_results`。
+- v1.3.91 错误透传：上游 400、529（带 `retry-after`）、只有 `message_start` 的空流分别返回 `upstream_invalid_request`、`upstream_overloaded`（`retry_after` 7）、`upstream_empty_stream`，带原始 status 和 message；之后的正常请求不受影响，内核 `closed_slots` 0、`cli_restarts` 0。
 - safeguards：两者都有时上游收到相同的 `safeguards` 和一次该 beta；Node 开关关闭、缺 beta、缺 safeguards，以及直接构造的只有一个字段、beta 不带日期、safeguards 非数组，上游都没有这两项；任何情况下上游都看不到 `kin_safeguards_beta`。
 - 回归：调用方 Windows 环境及首尾空白原样保留、无槽位环境注入、5m / 1h 缓存标记、SSE 到 `message_stop`、`kernel.json` 热读（档位与时区）；#191：上游 `stop_reason=max_tokens` 正常结束，无错误事件。
-- 新产物与官方 Bun 的 `.text` / `.rodata` 一致；单入口 `/$bunfs/root/cli.js`、graph flags=7 已核对；上述缓存和计费函数与上游 v1.3.88 源码逐字一致；`cli-node-v1.3.85` 模式仍能复现上一版补丁源码。
+- 新产物与官方 Bun 的 `.text` / `.rodata` 一致；单入口 `/$bunfs/root/cli.js`、graph flags=7 已核对；上述缓存和计费函数在补丁前后与上游 v1.3.91 源码逐字一致；`cli-node-v1.3.88` 模式复现出上一版相同的补丁源码哈希。
 
 本次证据见 [CLI_UPSTREAM_MERGE_EVIDENCE.json](CLI_UPSTREAM_MERGE_EVIDENCE.json)。旧版实际 Rust 内核联调证据保留在 [CLI_SYSTEM_PATCH_EVIDENCE.json](CLI_SYSTEM_PATCH_EVIDENCE.json)。
 
@@ -48,9 +49,9 @@ cc-node 二进制未更新，其 5m / 1h 双消息断点、总断点数不超过
 
 ## 维护与复现
 
-当前 cli-node 原始文件从 `259dbbdc79aa85158a29f3fbf5df372d66fd2577:share/wrap-cli/cli-node` 导出；cc-node 原始文件从 `336729010c6040236bdcd507923737eb4abb1178:share/wrap-cli/cc-node` 导出。使用二进制安全导出，不通过旧 PowerShell 文本重定向。
+当前 cli-node 原始文件从 `6a329238dc75c8c57bab14bb8cd17f7338272041:share/wrap-cli/cli-node` 导出；cc-node 原始文件从 `336729010c6040236bdcd507923737eb4abb1178:share/wrap-cli/cc-node` 导出。使用二进制安全导出，不通过旧 PowerShell 文本重定向。
 
-提取工具 `../scripts/research/extract-cli-bundle.py` 支持同一 Bun 格式的带/不带 shebang 两种入口；正式旧研究产物 `../artifacts/cli-node-rebuild/` 保持原样。
+提取工具在部署仓库 `scripts/research/extract-cli-bundle.py` 支持同一 Bun 格式的带/不带 shebang 两种入口；正式旧研究产物 `../artifacts/cli-node-rebuild/` 保持原样。
 
 固定使用 **官方 Bun 1.3.14+0d9b296af linux-x64-baseline**，压缩包 SHA-256：`a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7`。不要用嵌入式 CLI 的 `BUN_BE_BUN` 编译替代官方构建器；本次该方式生成的 ELF 启动崩溃，已弃用。
 

@@ -1,16 +1,18 @@
 # Fork 运行兼容性
 
-## 当前策略：优先采用上游 v1.3.88
+## 当前策略：优先采用上游 v1.3.91
 
-融合上游 `259dbbd`（v1.3.88，含 v1.3.86–v1.3.87）。保留 fork 历史与定制管理台，源码、预编译前端及 CLI 补丁同步维护。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
+融合上游 `6a32923`（v1.3.91，含 v1.3.89–v1.3.90）。保留 fork 历史与定制管理台，源码、预编译前端及 CLI 补丁同步维护。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
 
-- 采用 #191（cli-hop 的 `stop_reason=max_tokens` 视为正常截断）：Node 删除旧 `max_tokens<=64 → 1024` 规避分支，`compatibility.min_max_tokens` 下限仍生效。该修复依赖新 `cli-node`：仓内 `cli-node` 以上游 v1.3.88 为基线打 `caller-system-v3+safeguards-v1` 补丁，Node 与 CLI 必须一起上线。
+- 采用 v1.3.91 的 native 错误与恢复：CLI 的真实 HTTP / 网络错误（code、status、type、message、retry-after）原样返回，不再统一成 `incomplete_response`；请求失败或执行位全忙都不再回收 CLI，恢复由内核（关闭未 ack 的 slot、限次重启 CLI）和 watchdog（限次重启容器）有界执行。Node 每个 hop 带 `request_id`，客户端断开时调内核 `/internal/v1/cancel`。依赖新 `kin-kernel` 与新 `cli-node`，Node、内核、CLI 必须一起上线。
+- 采用 #191（cli-hop 的 `stop_reason=max_tokens` 视为正常截断）：Node 删除旧 `max_tokens<=64 → 1024` 规避分支，`compatibility.min_max_tokens` 下限仍生效。仓内 `cli-node` 以上游 v1.3.91 为基线打 `caller-system-v3+safeguards-v1` 补丁。
 - auto mode 服务端检查（fork 定制）：cli-hop 上 `prepareCliHopBody` 只在 `compatibility.auto_mode_server` 非 `false`、调用方 `safeguards` 为数组、`anthropic-beta` 含 `dangerous-tool-use-YYYY-MM-DD` 时保留 `safeguards` 并写内部字段 `kin_safeguards_beta`，否则两者都删；`cli-node` 补丁把 beta 并入出站 `anthropic-beta`，不外发内部字段。只放行这一个调用方 beta。合并上游时注意 `outbound-attempt.mjs`、`handle-protocol.mjs` 的 cli-hop 调用处。
 - 采用 #190：新 `bin/kin-egress` 拒绝自转发直连；`egress.mjs` 就绪检查改用 `ss -ltn`，运行环境需有 `ss`。
 - 采用上游管理台用户管理（`/api/panel/users`、`#/users`，侧栏「记录与设置」组）。管理员在管理台改过密码后以 SQLite `users` 为准，`.env` 的 `VM2API_ADMIN_PASSWORD` 对该账号不再生效。
-- 采用上游集群 SSH / 远程 Docker（`src/lib/cluster/*`、WebSocket 终端、迁移 `026_cluster_nodes.sql`、依赖 `ssh2`、`ws`、`@xterm/xterm`）。本 fork 部署保持闲置，不添加远程节点；可选环境变量 `VM2API_CLUSTER_SOCKET_DIR` 不设置走默认。
+- 采用上游集群 SSH / 远程 Docker 与集群 VM 放置（`src/lib/cluster/*`、`slotHost(vm)` 契约、WebSocket 终端、迁移 `026_cluster_nodes.sql`、依赖 `ssh2`、`ws`、`https-proxy-agent`、`@xterm/xterm`）。本 fork 部署保持闲置，不添加远程节点；本机建槽仍先检查槽位镜像（`inspectKernelImage`），节点建槽走上游节点预检。管理台运行环境页对节点槽位禁用官方初装和内核重装/设为模板。
+- 采用 v1.3.89 单槽位配额覆盖、v1.3.90 SOCKS5 IPv6 修复与「IPv6 代理出口」开关（默认关闭）。
 - Claude Code 带 `x-claude-code-agent-id` 时优先使用上游稳定子会话 ID，父会话仍为原始 root；无此头时保留 fork specialist 指纹隔离。分组候选和 family 检查、智能评分、取消、空响应退避继续保留。
-- cc-node 和两个 Rust 内核保持原版本。CLI 补丁维护与验证边界以 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md) 为准。
+- cc-node 保持原版本。CLI 补丁维护与验证边界以 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md) 为准。
 - 管理台保留定制色板、账号线视图、状态灯及分组删除，融合上游详情卡、操作菜单、统计、平台选项、品牌链接、用户与集群页面。`web/dist` 由合并后源码重建。
 - 管理员仅豁免用户级并发限制；API Key、账号额度和分组限制不放开。
 
@@ -63,7 +65,7 @@
 
 ### 执行位全忙时的 CLI 回收
 
-上游在 `kernel-router.mjs` 的 `runHop` 里遇到 `slot_busy` 就立即回收（SIGKILL）槽位 CLI，假定忙着的执行位都是泄漏的。fork 只在本控制面对该槽位没有在途请求（`wrapHopInflight === 0`）时才回收；有在途请求说明执行位是真在用，回收会把正在输出的长回合全部打断（表现为 `native cli stdout closed`、几分钟后 502）。有回归测试 `slot_busy with live hops on the VM does not recycle the CLI`。合并上游时保留这个条件。
+上游 v1.3.91 起请求路径不再回收槽位 CLI：`slot_busy` 只让本次请求换槽位，内核自己关闭未 ack 的 slot 并限次重启 CLI，用完次数才由 watchdog 限次重启容器。fork 此前“有在途请求时不回收”的补丁随之取消；回归测试 `slot_busy never recycles the CLI; the watchdog owns recovery` 保证请求路径不回收。合并上游时不要恢复请求路径上的回收。
 
 ### 流式响应
 
@@ -151,7 +153,9 @@ v1.3.56（Fable 权益探测标记 Max）只在上游分支 `cursor/fix-supervis
 
 ## 同步历史
 
-- `upstream/main 259dbbd`：同步至 v1.3.88（#191、#190、用户管理、集群 SSH / 远程 Docker），保留分组隔离、账号同步与定制管理台；`cli-node` 暂留 fork 版本待重打补丁。
+- `upstream/main 6a32923`：同步至 v1.3.91（native 取消与有界恢复、真实错误码、集群 VM 放置、单槽位配额、SOCKS5 IPv6），`cli-node` 在 v1.3.91 上重打补丁；fork 的 `slot_busy` 回收条件由上游行为取代。
+
+- `upstream/main 259dbbd`：同步至 v1.3.88（#191、#190、用户管理、集群 SSH / 远程 Docker），保留分组隔离、账号同步与定制管理台。
 
 - `v1.3.64 cd76b57`：同步 v1.3.61–v1.3.64 的内核异常恢复、凭证调度、套餐与额度判定、GPT 用量展示及 OAuth 换票服务。保留分组隔离、智能评分、原子安装与槽位资源限制。镜像改为检查 `kin-oauth-auth` 的 JSON 错误协议；OAuth 测试改为覆盖生产子进程接口，不依赖上游未发布的 `auth.js`。控制面与 wrap kernel 需要更新，槽位须依次同步；不新增数据库迁移。
 

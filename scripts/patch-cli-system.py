@@ -14,7 +14,8 @@ from pathlib import Path
 BASELINES = {
     "legacy-cli-node": "7d5366daf48ae71c96dce3ede9151ddf332056006f0d57e9ad9e188923083a10",
     "cli-node-v1.3.85": "085573950cf8f67b396266e868a24576b899bc3d7c6db8d865a6062dcbe84ae2",
-    "cli-node": "057ddffd6b18bcd4bd136caffc4145e8ebde6d641bee2219423d0b08da7ae920",
+    "cli-node-v1.3.88": "057ddffd6b18bcd4bd136caffc4145e8ebde6d641bee2219423d0b08da7ae920",
+    "cli-node": "125ce8dfd4d87d54851b1ad2e1dec7c4e96df56b7da8588ab2c916d628e4322f",
     "cc-node": "6fef71bdda7ad0929681711efee472552635f88b0a6ead51f711d10e03f55ca5",
 }
 
@@ -29,6 +30,8 @@ def replace_once(source, before, after):
 def patch(source, name):
     prompt = "systemPrompt2" if name == "legacy-cli-node" else "systemPrompt"
     if name == "cli-node":
+        return patch_safeguards(patch_current_cli(source), signature_tail="  onResponseHeaders,\n  onError\n}) {")
+    if name == "cli-node-v1.3.88":
         return patch_safeguards(patch_current_cli(source))
     if name == "cli-node-v1.3.85":
         return patch_current_cli(source)
@@ -135,13 +138,15 @@ async function runSingleProcessSlots() {''')
     return source
 
 
-def patch_safeguards(source):
+def patch_safeguards(source, signature_tail="  onResponseHeaders\n}) {"):
     """Forward Claude Code auto-mode server checks through the native slot.
 
     Node hands over the caller's `safeguards` plus the internal string
     `kin_safeguards_beta`. Only when both are valid does the outbound request
     carry `safeguards` unchanged and add that one beta; the internal field is
     never sent upstream. Cache and billing functions stay untouched.
+    `signature_tail` is the end of queryKinMessagesWithStreaming's parameters,
+    which gained `onError` in v1.3.91.
     """
     source = replace_once(source, 'function systemFromRequest(request2) {', r'''function kinSafeguardsFromRequest(request2) {
   const safeguards = request2.safeguards;
@@ -156,8 +161,8 @@ function systemFromRequest(request2) {''')
     source = replace_once(source, '      contextManagement: request2.context_management,\n',
                           '      contextManagement: request2.context_management,\n'
                           '      kinSafeguards: kinSafeguardsFromRequest(request2),\n')
-    source = replace_once(source, '  contextManagement,\n  onResponseHeaders\n}) {',
-                          '  contextManagement,\n  kinSafeguards,\n  onResponseHeaders\n}) {')
+    source = replace_once(source, '  contextManagement,\n' + signature_tail,
+                          '  contextManagement,\n  kinSafeguards,\n' + signature_tail)
     source = replace_once(source, '      contextManagementOverride: contextManagement,\n',
                           '      contextManagementOverride: contextManagement,\n      kinSafeguards,\n')
     source = replace_once(source, '    const filteredBetas = isKinQuerySource(options2.querySource) ? mergeOfficialExtraBetas(presentBetas) : presentBetas;\n',
