@@ -1,12 +1,18 @@
 # Fork 运行兼容性
 
-## 当前策略：优先采用上游 v1.3.91
+## 当前策略：优先采用上游 v1.3.95
 
-融合上游 `6a32923`（v1.3.91，含 v1.3.89–v1.3.90）。保留 fork 历史与定制管理台，源码、预编译前端及 CLI 补丁同步维护。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
+融合上游 `06f090b1`（v1.3.95，含 v1.3.92–v1.3.94）。保留 fork 历史与定制管理台，源码、预编译前端及 CLI 补丁同步维护。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
 
 - 采用 v1.3.91 的 native 错误与恢复：CLI 的真实 HTTP / 网络错误（code、status、type、message、retry-after）原样返回，不再统一成 `incomplete_response`；请求失败或执行位全忙都不再回收 CLI，恢复由内核（关闭未 ack 的 slot、限次重启 CLI）和 watchdog（限次重启容器）有界执行。Node 每个 hop 带 `request_id`，客户端断开时调内核 `/internal/v1/cancel`。依赖新 `kin-kernel` 与新 `cli-node`，Node、内核、CLI 必须一起上线。
-- 采用 #191（cli-hop 的 `stop_reason=max_tokens` 视为正常截断）：Node 删除旧 `max_tokens<=64 → 1024` 规避分支，`compatibility.min_max_tokens` 下限仍生效。仓内 `cli-node` 以上游 v1.3.91 为基线打 `caller-system-v3+safeguards-v1` 补丁。
-- auto mode 服务端检查（fork 定制）：cli-hop 上 `prepareCliHopBody` 只在 `compatibility.auto_mode_server` 非 `false`、调用方 `safeguards` 为数组、`anthropic-beta` 含 `dangerous-tool-use-YYYY-MM-DD` 时保留 `safeguards` 并写内部字段 `kin_safeguards_beta`，否则两者都删；`cli-node` 补丁把 beta 并入出站 `anthropic-beta`，不外发内部字段。只放行这一个调用方 beta。合并上游时注意 `outbound-attempt.mjs`、`handle-protocol.mjs` 的 cli-hop 调用处。
+- 采用 #191（cli-hop 的 `stop_reason=max_tokens` 视为正常截断）：Node 删除旧 `max_tokens<=64 → 1024` 规避分支，`compatibility.min_max_tokens` 下限仍生效。仓内 `cli-node` 以上游 v1.3.94 新 cli-node（`1b735bf7`，源码 `ef30963b…`）为基线打 `caller-system-v3+safeguards-v1` 补丁，成品 SHA-256 `3556b454…`（见 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md)、`share/wrap-cli/PATCH.json`）。
+- auto mode 服务端检查（fork 定制）：cli-hop 上 `prepareCliHopBody` 只在 `compatibility.auto_mode_server` 非 `false`、调用方 `safeguards` 为数组、`anthropic-beta` 含 `dangerous-tool-use-YYYY-MM-DD` 时保留 `safeguards` 并写内部字段 `kin_safeguards_beta`，否则两者都删；`cli-node` 补丁把 beta 并入出站 `anthropic-beta`，不外发内部字段。只放行这一个调用方 beta。
+- auto mode 分类请求（上游 v1.3.94）与 fork safeguards 并存：`handle-protocol.mjs` 用 `classifyClaudeRequestPurpose` 得到 `requestContext`，分类请求不走 Node persona、不做 fork 的“调用方 system 快照重建”（cli-hop 重建条件是 `!requestContext && !officialTraffic`），普通请求仍按 fork 重建。cli-hop 调用 `prepareCliHopBody` 时同时传 `safeguardsBeta`、`autoModeServer`、`requestContext`；分类请求在 `prepareCliHopBody` 内走上游 `prepareClassifierBody`，之后仍过 fork 的 `applyCliHopSafeguards`（beta 不合规就删 `safeguards`）。合并上游时用 `git grep -n "requestContext\|safeguardsBeta\|kin_safeguards_beta" -- src` 核对 `handle-protocol.mjs`、`outbound-attempt.mjs` 这两处。
+- 采用上游槽位终端（`src/lib/vm/slot-shell.mjs`、`web/src/components/ws-terminal.tsx`、`vm-shell-card.tsx`）：仅管理员，经 30 秒一次性 ticket 打开 WebSocket；反代必须对 `^/api/panel/(cluster/nodes|vms)/[^/]+/shell$` 透传 Upgrade（见 `docs/nginx-shell.md`）。
+- 采用上游 Claude 原生限额重置（`src/lib/oauth/claude-reset-credits.mjs`，`/api/panel/vms/:id/claude-reset/query|redeem`）：经槽内 `kin-worker` 出站，槽位需加载新版 `kin-worker`，否则查询返回 worker 不支持。本 fork 只在管理台手动使用，不做自动兑换。
+- 采用上游官方 Setup Token 区分：官方 `claude setup-token` 落盘为 `official-setup-token`，与转换后的完整 Setup Token 分开显示和处理。
+- 采用上游自定义 DoH（`dns_primary` 可填 HTTPS DoH URL）；本 fork 生产不配置。
+- 管理台「运维」tab（`detail-ops-tab.tsx`）保留 fork 的 `OpsGroup` 分组布局，上游槽位终端放在单独的「槽位终端」组；侧栏标题（`app-title.tsx`）保留 fork 样式，不采用上游霓虹品牌外框。
 - 采用 #190：新 `bin/kin-egress` 拒绝自转发直连；`egress.mjs` 就绪检查改用 `ss -ltn`，运行环境需有 `ss`。
 - 采用上游管理台用户管理（`/api/panel/users`、`#/users`，侧栏「记录与设置」组）。管理员在管理台改过密码后以 SQLite `users` 为准，`.env` 的 `VM2API_ADMIN_PASSWORD` 对该账号不再生效。
 - 采用上游集群 SSH / 远程 Docker 与集群 VM 放置（`src/lib/cluster/*`、`slotHost(vm)` 契约、WebSocket 终端、迁移 `026_cluster_nodes.sql`、依赖 `ssh2`、`ws`、`https-proxy-agent`、`@xterm/xterm`）。本 fork 部署保持闲置，不添加远程节点；本机建槽仍先检查槽位镜像（`inspectKernelImage`），节点建槽走上游节点预检。管理台运行环境页对节点槽位禁用官方初装和内核重装/设为模板。

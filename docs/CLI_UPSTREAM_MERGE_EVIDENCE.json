@@ -1,7 +1,10 @@
 {
- "upstream": "6a329238dc75c8c57bab14bb8cd17f7338272041",
+ "upstream": "1b735bf7ea65d562cfaeb4c4deaf3ff520e908ed",
+ "merged_upstream_tree": "06f090b18488b235691f5a861f522e5e25a9e3de",
  "patch": "caller-system-v3+safeguards-v1",
  "bun_revision": "1.3.14+0d9b296af",
+ "bun_archive_sha256": "a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7",
+ "upx": "5.2.1 -1",
  "official_bun_runtime_sections_match": true,
  "runtime_sections": {
   ".text": "b92183090fa644136cc3346548467e80fb4e5cb4bbf11de60ec58f76de7e134c",
@@ -17,98 +20,54 @@
   "applyKinOwnedCacheMarkers": "f76dba3c90be3a78faa0f87574d9f678827f96a5a301ac056520ee155520f5e0",
   "capCacheMarkers": "38e0ee8ff6a1cec4bbd0305e6400e6b709bc6361318a40f2b8a676beb875964a",
   "finalizeZeroBilling": "d6aca6814c435f57eaf53d1370a3b8e5ffd225128059902bafefab372934e333",
-  "withCchPlaceholder": "faf44efd13fd4f7123b5319400f6928723addcf478081c667fe79b42a21e4527"
+  "withCchPlaceholder": "faf44efd13fd4f7123b5319400f6928723addcf478081c667fe79b42a21e4527",
+  "classifierSystemBlocks": "060d15aebd36e359fcd28cd5a6308f88417455ac74f71580f1eb5e4c42e04056",
+  "validClassifierContext": "90fa41f6828b7338d4a28adc6beb1d8e3352f6a14b37e77bd679e0f06d23896b"
  },
- "unchanged_functions_note": "Upstream v1.3.91 and patched sources are identical for all eight functions; the rebuilt bundle's applyKinOwnedCacheMarkers text differs only by Bun reprinting.",
+ "unchanged_functions_note": "Upstream v1.3.94 and patched sources are identical for the eight cache/billing functions and the two upstream classifier functions; the eight hashes equal v1.3.91.",
  "previous_baseline_reproduction": {
-  "mode": "cli-node-v1.3.88",
-  "patched_source_sha256": "f94bb72870c76833ae0a2cda91b1cf5b26aba81e6a975377859e99ead52dd6e2",
+  "mode": "cli-node-v1.3.91",
+  "patched_source_sha256": "82ee3ae7e03c1a9f55cfd62c2eaa050c9e6bc871d6e56753addde28424cae2ee",
   "result": "passed"
  },
- "patch_delta_vs_v1.3.88": "identical hunks; only the queryKinMessagesWithStreaming parameter tail gained onError",
+ "patch_delta_vs_v1.3.91": "identical hunks and anchors; upstream v1.3.94 only added the classifier path (requestContext/wireSystem/wireThinking), error request_id/upstream_code and an onboarding check",
+ "classifier_vs_fork_system_filter": "upstream classifier jobs take queryModel's requestContext branch: systemPrompt is not passed through layoutSystemBlocks/leftoverFromSystemPrompt and the wire system comes from classifierSystemBlocks(request.system), so the fork filter never touches classifier system; patch unchanged",
  "actual_kernel": {
-  "scope": "Node prepareCliHopBody -> actual v1.3.91 kin-kernel gateway-worker socket (bundled glibc239) -> rebuilt cli-node -> loopback mock upstream",
-  "container": "python:3.12-slim-bookworm, network none, read-only root, 1.5 CPU, 3 GiB",
+  "scope": "merged Node prepareCliHopBody + go-worker-client envelope -> actual upstream v1.3.95 kin-kernel gateway-worker (bundled glibc239, local_cli, 2 slots) -> rebuilt cli-node -> loopback mock upstream",
+  "container": "node:22-bookworm-slim, network none, read-only root, 1.5 CPU, 3 GiB, fake credentials",
   "common_checks": [
    "one upstream request per case",
    "no kin_safeguards_beta upstream",
-   "caller Windows system text verbatim",
+   "caller Windows system text verbatim including leading/trailing whitespace",
    "gateway timezone present",
    "no slot environment injected",
-   "1h cache markers (3)",
-   "kernel healthy, closed_slots 0, cli_restarts 0 after all cases"
+   "cache markers 1-4, all of the requested TTL",
+   "kernel healthy, closed_slots 0, cli_restarts 0, classifier_request_context true after all cases"
   ],
   "cases": [
-   {
-    "case": "both fields",
-    "upstream_safeguards": "equal to caller",
-    "upstream_beta": "once",
-    "caller_safeguard_results": "kept",
-    "result": "passed"
-   },
-   {
-    "case": "caller without the beta",
-    "upstream_safeguards": "absent",
-    "upstream_beta": "absent",
-    "result": "passed"
-   },
-   {
-    "case": "Node switch off",
-    "upstream_safeguards": "absent",
-    "upstream_beta": "absent",
-    "result": "passed"
-   },
-   {
-    "case": "raw job: safeguards only / beta only / beta not dated / safeguards not an array",
-    "upstream_safeguards": "absent",
-    "upstream_beta": "absent",
-    "result": "passed"
-   },
-   {
-    "case": "#191 upstream stop_reason max_tokens",
-    "caller_stop_reason": "max_tokens",
-    "error_event": false,
-    "result": "passed"
-   },
-   {
-    "case": "upstream 400",
-    "caller_error": {
-     "code": "upstream_invalid_request",
-     "message": "mock: unexpected field in request",
-     "retry_after": null,
-     "status": 400,
-     "type": "invalid_request_error"
-    },
-    "result": "passed"
-   },
-   {
-    "case": "upstream 529 with retry-after",
-    "caller_error": {
-     "code": "upstream_overloaded",
-     "message": "mock: overloaded",
-     "retry_after": "7",
-     "status": 529,
-     "type": "overloaded_error"
-    },
-    "result": "passed"
-   },
-   {
-    "case": "upstream stream with message_start only",
-    "caller_error": {
-     "code": "upstream_empty_stream",
-     "message": "Stream ended without receiving any events",
-     "retry_after": null,
-     "status": 502,
-     "type": "api_error"
-    },
-    "result": "passed"
-   },
-   {
-    "case": "normal request after the error cases",
-    "stop_reason": "end_turn",
-    "result": "passed"
-   }
+   {"case": "both fields (zero layout, 1h)", "upstream_safeguards": "equal to caller", "upstream_beta": "once", "caller_safeguard_results": "kept", "sse": "message_stop", "cache_markers_1h": 2, "result": "passed"},
+   {"case": "caller without the beta", "upstream_safeguards": "absent", "upstream_beta": "absent", "result": "passed"},
+   {"case": "Node switch off", "upstream_safeguards": "absent", "upstream_beta": "absent", "result": "passed"},
+   {"case": "caller without safeguards", "upstream_safeguards": "absent", "upstream_beta": "absent", "result": "passed"},
+   {"case": "raw job: safeguards only / beta only / beta not dated / safeguards not an array", "upstream_safeguards": "absent", "upstream_beta": "absent", "result": "passed"},
+   {"case": "5m cache markers", "cache_markers_5m": 2, "result": "passed"},
+   {"case": "kernel.json hot read without restart", "identity_asia_tokyo": "applied", "zero_america_new_york": "applied", "result": "passed"},
+   {"case": "#191 upstream stop_reason max_tokens", "caller_stop_reason": "max_tokens", "error_event": false, "result": "passed"},
+   {"case": "upstream 400", "caller_error": {"code": "upstream_invalid_request", "message": "mock: unexpected field in request", "retry_after": null, "status": 400, "type": "invalid_request_error"}, "result": "passed"},
+   {"case": "upstream 529 with retry-after", "caller_error": {"code": "upstream_overloaded", "message": "mock: overloaded", "retry_after": "7", "status": 529, "type": "overloaded_error"}, "result": "passed"},
+   {"case": "upstream stream with message_start only", "caller_error": {"code": "upstream_empty_stream", "message": "Stream ended without receiving any events", "retry_after": null, "status": 502, "type": "api_error"}, "result": "passed"},
+   {"case": "classifier xml_s1 with identity and timezone-only blocks in system", "system": "caller blocks and 1h cache_control verbatim (fork filter bypassed), only upstream billing prepended", "thinking": "disabled", "temperature": 0, "max_tokens": 64, "stop_sequences": ["</block>"], "output_config": "absent", "context_management": "absent", "result": "passed"},
+   {"case": "classifier with safeguards", "with_beta": "safeguards equal, beta once, no kin_safeguards_beta", "without_beta": "both absent", "result": "passed"},
+   {"case": "classifier tool format and claude-sonnet-5-5 xml_s2", "tool_choice": "classify_result", "thinking": "adaptive", "max_tokens": 6144, "temperature": "absent", "result": "passed"},
+   {"case": "normal request after error and classifier cases", "stop_reason": "end_turn", "result": "passed"}
   ]
+ },
+ "upstream_auto_mode_tests": {
+  "scope": "upstream test/e2e/auto-mode.e2e.test.mjs (KIN_AUTOMODE_CLI = rebuilt cli-node, KIN_AUTOMODE_OLD_CLI = previous fork cli-node db59110a), test/unit/auto-mode.test.mjs, test/unit/auto-mode-api.test.mjs on the merged tree",
+  "container": "node:22-bookworm-slim, network none, read-only root, 1.5 CPU, 3 GiB",
+  "tests": 20,
+  "passed": 20,
+  "notes": "zero and identity layouts; xml_s1/fast/xml_s2/tool wire; terminal, HTTP/SSE error, cancel and concurrency boundaries; the new kernel refuses classifier context against the previous fork CLI"
  },
  "production_deployed": false
 }

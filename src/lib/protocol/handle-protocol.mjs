@@ -43,6 +43,7 @@ import {
   healthUnavailableError,
 } from '../admin/health-probe.mjs'
 import { resolveInferenceBackend, runApiInference } from '../pool/api-protocol.mjs'
+import { classifyClaudeRequestPurpose, prepareClassifierBody, classifierRequestSummary } from './request-purpose.mjs'
 import { summarizeBody, redactHeaders, presentedApiKeyForLog } from '../admin/request-log.mjs'
 import { ownerScopeFromRequest } from '../admin/resource-owner.mjs'
 import {
@@ -186,6 +187,16 @@ export function createHandleProtocol(deps) {
     const summary = formatPoolSelectionSummary(details)
     logBag.error_code = originalCode || mapped.body?.error?.code
     logBag.error_message = summary || originalMessage || mapped.body?.error?.message || null
+    if (logBag.classifier) {
+      logBag.classifier.error = {
+        status: result?.status || null,
+        type: result?.body?.error?.type || null,
+        code: originalCode,
+        upstream_code: result?.body?.error?.upstream_code || null,
+        request_id: result?.body?.error?.request_id || result?.headers?.['request-id'] || null,
+        retry_after: result?.body?.error?.retry_after || result?.headers?.['retry-after'] || null,
+      }
+    }
     // Only a known wake time (cooldown / RPM / window reset) earns a Retry-After.
     if (mapped.body?.error?.code === 'pool_overloaded' && Number(result?.retryAfterSec) > 0) {
       mapped.retryAfterSec = Number(result.retryAfterSec)
@@ -303,6 +314,7 @@ export function createHandleProtocol(deps) {
     want1m = false,
     preserveCacheBreakpoints = false,
     cliHop = false,
+    requestContext = null,
     routing = {},
     noGoFallback = false,
   }) {
@@ -320,6 +332,7 @@ export function createHandleProtocol(deps) {
       routing,
       preserveCacheBreakpoints,
       cliHop,
+      requestContext,
       slotWaitMs: candidate.slotWaitMs,
       noGoFallback,
       ensureCredential: (exec) => ensureWorkerCredential(exec),
@@ -624,7 +637,23 @@ export function createHandleProtocol(deps) {
     else stats.convert++
 
     ctx = applyIntercept(cfg.intercept.rules, 'before_upstream', { ...ctx, body: converted.claude })
-    ctx.body = applyMinMaxTokens(ctx.body, getRouting()?.compatibility?.min_max_tokens)
+    const officialTraffic =
+      isOfficialClaudeCodeTraffic(req.headers, inbound) ||
+      (detectProxiedOfficialCcFromRoutingFile(routingConfigPath) && isProxiedOfficialClaudeCode(inbound, req.headers))
+    const requestContext = classifyClaudeRequestPurpose(inbound, { officialTraffic })
+    if (requestContext) {
+      logBag.classifier = classifierRequestSummary(inbound, ctx.body, requestContext)
+      try {
+        ctx.body = prepareClassifierBody(ctx.body)
+        logBag.classifier = classifierRequestSummary(inbound, ctx.body, requestContext)
+      } catch (error) {
+        if (!error.body?.error) throw error
+        stats.errors++
+        logBag.error_code = error.body.error.code
+        logBag.error_message = error.body.error.message
+        return json(res, error.status, error.body)
+      }
+    } else ctx.body = applyMinMaxTokens(ctx.body, getRouting()?.compatibility?.min_max_tokens)
 
     if (applyDistillGuard({ req, inbound, body: ctx.body, fp, logBag, requestId: logCtx.request_id, res })) {
       return
@@ -633,9 +662,6 @@ export function createHandleProtocol(deps) {
       return
     }
     const officialClient = isOfficialClaudeClient(fp.client_class)
-    const officialTraffic =
-      isOfficialClaudeCodeTraffic(req.headers, inbound) ||
-      (detectProxiedOfficialCcFromRoutingFile(routingConfigPath) && isProxiedOfficialClaudeCode(inbound, req.headers))
     const callerSession = extractCallerSession({ inbound, body: ctx.body, headers: req.headers })
     const firstUserText = extractFirstUserText(ctx.body?.messages) || extractFirstUserText(inbound?.messages)
     const clientDiscriminator = sessionContextDiscriminator({
@@ -727,7 +753,7 @@ export function createHandleProtocol(deps) {
     const openaiCompat = String(protocol || '').startsWith('openai.')
     syncClaudeKernelConfigsFromFile(cfg.paths?.project, routingConfigPath)
     const personaMode = personaModeFromRoutingFile(routingConfigPath)
-    if (!officialClient && !officialTraffic) {
+    if (!requestContext && !officialClient && !officialTraffic) {
       ctx.body = ensureClaudeWebSearch(ctx.body, {
         enabled: shouldInjectClaudeWebSearch({
           officialClient: officialTraffic,
@@ -738,20 +764,23 @@ export function createHandleProtocol(deps) {
       })
     }
     const personaIn = ctx.body
-    ctx.body = applyCrsUnofficialPersona(ctx.body, {
-      officialClient: officialTraffic,
-      routingFile: routingConfigPath,
-      headers: req.headers,
-      sessionId: outboundSessionId,
-      model: ctx.body?.model,
-      cliVersion: OFFICIAL_CLI_VERSION,
-    })
-    let personaHideTokens = personaHideForUnofficial(personaIn, ctx.body, {
-      officialClient: officialTraffic,
-      mode: personaMode,
-      hides: personaHidesUsageFromRoutingFile(routingConfigPath),
-      standing: standingUsageFromRoutingFile(routingConfigPath),
-    })
+    if (!requestContext)
+      ctx.body = applyCrsUnofficialPersona(ctx.body, {
+        officialClient: officialTraffic,
+        routingFile: routingConfigPath,
+        headers: req.headers,
+        sessionId: outboundSessionId,
+        model: ctx.body?.model,
+        cliVersion: OFFICIAL_CLI_VERSION,
+      })
+    let personaHideTokens = requestContext
+      ? 0
+      : personaHideForUnofficial(personaIn, ctx.body, {
+          officialClient: officialTraffic,
+          mode: personaMode,
+          hides: personaHidesUsageFromRoutingFile(routingConfigPath),
+          standing: standingUsageFromRoutingFile(routingConfigPath),
+        })
 
     if (inferenceBackend === 'api') {
       const managedKey = req.apiKeyRecord || null
@@ -798,6 +827,7 @@ export function createHandleProtocol(deps) {
           timeoutMs: cfg.limits.upstream_timeout_ms,
           personaHideTokens,
           cacheTtl,
+          requestContext,
           converters: {
             createClaudeMessageAssembler,
             applyClaudeSSELineToMessage,
@@ -971,10 +1001,11 @@ export function createHandleProtocol(deps) {
             const repaired = extra.repaired === true
             const resolvedPersona = resolveSlotPersonaPreset(selected.vm, routingNow)
             const cliCountsNodePersona =
-              !officialTraffic && resolvedPersona !== 'zero' && resolvedPersona !== 'official_full'
+              !requestContext && !officialTraffic && resolvedPersona !== 'zero' && resolvedPersona !== 'official_full'
             // Rebuild from the caller snapshot for every slot preset; the global
             // persona may already have moved its system into messages.
-            if (!officialTraffic) {
+            // Classifier requests (requestContext) keep the upstream body untouched.
+            if (!requestContext && !officialTraffic) {
               hopBody = applyCrsUnofficialPersona(structuredClone(personaIn), {
                 officialClient: false,
                 routingFile: routingConfigPath,
@@ -1001,6 +1032,7 @@ export function createHandleProtocol(deps) {
               cacheTtl: requestedCacheTtl,
               safeguardsBeta: pickSafeguardsBeta(req.headers['anthropic-beta']),
               autoModeServer: autoModeServerEnabled(routingNow),
+              requestContext,
             })
             hopBody = await materializeRemoteImageSources(hopBody)
             if (identity) {
@@ -1021,8 +1053,9 @@ export function createHandleProtocol(deps) {
 
             // 0注入 hides CLI billing + env and the standing Node left in the leftover.
             // 官方提示词 must show real usage.
-            const cliHide =
-              resolvedPersona === 'official'
+            const cliHide = requestContext
+              ? 0
+              : resolvedPersona === 'official'
                 ? 0
                 : personaHideForCliZero(personaIn, hopBody, {
                     officialClient: officialTraffic,
@@ -1048,11 +1081,11 @@ export function createHandleProtocol(deps) {
               requestId: logCtx.request_id,
             })
             noteCachePrefix(selected, attemptSessionId, hopBody)
-            return { body: hopBody, meta: { toolNames: {}, sessionId: attemptSessionId, cliHop: true } }
+            return { body: hopBody, meta: { toolNames: {}, sessionId: attemptSessionId, cliHop: true, requestContext } }
           }
 
           cacheTtl = requestedCacheTtl
-          if (!officialTraffic && modeOverride) {
+          if (!requestContext && !officialTraffic && modeOverride) {
             const rewritten = applyCrsUnofficialPersona(structuredClone(personaIn), {
               officialClient: officialTraffic,
               routingFile: routingConfigPath,
@@ -1076,6 +1109,7 @@ export function createHandleProtocol(deps) {
           logBag.official_cc_inference = 'http'
           logBag.provider = 'anthropic_api'
           const prepared = prepareOutboundEnvelope({
+            requestContext,
             canonicalBody: hopBody,
             inbound,
             identity,
@@ -1133,6 +1167,7 @@ export function createHandleProtocol(deps) {
               cacheTtl,
               preserveCacheBreakpoints,
               cliHop: attemptMeta?.cliHop === true,
+              requestContext: attemptMeta?.requestContext || requestContext,
               want1m,
               routing: getRouting(),
               noGoFallback: !!pinVmId,
@@ -1163,6 +1198,7 @@ export function createHandleProtocol(deps) {
               cacheTtl,
               preserveCacheBreakpoints,
               cliHop: attemptMeta?.cliHop === true,
+              requestContext: attemptMeta?.requestContext || requestContext,
               body,
               reqHeaders: req.headers,
               timeoutMs: cfg.limits.upstream_timeout_ms,

@@ -15,7 +15,8 @@ BASELINES = {
     "legacy-cli-node": "7d5366daf48ae71c96dce3ede9151ddf332056006f0d57e9ad9e188923083a10",
     "cli-node-v1.3.85": "085573950cf8f67b396266e868a24576b899bc3d7c6db8d865a6062dcbe84ae2",
     "cli-node-v1.3.88": "057ddffd6b18bcd4bd136caffc4145e8ebde6d641bee2219423d0b08da7ae920",
-    "cli-node": "125ce8dfd4d87d54851b1ad2e1dec7c4e96df56b7da8588ab2c916d628e4322f",
+    "cli-node-v1.3.91": "125ce8dfd4d87d54851b1ad2e1dec7c4e96df56b7da8588ab2c916d628e4322f",
+    "cli-node": "ef30963b3fe4ddd0dda08247ff31edce8d61d03535c1af2328d09ade132b0d06",
     "cc-node": "6fef71bdda7ad0929681711efee472552635f88b0a6ead51f711d10e03f55ca5",
 }
 
@@ -29,7 +30,9 @@ def replace_once(source, before, after):
 
 def patch(source, name):
     prompt = "systemPrompt2" if name == "legacy-cli-node" else "systemPrompt"
-    if name == "cli-node":
+    if name in ("cli-node", "cli-node-v1.3.91"):
+        # v1.3.94 classifier jobs bypass leftoverFromSystemPrompt and build
+        # system from the wire request, so the same hunks leave them untouched.
         return patch_safeguards(patch_current_cli(source), signature_tail="  onResponseHeaders,\n  onError\n}) {")
     if name == "cli-node-v1.3.88":
         return patch_safeguards(patch_current_cli(source))

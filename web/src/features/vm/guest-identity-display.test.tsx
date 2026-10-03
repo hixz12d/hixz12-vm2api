@@ -17,6 +17,7 @@ function render(vm: Vm) {
         refreshBlocked=''
         savingTimezone={false}
         onAction={noop}
+        onRefresh={noop}
         onTimezoneSave={noop}
         onTimezoneFollowProxy={noop}
         onReset={noop}

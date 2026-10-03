@@ -420,6 +420,7 @@ export function finalizeWorkerPayload({ body, reqHeaders, exec, identity, want1m
 }
 
 function workerEnvelope({
+  requestContext = null,
   body,
   reqHeaders,
   exec,
@@ -433,6 +434,7 @@ function workerEnvelope({
 } = {}) {
   const finalized = finalizeWorkerPayload({ body, reqHeaders, exec, identity, want1m, cliHop })
   const envelope = {
+    ...(requestContext ? { request_context: requestContext } : {}),
     body: finalized.body,
     headers: finalized.headers,
     stream: !!stream,
@@ -454,6 +456,7 @@ function mockScenario(exec) {
 }
 
 export async function callGoWorker({
+  requestContext = null,
   exec,
   body,
   reqHeaders = {},
@@ -498,6 +501,7 @@ export async function callGoWorker({
             cacheTtl,
             preserveCacheBreakpoints,
             cliHop,
+            requestContext,
           })),
         request_id: requestId,
       },
@@ -543,6 +547,7 @@ export async function callGoWorker({
 }
 
 export async function streamGoWorker({
+  requestContext = null,
   exec,
   body,
   reqHeaders = {},
@@ -650,6 +655,7 @@ export async function streamGoWorker({
             cacheTtl,
             preserveCacheBreakpoints,
             cliHop,
+            requestContext,
           })),
         request_id: requestId,
       },
