@@ -18,6 +18,7 @@ test('watchdog restarts only a dead kernel or one that gave up on its CLI', asyn
   const ensured = []
   let now = 0
   const wd = createKernelWatchdog({
+    config: { fail_threshold: 1 },
     now: () => now,
     listTargets: () => [
       { id: 'vm-up', inference_engine: 'rust' },
@@ -57,7 +58,7 @@ test('container restarts are bounded, spaced out, then the VM is faulted until h
   const ensured = []
   const faults = []
   const wd = createKernelWatchdog({
-    config: { restart_backoff_sec: [60, 300], restart_window_sec: 3600 },
+    config: { restart_backoff_sec: [60, 300], restart_window_sec: 3600, fail_threshold: 1 },
     listTargets: () => [{ id: 'vm-loop', inference_engine: 'rust' }],
     homeDirFor: () => '/tmp/vm-loop',
     health: async () => health,

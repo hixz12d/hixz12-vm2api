@@ -2,10 +2,13 @@
  * Host watchdog for rust PID-1 slots (recovery level L4/L5).
  *
  * The kernel recovers its own CLI first (close slot, ping, restart CLI) and
- * reports `healthy:false` only after that budget is spent. Then this restarts
- * the container via ensureRustKernel, a bounded number of times with growing
- * waits; when that is spent too, the VM is marked faulted, the scheduler skips
- * it and the operator is notified. Never falls back to kin-worker hop.
+ * reports `healthy:false` only after that budget is spent. A slot enters L4
+ * only after `fail_threshold` consecutive failed probes (each waits
+ * `health_timeout_ms`); one healthy probe resets the count, so a single slow
+ * answer from a busy slot never restarts it. Then this restarts the container
+ * via ensureRustKernel, a bounded number of times with growing waits; when that
+ * is spent too, the VM is marked faulted, the scheduler skips it and the
+ * operator is notified. Never falls back to kin-worker hop.
  */
 import {
   kernelFaults,
@@ -26,6 +29,10 @@ export const DEFAULT_KERNEL_WATCHDOG = Object.freeze({
   enabled: true,
   interval_sec: 20,
   timeout_ms: 15_000,
+  // Per-probe health wait; a busy slot can answer slower than the old 800ms.
+  health_timeout_ms: 3000,
+  // Consecutive failed probes before the restart flow (L4) starts.
+  fail_threshold: 3,
   // Wait before each container restart, including the first one.
   restart_backoff_sec: Object.freeze([60, 300, 900]),
   restart_window_sec: 3600,
@@ -45,6 +52,8 @@ export function normalizeKernelWatchdogConfig(raw = {}) {
     enabled: raw.enabled !== false,
     interval_sec: clampInt(raw.interval_sec, 5, 300, DEFAULT_KERNEL_WATCHDOG.interval_sec),
     timeout_ms: clampInt(raw.timeout_ms, 3000, 60_000, DEFAULT_KERNEL_WATCHDOG.timeout_ms),
+    health_timeout_ms: clampInt(raw.health_timeout_ms, 500, 15_000, DEFAULT_KERNEL_WATCHDOG.health_timeout_ms),
+    fail_threshold: clampInt(raw.fail_threshold, 1, 10, DEFAULT_KERNEL_WATCHDOG.fail_threshold),
     restart_backoff_sec: backoff.length ? backoff : [...DEFAULT_KERNEL_WATCHDOG.restart_backoff_sec],
     restart_window_sec: clampInt(raw.restart_window_sec, 60, 86_400, DEFAULT_KERNEL_WATCHDOG.restart_window_sec),
   }
@@ -83,6 +92,8 @@ export function createKernelWatchdog({
   let inTick = false
   // vmId -> { attempts: [ms], nextAt }
   const restarts = new Map()
+  // vmId -> consecutive probes that needed a restart
+  const failures = new Map()
 
   /** L4 gate: bounded container restarts with growing waits; spending them is L5. */
   function admitRestart(vm, reason, at) {
@@ -123,20 +134,28 @@ export function createKernelWatchdog({
           vm,
           homeDir: typeof homeDirFor === 'function' ? homeDirFor(vm) : null,
         }
-        const current = await health(exec, { timeoutMs: 800 })
+        const current = await health(exec, { timeoutMs: config.health_timeout_ms })
         // cc-node is the crag worker. Restarting a live kernel SIGKILLs it.
         if (dataplaneUsesCcNode(exec) && rustKernelProcessUp(current)) continue
         if (!rustKernelNeedsRestart(current)) {
+          failures.delete(vm.id)
           // Healthy again after a fault means someone fixed it: start a fresh budget.
           // Plain recovery keeps past attempts so a crash loop stays bounded by the window.
           if (kernelFaults.delete(vm.id)) restarts.delete(vm.id)
+          // A wait that never led to a restart is dropped, so a stale nextAt
+          // cannot turn the next isolated failure into an instant restart.
+          else if (restarts.get(vm.id)?.attempts.length === 0) restarts.delete(vm.id)
           // Config convergence, not a failure: outside the restart budget.
           if (kernelSlotMismatch(exec)) await ensure(exec, { timeoutMs: config.timeout_ms })
           continue
         }
+        const failed = (failures.get(vm.id) || 0) + 1
+        failures.set(vm.id, failed)
+        if (failed < config.fail_threshold) continue
         const reason = current?.unhealthy_reason || current?.error || 'kernel process down'
         if (!admitRestart(vm, reason, now())) continue
         console.warn(`[kernel-watchdog] ${vm.id} restarting container: ${reason}`)
+        failures.delete(vm.id)
         await ensure(exec, { timeoutMs: config.timeout_ms })
       }
     } finally {
