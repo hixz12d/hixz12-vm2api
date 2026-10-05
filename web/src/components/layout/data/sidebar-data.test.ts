@@ -24,13 +24,13 @@ describe('sidebar permissions', () => {
         '/database',
         '/import',
         '/keys',
-        '/loadtest',
         '/logs',
         '/models',
         '/overview',
         '/protocol',
         '/proxies',
         '/settings',
+        '/statistics',
         '/system',
         '/usage',
         '/users',
@@ -51,5 +51,17 @@ describe('sidebar permissions', () => {
     expect(advanced?.items.map((item) => item.url)).toEqual(
       expect.arrayContaining(['/wrap', '/protocol', '/database', '/system'])
     )
+  })
+
+  it('shows statistics next to usage, ahead of logs', () => {
+    const groups = navGroupsFor(['usage', 'statistics', 'logs'])
+    const items = groups.flatMap((group) => group.items)
+
+    expect(items.map((item) => item.url)).toEqual([
+      '/usage',
+      '/statistics',
+      '/logs',
+    ])
+    expect(items[1].title).toBe('统计')
   })
 })

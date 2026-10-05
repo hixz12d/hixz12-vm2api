@@ -276,13 +276,11 @@ export function replaceSlotOwnedFile(filePath, body, vm) {
 }
 
 export function slotUidGidFromHomeDir(homeDir) {
-  const m = String(homeDir || '')
+  const id = String(homeDir || '')
     .replace(/\\/g, '/')
-    .match(/\/(vm-\d+)\/cli-home\/?$/i)
-  if (!m) return null
-  const n = Number(String(m[1]).slice(3))
-  if (!Number.isFinite(n) || n < 1) return null
-  return { uid: 10000 + n, gid: Number(process.env.KIN_VM_GID || 987) }
+    .match(/\/([^/]+)\/cli-home\/?$/i)?.[1]
+  if (!id) return null
+  return slotRuntimeOwner({ id })
 }
 
 export function ensureSlotClaudeOwnership(homeDir, uid = null, gid = null) {
@@ -403,8 +401,8 @@ export function writeWorkerCredentialFile(homeDir, cred) {
 }
 
 /**
- * Old slot files predate subscriptionType. A release fills it once:
- * the VM's identified plan, otherwise pro. An existing value is kept.
+ * Old slot files predate subscriptionType. Fill from the identified plan,
+ * otherwise pro; repair the legacy pro fallback for an identified Max slot.
  */
 export function ensureSlotSubscriptionType(homeDir, accountTier = null) {
   const file = slotWorkerCredentialPath(homeDir)
@@ -417,8 +415,16 @@ export function ensureSlotSubscriptionType(homeDir, accountTier = null) {
   }
   const oauth = doc?.claudeAiOauth
   if (!oauth || typeof oauth !== 'object') return { wrote: false, reason: 'no_oauth' }
-  if (normalizeSubscriptionType(oauth.subscriptionType)) return { wrote: false, reason: 'present' }
-  const tier = normalizeSubscriptionType(accountTier) || 'pro'
+  const present = normalizeSubscriptionType(oauth.subscriptionType)
+  const identified = normalizeSubscriptionType(accountTier)
+  // Startup summaries used to lose the identified tier and write pro. A pro
+  // hint may itself be a default, so it must not downgrade an existing plan.
+  if (present && !(present === 'pro' && identified === 'max')) {
+    chownSlotCredentialFile(homeDir, file)
+    return { wrote: false, reason: 'present' }
+  }
+
+  const tier = identified || 'pro'
   oauth.subscriptionType = tier
   try {
     fs.chmodSync(file, 0o600)

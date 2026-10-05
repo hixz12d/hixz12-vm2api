@@ -209,6 +209,31 @@ test('proxy disconnect_on_error can be toggled via config', async () => {
   }
 })
 
+test('DNS 64/65 suppression is visible in proxy config and can be toggled', async () => {
+  const gw = await startGateway()
+  try {
+    const initial = await api(gw, 'GET', '/api/panel/proxies/config')
+    assert.equal(initial.status, 200, initial.text)
+    assert.equal((initial.json.data || initial.json).dns_disable_svcb_https, false)
+    for (const enabled of [true, false]) {
+      const put = await api(gw, 'PUT', '/api/panel/proxies/config', {
+        body: { dns_disable_svcb_https: enabled },
+      })
+      assert.equal(put.status, 200, put.text)
+      assert.equal((put.json.data || put.json).dns_disable_svcb_https, enabled)
+      const get = await api(gw, 'GET', '/api/panel/proxies')
+      assert.equal((get.json.data || get.json).config.dns_disable_svcb_https, enabled)
+    }
+    const invalid = await api(gw, 'PUT', '/api/panel/proxies/config', {
+      body: { dns_disable_svcb_https: 'false' },
+    })
+    assert.equal(invalid.status, 400, invalid.text)
+    assert.equal(invalid.json.error.code, 'invalid_dns_disable_svcb_https')
+  } finally {
+    await gw.stop()
+  }
+})
+
 test('generate-auth-url requires bound SOCKS5', async () => {
   const gw = await startGateway()
   try {
@@ -239,6 +264,26 @@ test('generate-auth-url then exchange-code writes fake oauth', async () => {
     const out = ex.json.data || ex.json
     assert.equal(out.oauth_email, 'fake-oauth@kin.test')
     assert.equal(out.vm?.has_token || out.has_refresh != null, true)
+  } finally {
+    await gw.stop()
+  }
+})
+
+test('local egress slot generates auth url and exchanges code', async () => {
+  const gw = await startGateway({ oauth: false })
+  try {
+    const bind = await api(gw, 'POST', '/api/panel/proxies/px-local/bind', { body: { vm_id: 'vm-sim-01' } })
+    assert.equal(bind.status, 200, bind.text)
+    const vm = JSON.parse(fs.readFileSync(path.join(gw.project, 'vms', 'vm-sim-01.json'), 'utf8'))
+    assert.equal(vm.proxy?.id, 'px-local')
+    const gen = await api(gw, 'POST', '/api/panel/vms/vm-sim-01/oauth/generate-auth-url', { body: {} })
+    assert.equal(gen.status, 200, gen.text)
+    const data = gen.json.data || gen.json
+    const ex = await api(gw, 'POST', '/api/panel/vms/vm-sim-01/oauth/exchange-code', {
+      body: { session_id: data.session_id, code: 'pasted-auth-code' },
+    })
+    assert.equal(ex.status, 200, ex.text)
+    assert.equal((ex.json.data || ex.json).oauth_email, 'fake-oauth@kin.test')
   } finally {
     await gw.stop()
   }

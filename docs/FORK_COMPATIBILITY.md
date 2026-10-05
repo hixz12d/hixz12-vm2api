@@ -1,12 +1,17 @@
 # Fork 运行兼容性
 
-## 当前策略：优先采用上游 v1.3.95
+## 当前策略：优先采用上游 v1.3.106
 
-融合上游 `06f090b1`（v1.3.95，含 v1.3.92–v1.3.94）。保留 fork 历史与定制管理台，源码、预编译前端及 CLI 补丁同步维护。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
+融合上游 `6735621b`（v1.3.106，含 v1.3.96–v1.3.105）。保留 fork 历史与定制管理台，源码、预编译前端及 CLI 补丁同步维护。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
+
+- 采用 v1.3.96–v1.3.106：宿主独占换票（槽内 CLI 带 `CLAUDE_CODE_KIN_HOST_REFRESH=1` 只重读宿主凭证）、官方初装与 `setup-token` 改用槽内 cli-node、auto mode 分类识别不再依赖判决格式（#220）、Codex Fast / UA 0.160.0、出口 PID 核对、首条 user 跳过纯 `<system-reminder>` 作会话指纹（#236）、代理名称（迁移 `028`）、`usage_logs` 加 `session_id` / `reasoning_effort`（迁移 `027`）、DNS type 64/65 开关。`cli-node`、`kin-kernel`、`kin-egress`、`kin-oauth-auth`、`kin-codex-kernel` 都有变化，Node、内核、CLI 必须一起上线并 `wrap-cli/sync`。
+- 采用上游下线压测页（`/loadtest` 及其管理 API）；侧栏「高级」组随之去掉压测。
+- 采用上游重写的日志页（`/logs`，滚动日志 + 详情抽屉）和新统计页（`/statistics`，放在侧栏「记录与设置」组「用量」之后）。fork 在旧日志详情里的「账号分组 / 密钥名称」改到新详情「会话信息」区：`usage-logs-view.mjs` 的 `lookupNames` 增加 `groups`，行字段 `groupName`（旧行无 `group_id` 按默认分组 1）。合并上游时注意 `toUsageLogRow` 与 `summary-tab.tsx` 这两处。
+- Key 页复制采用上游 `copyText`（HTTP 下也能复制，失败时转弹层），文案保留 fork 写法。
 
 - 采用 v1.3.91 的 native 错误与恢复：CLI 的真实 HTTP / 网络错误（code、status、type、message、retry-after）原样返回，不再统一成 `incomplete_response`；请求失败或执行位全忙都不再回收 CLI，恢复由内核（关闭未 ack 的 slot、限次重启 CLI）和 watchdog（限次重启容器）有界执行。Node 每个 hop 带 `request_id`，客户端断开时调内核 `/internal/v1/cancel`。依赖新 `kin-kernel` 与新 `cli-node`，Node、内核、CLI 必须一起上线。
 - watchdog 探测放宽（fork 定制，`kernel-watchdog.mjs`）：健康探测等待 `kernel_watchdog.health_timeout_ms`（默认 3000，范围 500–15000），连续 `kernel_watchdog.fail_threshold` 次（默认 3，范围 1–10，约 1 分钟）探测需要重启才进入“递增等待 → 重启容器”流程；中间一次健康就清零，并清掉尚未开始重启的等待状态。原因：上游探测只等 800 毫秒、单次失败就进入重启流程，会误杀正在出结果的槽位。合并上游时 `kernel-watchdog.mjs` 有冲突要保留这两项及连续失败计数。
-- 采用 #191（cli-hop 的 `stop_reason=max_tokens` 视为正常截断）：Node 删除旧 `max_tokens<=64 → 1024` 规避分支，`compatibility.min_max_tokens` 下限仍生效。仓内 `cli-node` 以上游 v1.3.94 新 cli-node（`1b735bf7`，源码 `ef30963b…`）为基线打 `caller-system-v3+safeguards-v1` 补丁，成品 SHA-256 `3556b454…`（见 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md)、`share/wrap-cli/PATCH.json`）。
+- 采用 #191（cli-hop 的 `stop_reason=max_tokens` 视为正常截断）：Node 删除旧 `max_tokens<=64 → 1024` 规避分支，`compatibility.min_max_tokens` 下限仍生效。仓内 `cli-node` 以上游 v1.3.103 新 cli-node（`cb585bb6`，源码 `51e51f4a…`）为基线打 `caller-system-v3+safeguards-v1` 补丁，成品 SHA-256 `89e08a33…`（见 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md)、`share/wrap-cli/PATCH.json`）。
 - auto mode 服务端检查（fork 定制）：cli-hop 上 `prepareCliHopBody` 只在 `compatibility.auto_mode_server` 非 `false`、调用方 `safeguards` 为数组、`anthropic-beta` 含 `dangerous-tool-use-YYYY-MM-DD` 时保留 `safeguards` 并写内部字段 `kin_safeguards_beta`，否则两者都删；`cli-node` 补丁把 beta 并入出站 `anthropic-beta`，不外发内部字段。只放行这一个调用方 beta。
 - auto mode 分类请求（上游 v1.3.94）与 fork safeguards 并存：`handle-protocol.mjs` 用 `classifyClaudeRequestPurpose` 得到 `requestContext`，分类请求不走 Node persona、不做 fork 的“调用方 system 快照重建”（cli-hop 重建条件是 `!requestContext && !officialTraffic`），普通请求仍按 fork 重建。cli-hop 调用 `prepareCliHopBody` 时同时传 `safeguardsBeta`、`autoModeServer`、`requestContext`；分类请求在 `prepareCliHopBody` 内走上游 `prepareClassifierBody`，之后仍过 fork 的 `applyCliHopSafeguards`（beta 不合规就删 `safeguards`）。合并上游时用 `git grep -n "requestContext\|safeguardsBeta\|kin_safeguards_beta" -- src` 核对 `handle-protocol.mjs`、`outbound-attempt.mjs` 这两处。
 - 采用上游槽位终端（`src/lib/vm/slot-shell.mjs`、`web/src/components/ws-terminal.tsx`、`vm-shell-card.tsx`）：仅管理员，经 30 秒一次性 ticket 打开 WebSocket；反代必须对 `^/api/panel/(cluster/nodes|vms)/[^/]+/shell$` 透传 Upgrade（见 `docs/nginx-shell.md`）。
@@ -159,6 +164,8 @@ v1.3.56（Fable 权益探测标记 Max）只在上游分支 `cursor/fix-supervis
 - 智能评分与设备亲和同时存在时，采用上游顺序：设备主 VM 可预留时优先，否则再按号池策略（含 `smart`）选号。
 
 ## 同步历史
+
+- `upstream/main 06f090b1`：同步至 v1.3.95（槽位终端、Claude 原生限额重置、auto mode 分类请求与 fork safeguards 并存、官方 Setup Token 区分、自定义 DoH），`cli-node` 在 v1.3.94 上重打补丁。
 
 - `upstream/main 6a32923`：同步至 v1.3.91（native 取消与有界恢复、真实错误码、集群 VM 放置、单槽位配额、SOCKS5 IPv6），`cli-node` 在 v1.3.91 上重打补丁；fork 的 `slot_busy` 回收条件由上游行为取代。
 

@@ -1,8 +1,8 @@
 import { VIEW_TITLES } from '@/config/nav'
 import {
-  Activity,
   Boxes,
   Cable,
+  ChartColumn,
   Database,
   Download,
   Gauge,
@@ -40,6 +40,7 @@ const ALL_GROUPS: NavGroup[] = [
     title: '记录与设置',
     items: [
       { title: VIEW_TITLES.usage, url: '/usage', icon: Gauge },
+      { title: VIEW_TITLES.statistics, url: '/statistics', icon: ChartColumn },
       { title: VIEW_TITLES.logs, url: '/logs', icon: ScrollText },
       { title: VIEW_TITLES.settings, url: '/settings', icon: Settings },
       { title: VIEW_TITLES.users, url: '/users', icon: UserCog },
@@ -57,7 +58,6 @@ const ALL_GROUPS: NavGroup[] = [
         icon: MessageSquareText,
       },
       { title: VIEW_TITLES.wrap, url: '/wrap', icon: Layers },
-      { title: VIEW_TITLES.loadtest, url: '/loadtest', icon: Activity },
       { title: VIEW_TITLES.database, url: '/database', icon: Database },
       { title: VIEW_TITLES.cluster, url: '/cluster', icon: Boxes },
     ],

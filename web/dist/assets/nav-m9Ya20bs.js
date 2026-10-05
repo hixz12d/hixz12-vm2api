@@ -1,0 +1,1 @@
+var e={overview:`总览`,cluster:`集群`,vm:`账号`,import:`导入账号`,usage:`用量`,billing:`计费`,proxies:`出口代理`,models:`模型`,protocol:`协议拦截`,system:`System 提示词`,keys:`Key 和分组`,api:`API`,logs:`日志`,statistics:`统计`,database:`数据库`,settings:`设置`,users:`用户`,wrap:`内核`};export{e as t};

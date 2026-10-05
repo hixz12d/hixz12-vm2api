@@ -2,9 +2,9 @@
 
 ## 当前状态
 
-源码融合上游 `06f090b`（v1.3.95）。仓内 `cli-node` 基于上游 v1.3.94 新 cli-node（`1b735bf7`，v1.3.95 未再改）重新提取，应用 `caller-system-v3+safeguards-v1` 并用官方 Bun 重建；`cc-node` 保持已验证的 `caller-system-v1` 二进制。`kin-kernel` 采用上游 v1.3.95 原版。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准；下文记录的是本地验证。
+源码融合上游 `6735621b`（v1.3.106）。仓内 `cli-node` 基于上游 v1.3.103 新 cli-node（`cb585bb6`，之后未再改）重新提取，应用 `caller-system-v3+safeguards-v1` 并用官方 Bun 重建；`cc-node` 保持已验证的 `caller-system-v1` 二进制。`kin-kernel` 采用上游 v1.3.106 原版。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准；下文记录的是本地验证。
 
-唯一补丁实现是 `scripts/patch-cli-system.py`，固定输入源码 SHA-256；未知上游版本拒绝应用。`cli-node` 对应当前上游，`cli-node-v1.3.91`、`cli-node-v1.3.88`、`cli-node-v1.3.85` 可复现前三版，`cc-node` 对应原固定基线，`legacy-cli-node` 可复现旧版补丁。逐文件基线和成品哈希见 [PATCH.json](../share/wrap-cli/PATCH.json)。
+唯一补丁实现是 `scripts/patch-cli-system.py`，固定输入源码 SHA-256；未知上游版本拒绝应用。`cli-node` 对应当前上游，`cli-node-v1.3.94`、`cli-node-v1.3.91`、`cli-node-v1.3.88`、`cli-node-v1.3.85` 可复现前四版，`cc-node` 对应原固定基线，`legacy-cli-node` 可复现旧版补丁。逐文件基线和成品哈希见 [PATCH.json](../share/wrap-cli/PATCH.json)。
 
 ## 修复契约
 
@@ -42,7 +42,13 @@ cc-node 二进制未更新，其 5m / 1h 双消息断点、总断点数不超过
 
 ## 本次验证
 
-验证环境为本地 Linux Docker，无外网，根文件系统只读，CPU 限制 1.5 核，使用虚构凭据与容器内 HTTP 模拟上游。
+v1.3.103 新 cli-node 相对上一基线（v1.3.94，源码 `ef30963b…`）只有两处上游改动：带 `CLAUDE_CODE_KIN_HOST_REFRESH` 时 401 恢复只重读宿主凭证（宿主独占换票）；XML 分类请求的一致性校验不再要求 system 含 `<block>`（#220）。两处都不碰补丁锚点，补丁原样应用。
+
+- 新成品内嵌源码与上一版 fork 成品（`8ad1e972…`）逐行比较，差异只有上述两处上游改动；补丁内容、上面列出的缓存和计费函数不变。
+- 单入口 `/$bunfs/root/cli.js`、graph flags=7 已核对；`cli-node-v1.3.94` 模式复现出上一版相同的补丁源码哈希（`cd7f6500…`）；成品在 Linux 下 `--version` 输出 `2.1.284 (Claude Code)`。
+- 本次未重跑实际 Rust 内核联调、错误透传和 auto mode e2e（`test/e2e/auto-mode.e2e.test.mjs`），上线前或上线后按 RUNBOOK 做请求级验证。
+
+以下为 v1.3.95 融合时的完整验证，补丁行为至今未变。验证环境为本地 Linux Docker，无外网，根文件系统只读，CPU 限制 1.5 核，使用虚构凭据与容器内 HTTP 模拟上游。
 
 - 经上游 v1.3.95 实际 Rust 内核（`kin-kernel --gateway-worker`，随附 glibc239，local_cli / 2 槽位）调用新 cli-node；请求体由合并后的真实 `prepareCliHopBody` 生成，经 `go-worker-client` 信封送入内核。
 - 返回给调用方的 SSE 保留 `safeguard_results`，到 `message_stop` 结束。
@@ -58,7 +64,7 @@ cc-node 二进制未更新，其 5m / 1h 双消息断点、总断点数不超过
 
 ## 维护与复现
 
-当前 cli-node 原始文件从 `1b735bf7ea65d562cfaeb4c4deaf3ff520e908ed:share/wrap-cli/cli-node` 导出（SHA-256 `c711a966…`）；cc-node 原始文件从 `336729010c6040236bdcd507923737eb4abb1178:share/wrap-cli/cc-node` 导出。用 Git Bash 或 Linux 的 `git show <commit>:<path> > file` 二进制安全导出，不通过 PowerShell 文本重定向。
+当前 cli-node 原始文件从 `cb585bb63df4fbada4005306299f60fdfb1b1996:share/wrap-cli/cli-node` 导出（SHA-256 `7b23385e…`）；cc-node 原始文件从 `336729010c6040236bdcd507923737eb4abb1178:share/wrap-cli/cc-node` 导出。用 Git Bash 或 Linux 的 `git show <commit>:<path> > file` 二进制安全导出，不通过 PowerShell 文本重定向。
 
 提取工具在部署仓库 `scripts/research/extract-cli-bundle.py` 支持同一 Bun 格式的带/不带 shebang 两种入口；正式旧研究产物 `../artifacts/cli-node-rebuild/` 保持原样。
 

@@ -5,6 +5,7 @@ import type { ApiKeyItem } from '@/types/panel-keys'
 import { Copy, MoreHorizontal, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { copyText } from '@/lib/clipboard'
 import { fmtNum, fmtUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -190,12 +191,15 @@ export function KeysPage() {
         toast.error('这个 Key 的原文找不回来，需要的话请换新 Key')
         return
       }
-      try {
-        await navigator.clipboard.writeText(key)
+      if (await copyText(key)) {
         toast.success('Key 已复制，注意不要泄露')
-      } catch {
-        toast.error('复制失败，请点「查看」手动复制')
+        return
       }
+      // The browser refused (plain HTTP without execCommand, or the click's
+      // activation expired while revealing): hand the key over in the dialog,
+      // whose own button is a fresh gesture.
+      setRevealed({ title: '复制 Key', name: k.name, id: k.id, key })
+      toast.warning('浏览器拦住了自动复制，请在弹出的窗口里点「复制」')
     } catch {
       /* onError 已 toast */
     }
