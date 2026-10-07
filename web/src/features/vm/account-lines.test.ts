@@ -25,7 +25,6 @@ describe('accountLamp', () => {
 
   it('lights amber for quota/cooldown, red for broken credentials', () => {
     expect(accountLamp(vm('quota')).lamp).toBe('amber')
-    expect(accountLamp(vm('sessions')).lamp).toBe('amber')
     expect(accountLamp(vm('cool')).lamp).toBe('amber')
     expect(accountLamp(vm('bad')).lamp).toBe('red')
   })

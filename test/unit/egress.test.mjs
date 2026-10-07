@@ -32,7 +32,8 @@ import {
   stopEgressProcess,
 } from '../../src/lib/vm/egress.mjs'
 
-const egressBin = path.resolve(import.meta.dirname, '../../bin/kin-egress')
+// Process-ownership tests need the native helper so /proc/<pid>/exe identifies it.
+const egressBin = process.env.KIN_EGRESS_BIN || path.resolve(import.meta.dirname, '../../bin/kin-egress')
 
 async function waitForProcess(predicate) {
   for (let i = 0; i < 100; i++) {

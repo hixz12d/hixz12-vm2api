@@ -204,8 +204,8 @@ test('incomplete hops retry within the key group then return 502 without walking
   assert.deepEqual(new Set(seen), new Set(['vm-01', 'vm-02']))
   for (const vmId of new Set(seen)) assert.ok(seen.filter((id) => id === vmId).length <= 3)
   assert.equal(Object.keys(pool.snapshot().inflight).length, 0)
-  assert.equal(pool.usedSlotCount('vm-01'), 0)
-  assert.equal(pool.usedSlotCount('vm-02'), 0)
+  assert.equal(pool.planner.openCount('vm-01'), 0)
+  assert.equal(pool.planner.openCount('vm-02'), 0)
 })
 
 test('empty-hop retry affinity keeps group, quota and concurrency checks', async (t) => {
@@ -325,8 +325,8 @@ test('a concurrent family bind does not discard an already reserved in-group sea
   assert.equal(calls, 1)
   assert.deepEqual(seen, ['vm-01'])
   assert.equal(Object.keys(pool.snapshot().inflight).length, 0)
-  assert.equal(pool.usedSlotCount('vm-01'), 0)
-  assert.equal(pool.usedSlotCount('vm-02'), 0)
+  assert.equal(pool.planner.openCount('vm-01'), 0)
+  assert.equal(pool.planner.openCount('vm-02'), 0)
 })
 
 test('family lock never pulls a request outside its key group', async (t) => {
@@ -425,6 +425,6 @@ for (const remainingPro of [true, false]) {
       assert.deepEqual(seen, [])
     }
     assert.equal(Object.keys(pool.snapshot().inflight).length, 0)
-    for (const vm of ['vm-01', 'vm-02', 'vm-03']) assert.equal(pool.usedSlotCount(vm), 0)
+    for (const vm of ['vm-01', 'vm-02', 'vm-03']) assert.equal(pool.planner.openCount(vm), 0)
   })
 }

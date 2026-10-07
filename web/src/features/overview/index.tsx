@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { VIEW_TITLES } from '@/config/nav'
+import { VIEW_DESCRIPTIONS, VIEW_TITLES } from '@/config/nav'
 import type { OpsWindow } from '@/types/panel-overview'
 import type { Vm } from '@/types/panel-vm'
 import { ChevronRight, Download } from 'lucide-react'
@@ -20,7 +20,6 @@ import { QueryGate } from '@/components/query-gate'
 import { groupsQueryOptions } from '@/features/keys/groups-query'
 import { apiKeysQueryOptions } from '@/features/keys/queries'
 import { logStatsQueryOptions } from '@/features/logs/queries'
-import { BillingStrip } from '@/features/overview/billing-strip'
 import { ErrorCollectionSummary } from '@/features/overview/error-collection-summary'
 import { HostColumn } from '@/features/overview/host-column'
 import { OverviewSkeleton } from '@/features/overview/overview-skeleton'
@@ -30,7 +29,6 @@ import {
   dashboardQueryOptions,
   usageQueryOptions,
 } from '@/features/overview/queries'
-import { StatisticsChartCard } from '@/features/overview/statistics-chart-card'
 import { TrafficOps } from '@/features/overview/traffic-ops'
 import { KeyPatchPanel, StatusLine, Switchboard } from './switchboard'
 import { buildLines, summarize } from './switchboard-model'
@@ -41,7 +39,7 @@ const DETAILS_OPEN_KEY = 'overview_details_open'
  * 总览 = 夜班交换台。
  * 上：一句话说明现在要不要管；中：每个账号一条线（灯 + 额度刻度）；
  * 右：调用 Key，点一个 Key 标出它能用到的账号。
- * 其余统计（额度池、费用、服务质量、错误分类、主机、趋势图）收进页尾「详细数据」。
+ * 其余统计（额度池、服务质量、错误分类、主机）收进页尾「详细数据」。
  */
 export function OverviewPage() {
   const dash = useQuery(dashboardQueryOptions())
@@ -102,6 +100,7 @@ export function OverviewPage() {
   return (
     <PageHeader
       title={VIEW_TITLES.overview}
+      description={VIEW_DESCRIPTIONS.overview}
       extra={
         <Button size='sm' asChild>
           <Link to='/import'>
@@ -143,7 +142,7 @@ export function OverviewPage() {
               <ChevronRight className='size-4 transition-transform duration-200 group-data-[state=open]:rotate-90' />
               详细数据
               <span className='text-xs font-normal'>
-                额度池、费用、服务质量、错误分类、主机、趋势图
+                额度池、服务质量、错误分类、主机
               </span>
             </CollapsibleTrigger>
             <CollapsibleContent className='CollapsibleContent'>
@@ -175,17 +174,6 @@ export function OverviewPage() {
 
                 <PoolQuota vms={vms} />
 
-                <BillingStrip
-                  billing={d.billing}
-                  vms={vms}
-                  fallbackToday={Number(
-                    summary.today_cost ?? totals.today_cost ?? 0
-                  )}
-                  fallbackTotal={Number(
-                    summary.total_cost ?? totals.total_cost ?? 0
-                  )}
-                />
-
                 <TrafficOps ops={ops} showModels />
 
                 <ErrorCollectionSummary
@@ -202,7 +190,6 @@ export function OverviewPage() {
                   </div>
                 </PanelCard>
 
-                <StatisticsChartCard />
               </div>
             </CollapsibleContent>
           </Collapsible>

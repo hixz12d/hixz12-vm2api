@@ -2,16 +2,16 @@
 
 ## 当前状态
 
-源码融合上游 `6735621b`（v1.3.106）。仓内 `cli-node` 基于上游 v1.3.103 新 cli-node（`cb585bb6`，之后未再改）重新提取，应用 `caller-system-v3+safeguards-v1` 并用官方 Bun 重建；`cc-node` 保持已验证的 `caller-system-v1` 二进制。`kin-kernel` 采用上游 v1.3.106 原版。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准；下文记录的是本地验证。
+源码融合上游 `4a3e6136`（v1.3.123）。仓内 `cli-node` 基于上游 v1.3.123 cli-node（`c0edfaef`，Claude Code 2.1.293）重新提取，应用 `caller-system-v3+safeguards-v1` 并用官方 Bun 重建；`cc-node` 保持已验证的 `caller-system-v1` 二进制。`kin-kernel` / `kin-kernel.bin` 采用上游 v1.3.123 原版（线协议与环境变量已去掉 `kin_` / `KIN_` 前缀，必须与新 cli-node 一起上线）。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准；下文记录的是本地验证。
 
-唯一补丁实现是 `scripts/patch-cli-system.py`，固定输入源码 SHA-256；未知上游版本拒绝应用。`cli-node` 对应当前上游，`cli-node-v1.3.94`、`cli-node-v1.3.91`、`cli-node-v1.3.88`、`cli-node-v1.3.85` 可复现前四版，`cc-node` 对应原固定基线，`legacy-cli-node` 可复现旧版补丁。逐文件基线和成品哈希见 [PATCH.json](../share/wrap-cli/PATCH.json)。
+唯一补丁实现是 `scripts/patch-cli-system.py`，固定输入源码 SHA-256；未知上游版本拒绝应用。`cli-node` 对应当前上游，`cli-node-v1.3.103`、`cli-node-v1.3.94`、`cli-node-v1.3.91`、`cli-node-v1.3.88`、`cli-node-v1.3.85` 可复现前五版，`cc-node` 对应原固定基线，`legacy-cli-node` 可复现旧版补丁。逐文件基线和成品哈希见 [PATCH.json](../share/wrap-cli/PATCH.json)。
 
 ## 修复契约
 
 - Node 的 cli-hop 路径保留调用方顶层 system，`zero` / `official` / `official_full` 不将其搬成 user reminder。历史 HTTP 行为保持原样。
 - CLI 按 billing、可选身份句、网关时区、调用方文本组装 system，保留调用方文本和空白，不注入槽位 cwd、平台、OS 或 Notes。
 - 上游新版已修复 caller system 丢失，但仍整块删除以 `# Environment` 开头的调用方内容。fork 只删除独立 billing、身份句和纯时区块；客户端环境、agent、Notes 原文继续保留。
-- 请求阶段读取 `KIN_KERNEL_CONFIG` 或 `/run/kin/kernel.json` 的 `system_layout` 与 `timezone`；缺失配置时才回退环境变量。启动时档位握手沿用旧内核契约。
+- 请求阶段读取 `KIN_KERNEL_CONFIG` 或 `/run/kin/kernel.json` 的 `system_layout` 与 `timezone`；缺失配置时才回退环境变量。启动时档位握手沿用旧内核契约。上游 2.1.293 自己的面板缓存 TTL 读取改用 `KERNEL_CONFIG` 或 `/run/guest/kernel.json`，在当前 `/run/kin` 挂载下读不到时回落 1h；生产全局 TTL 本就是 1h，暂不处理。
 - cc-node 保留 native/crag 配置初始化、workload/debug 引用修复；crag 仅还原首个传输用 `<system>` 块，普通 user 中的同名标签不提升为 system，工具续轮保留当前槽位 system，新任务重置。
 - 常驻约束采用上游默认关闭语义：缺 map/key 为关闭，显式 true 才开启。关闭后不得残留前一请求约束。
 
@@ -30,6 +30,7 @@ Claude Code auto mode 在请求体带 `safeguards`、在 `anthropic-beta` 带 `d
 - cli-node 只有在 `safeguards` 是数组、且 `kin_safeguards_beta` 匹配 `^dangerous-tool-use-\d{4}-\d{2}-\d{2}$` 时，才把 `safeguards` 原样放进出站请求体，并把该 beta 并入出站 `anthropic-beta`（去重）。任一条件不满足则两者都不发。`kin_safeguards_beta` 从不发给 Anthropic。
 - 回复方向不需要补丁：内核与 CLI 原样转出 `message_delta`，`safeguard_results` 保留。
 - 补丁只新增 `kinSafeguardsFromRequest` 并在 `runJob` → 出站参数之间传一个 `kinSafeguards` 选项，不改缓存和计费函数。v1.3.94 的补丁锚点与 v1.3.91 相同，改动内容逐行相同。
+- 上游 2.1.293 自带一套 safeguards 转发：请求带 `safeguards` 就无条件外发，并由 `withServerSafeguardBeta` 固定追加 `afk-mode-2026-01-31` beta。补丁的 `patch_upstream_safeguards` 删掉这两处，换回上面的 fork 门禁；出站不会出现 afk-mode beta。
 - 内核会把 job JSON 按键名重新排序后交给 CLI，`safeguards` 的值不变、键顺序会变。
 
 ## 缓存与预览
@@ -42,11 +43,13 @@ cc-node 二进制未更新，其 5m / 1h 双消息断点、总断点数不超过
 
 ## 本次验证
 
-v1.3.103 新 cli-node 相对上一基线（v1.3.94，源码 `ef30963b…`）只有两处上游改动：带 `CLAUDE_CODE_KIN_HOST_REFRESH` 时 401 恢复只重读宿主凭证（宿主独占换票）；XML 分类请求的一致性校验不再要求 system 含 `<block>`（#220）。两处都不碰补丁锚点，补丁原样应用。
+v1.3.123 cli-node（源码 `884a04fd…`）相对上一基线 v1.3.103（`51e51f4a…`）：版本 2.1.284 → 2.1.293；新增 Haiku 5.5 型号、计费、1M 与 effort；握手帧和环境变量去掉 `kin_` / `KIN_` 前缀（`host_ready`、`CLAUDE_CODE_NATIVE_SLOTS`、`SLOT_TZ` 等，新 `kin-kernel.bin` 用同一套名字）；新增上游 safeguards 转发（见上节，已由补丁换回 fork 门禁）。`leftoverFromSystemPrompt`、`classifierSystemBlocks`、`validClassifierContext` 与 8 个缓存和计费函数与 v1.3.103 逐字相同，caller-system 部分原样应用。
 
-- 新成品内嵌源码与上一版 fork 成品（`8ad1e972…`）逐行比较，差异只有上述两处上游改动；补丁内容、上面列出的缓存和计费函数不变。
-- 单入口 `/$bunfs/root/cli.js`、graph flags=7 已核对；`cli-node-v1.3.94` 模式复现出上一版相同的补丁源码哈希（`cd7f6500…`）；成品在 Linux 下 `--version` 输出 `2.1.284 (Claude Code)`。
-- 本次未重跑实际 Rust 内核联调、错误透传和 auto mode e2e（`test/e2e/auto-mode.e2e.test.mjs`），上线前或上线后按 RUNBOOK 做请求级验证。
+- 成品 SHA-256 `6c8164fc…`（48,547,864 字节），各阶段哈希见 PATCH.json。`cli-node-v1.3.103` 模式复现出上一版补丁源码哈希（`ce2bfc4a…`）。
+- 单入口 `/$bunfs/root/cli.js`、graph flags=7、`.text` / `.rodata` 与官方 Bun 一致；Linux 下 `--version` 输出 `2.1.293 (Claude Code)`。
+- 上游 `test/e2e/auto-mode.e2e.test.mjs`（上游 Node + 新内核 + 新成品，Debian trixie 容器；新内核需要 glibc 2.38+）：3 项通过，1 项按设计跳过（旧 CLI 用例）。
+- 实际内核 → 新成品 → 模拟上游的 safeguards 检查：两项都合规时上游收到原样 `safeguards` 和一次该 beta；缺 beta、缺 safeguards、beta 不带日期、safeguards 非数组时两者都不发；任何情况都没有 `kin_safeguards_beta` 和 afk-mode beta，调用方 `# Environment` 内容保留。同一检查用上游原版 CLI 会因 afk beta 外发而失败。
+- 未验证：合并后 fork Node（`prepareCliHopBody`）到新成品的端到端、真实 Anthropic、生产请求和缓存命中。上线后按 RUNBOOK 做请求级验证。
 
 以下为 v1.3.95 融合时的完整验证，补丁行为至今未变。验证环境为本地 Linux Docker，无外网，根文件系统只读，CPU 限制 1.5 核，使用虚构凭据与容器内 HTTP 模拟上游。
 

@@ -29,6 +29,7 @@ import {
 import { createKernelWatchdog, normalizeKernelWatchdogConfig } from './lib/transport/kernel-watchdog.mjs'
 import { ensureSlotSubscriptionType } from './lib/oauth/oauth-credentials.mjs'
 import { createCliNodeGuard } from './lib/vm/cli-node-guard.mjs'
+import { ensureTelemetrySidecar } from './lib/vm/slot-process-status.mjs'
 
 import { createUsageProbeMonitor, normalizeUsageProbeConfig } from './lib/oauth/usage-probe-monitor.mjs'
 import { normalizeOfficialCcConfig } from './lib/oauth/official-cc-bootstrap.mjs'
@@ -101,7 +102,6 @@ const FEATURES = [
   'protocol-convert',
   'go-slot-worker',
   'account-pool-failover',
-  'weighted-round-robin',
   'tools',
   'client-workspace',
   'api-direct-kernel',
@@ -256,10 +256,14 @@ const {
   applyVmConcurrency,
   applyVmRpm,
   applyVmSessionSlots,
+  applyVmMaxSessions,
+  inheritVmScheduling,
   applyVmQuotaOverride,
+  migrateLegacyOpenAIPolicies,
 } = routingRt
 
 routingConfig = loadRoutingConfig()
+migrateLegacyOpenAIPolicies(routingConfig)
 setManualScheduleWins(routingConfig.pool?.manual_schedule_wins)
 if (routingConfig.official_cc) {
   routingConfig.official_cc = normalizeOfficialCcConfig(routingConfig.official_cc)
@@ -445,6 +449,7 @@ kernelWatchdog = createKernelWatchdog({
   config: routingConfig.kernel_watchdog,
   listTargets: () => listVms(cfg.paths.project),
   homeDirFor: (vm) => path.join(cfg.paths.project, 'vms', vm.id, 'cli-home'),
+  ensureTelemetry: (vm) => ensureTelemetrySidecar({ projectRoot: cfg.paths.project, vm }),
   onFault: (vm, reason) => {
     const title = `槽内核故障 ${vm.id}`
     dispatchNotify(routingConfig.notify, {
@@ -464,7 +469,9 @@ usageProbeMonitor = createUsageProbeMonitor({
     const id = account?.account_id || vm?.claude?.account_uuid || vm?.account_uuid || vm?.id
     if (isCodexVm(vm)) {
       try {
-        syncCodexQuotaSchedule(cfg.paths.project, getVm(cfg.paths.project, vm.id) || vm)
+        syncCodexQuotaSchedule(cfg.paths.project, getVm(cfg.paths.project, vm.id) || vm, {
+          policy: routingConfig.codex?.quota,
+        })
       } catch {}
       return
     }
@@ -475,7 +482,7 @@ usageProbeMonitor = createUsageProbeMonitor({
       poolScheduler.syncQuotaSchedule(vm, account)
     } catch {}
   },
-  probeOne: (vm) => panel.buildProbeOne({ cfg, accountQuota, id: vm.id }),
+  probeOne: (vm) => panel.buildProbeOne({ cfg, accountQuota, id: vm.id, routingConfig }),
 })
 notifyMonitor = createNotifyMonitor({
   config: routingConfig.notify,
@@ -508,6 +515,7 @@ backupService.onRestored((db) => {
   apiScheduler.reload(apiEndpointStore.listRaw())
 
   routingConfig = loadRoutingConfig()
+  migrateLegacyOpenAIPolicies(routingConfig)
   setManualScheduleWins(routingConfig.pool?.manual_schedule_wins)
   if (routingConfig.official_cc) {
     routingConfig.official_cc = normalizeOfficialCcConfig(routingConfig.official_cc)
@@ -765,7 +773,7 @@ const importCommit = createImportCommit({
 
 const { commitImportedOauth, requireSlotProxy, officialCcStatsHandler } = importCommit
 
-const { handleProtocol } = createHandleProtocol({
+const { handleProtocol, handleSearch } = createHandleProtocol({
   json,
   writeSSEHeaders,
   readBody,
@@ -832,6 +840,7 @@ cliNodeGuard = createCliNodeGuard({
 
 const handlePanel = createPanelHandler({
   json,
+  writeSSEHeaders,
   readBody,
   readRawBody,
   requireAuth,
@@ -881,6 +890,8 @@ const handlePanel = createPanelHandler({
   applyVmConcurrency,
   applyVmRpm,
   applyVmSessionSlots,
+  applyVmMaxSessions,
+  inheritVmScheduling,
   applyVmQuotaOverride,
   initPoolRuntime,
   poolSchedulerConfig,
@@ -1032,6 +1043,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && (p === '/v1/messages' || p === '/messages')) {
       return await handleProtocol(req, res, 'anthropic.messages', p)
+    }
+    if (req.method === 'POST' && (p === '/v1/alpha/search' || p === '/alpha/search')) {
+      return await handleSearch(req, res, p)
     }
 
     json(res, 404, { error: { message: `not found: ${p}` } })

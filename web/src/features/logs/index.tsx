@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
-import { VIEW_TITLES } from '@/config/nav'
+import { VIEW_DESCRIPTIONS, VIEW_TITLES } from '@/config/nav'
 import type { ErrorCollection } from '@/types/panel-logs'
 import { ChevronDown, Download, Expand, Filter, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
@@ -39,7 +39,10 @@ import {
   type ExportWindow,
 } from './export-dialog'
 import { UsageLogsFilters } from './filters/usage-logs-filters'
-import { LogDetailSheet, type DetailState } from './log-detail/log-detail-sheet'
+import {
+  LogDetailDialog,
+  type DetailState,
+} from './log-detail/log-detail-dialog'
 import { LogsFullscreen } from './logs-fullscreen'
 import {
   LOGS_QUERY_KEY,
@@ -264,7 +267,11 @@ export function LogsPage() {
     .join(' · ')
 
   return (
-    <PageHeader title={VIEW_TITLES.logs} fluid>
+    <PageHeader
+      title={VIEW_TITLES.logs}
+      description={VIEW_DESCRIPTIONS.logs}
+      fluid
+    >
       <div className='space-y-3'>
         <ActiveSessionsList
           maxHeight='200px'
@@ -388,7 +395,7 @@ export function LogsPage() {
           />
         </div>
       </div>
-      <LogDetailSheet state={detail} onClose={() => setDetail(null)} />
+      <LogDetailDialog state={detail} onClose={() => setDetail(null)} />
       <ExportDialog
         open={exportOpen}
         onOpenChange={setExportOpen}

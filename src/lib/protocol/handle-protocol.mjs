@@ -3,16 +3,20 @@
  * server wiring; this factory owns convert → pool → Go/Rust hop → client.
  */
 import { applyIntercept } from '../core/intercept.mjs'
-import { detectDistill, distillBlockError } from '../core/distill-detect.mjs'
 import {
+  inboundRefusalDeviceId,
   isRefusalGuardEnabled,
   isUpstreamRefusal,
   refusalFingerprint,
-  refusalGuardError,
+  refusalGuardPolicy,
   refusalPreview,
+  refusalPromptSignature,
 } from '../core/refusal-guard.mjs'
 import { RefusalGuardsRepo } from '../db/repos/refusal-guards-repo.mjs'
+import { RefusalDeviceBlocksRepo } from '../db/repos/refusal-device-blocks-repo.mjs'
 import { SettingsRepo } from '../db/repos/settings-repo.mjs'
+import { readJevConfig } from './jev-intercept.mjs'
+import { runProtocolIntercept } from './intercept-gate.mjs'
 import {
   toClaudeMessages,
   isClientStream,
@@ -31,7 +35,7 @@ import {
 import { sanitizeInboundBody, defaultSeedPolicy } from './seed-policy.mjs'
 import { fingerprintRequest } from './client-fingerprint.mjs'
 import { validateOfficialModel } from './models.mjs'
-import { handleCodexProtocol } from './handle-codex.mjs'
+import { handleCodexProtocol, handleCodexSearch } from './handle-codex.mjs'
 import { detectInboundPlatform } from './platform-detect.mjs'
 import { normalizeCodexRouting } from './codex-route.mjs'
 import { hasClaudeCode1mSuffix } from './context-1m.mjs'
@@ -85,7 +89,9 @@ import {
   extractFirstUserIdentity,
   outboundSessionMode,
   resolveInboundIdentity,
+  resolveSeatIdentity,
   resolveOutboundSessionId,
+  sessionIdFromOutboundBody,
   sessionContextDiscriminator,
 } from '../identity/identity-rewrite.mjs'
 import {
@@ -107,6 +113,7 @@ import {
 } from '../identity/crs-persona.mjs'
 import { createDownstreamKeepalive } from './stream-keepalive.mjs'
 import { createClientAbort } from '../http/client-abort.mjs'
+import { createAnthropicStreamTracker, isRecoverableTruncation } from './stream-truncation.mjs'
 import {
   hidePersonaUsageInSseLine,
   hidePersonaUsageOnMessage,
@@ -125,7 +132,7 @@ import { dispatchStreamInference } from '../transport/kernel-router.mjs'
 import { syncClaudeKernelConfigsFromFile } from '../transport/rust-kernel-supervisor.mjs'
 import { ensureWorkerCredential } from '../transport/go-worker-client.mjs'
 import { formatPoolSelectionSummary } from '../pool/pool-scheduler.mjs'
-import { extraHeadersFromLimitError, isPlanLimitMessage } from '../pool/quota-window.mjs'
+import { extraHeadersFromLimitError, isAccountQuotaExhausted } from '../pool/quota-window.mjs'
 import { getVm } from '../vm/vm-registry.mjs'
 import { credentialModeFromOauth, isApiKeyMode } from '../oauth/credential-mode.mjs'
 import {
@@ -199,9 +206,9 @@ export function createHandleProtocol(deps) {
         retry_after: result?.body?.error?.retry_after || result?.headers?.['retry-after'] || null,
       }
     }
-    // Only a known wake time (cooldown / RPM / window reset) earns a Retry-After.
-    if (mapped.body?.error?.code === 'pool_overloaded' && Number(result?.retryAfterSec) > 0) {
-      mapped.retryAfterSec = Number(result.retryAfterSec)
+    // Pool 529 / pool-wide 429 always carry Retry-After: the runner's wake estimate, floored at 1s.
+    if (mapped.retryAfterSec && Number(result?.retryAfterSec) > 0) {
+      mapped.retryAfterSec = Math.max(1, Math.ceil(Number(result.retryAfterSec)))
     }
     return mapped
   }
@@ -215,26 +222,43 @@ export function createHandleProtocol(deps) {
     return finalizeAssembledAssistantHop(result)
   }
 
-  function applyDistillGuard({ req, inbound, body, fp, logBag, requestId, res }) {
+  async function applyProtocolIntercept({ req, inbound, body, fp, logBag, requestId, res }) {
     const official =
       isOfficialClaudeCodeTraffic(req.headers, inbound) ||
       isOfficialClaudeClient(fp.client_class) ||
       (detectProxiedOfficialCcFromRoutingFile(routingConfigPath) && isProxiedOfficialClaudeCode(inbound, req.headers))
-    const zeroInject = isZeroInjectMode()
-    const hit = detectDistill({ inbound, body, official, zeroInject }, cfg.distill)
-    if (hit.action !== 'block') return false
+    let jev
+    try {
+      const settings = deps.settings || new SettingsRepo()
+      jev = readJevConfig((key, fallback) => settings.get(key, fallback))
+    } catch {
+      jev = readJevConfig()
+    }
+    const decision = await runProtocolIntercept({
+      inbound,
+      body,
+      headers: req.headers,
+      official,
+      zeroInject: isZeroInjectMode(),
+      distillRules: cfg.distill,
+      policy: refusalPolicy(),
+      jev,
+      repo: refusalRepo(),
+      devices: deviceRepo(),
+      requestId,
+    })
+    if (!decision || decision.action !== 'block') {
+      if (decision?.intercept) logBag.intercept = decision.intercept
+      return false
+    }
     stats.errors++
-    logBag.via = 'distill-detect'
+    logBag.via = decision.via
     logBag.attempt_count = 0
-    logBag.final_state = 'distill_blocked'
-    logBag.error_code = hit.error.code
-    const evidence = (hit.hits || [])
-      .map((item) => item.evidence || item.rule)
-      .filter(Boolean)
-      .join(';')
-    logBag.error_message = evidence ? `${hit.error.message}: ${evidence}` : hit.error.message
-    const blocked = distillBlockError(cfg.distill, requestId)
-    json(res, blocked.status, blocked.body)
+    logBag.final_state = decision.final_state
+    logBag.error_code = decision.error?.body?.error?.code || null
+    logBag.error_message = decision.errorMessage || decision.error?.body?.error?.message || null
+    logBag.intercept = decision.intercept || null
+    json(res, decision.error.status, decision.error.body)
     return true
   }
 
@@ -267,41 +291,61 @@ export function createHandleProtocol(deps) {
     }
   }
 
-  function applyRefusalGuard({ inbound, body, logBag, requestId, res }) {
-    if (!refusalEnabled()) return false
-    const repo = refusalRepo()
-    if (!repo) return false
-    const hit = repo.get(refusalFingerprint(body, inbound))
-    if (!hit) return false
-    repo.hit(hit.fingerprint)
-    logBag.via = 'refusal-guard'
-    logBag.attempt_count = 0
-    logBag.final_state = 'refusal_guard'
-    logBag.error_code = 'refusal_guard'
-    const blocked = refusalGuardError(requestId)
-    logBag.error_message = blocked.body?.error?.message
-    json(res, blocked.status, blocked.body)
-    return true
+  function deviceRepo() {
+    if (deps.refusalDevices) return deps.refusalDevices
+    try {
+      return new RefusalDeviceBlocksRepo()
+    } catch {
+      return null
+    }
   }
 
-  function rememberRefusal({ inbound, body, result, logBag, requestId }) {
+  function banRefusalDevice(deviceId, { requestId, fingerprint, reason }) {
+    if (!deviceId) return
+    try {
+      deviceRepo()?.block?.({ deviceId, requestId, fingerprint, reason })
+    } catch {
+      /* the prompt block still stands */
+    }
+  }
+
+  function refusalPolicy() {
+    try {
+      const settings = deps.settings || new SettingsRepo()
+      return refusalGuardPolicy((key, fallback) => settings.get(key, fallback))
+    } catch {
+      return refusalGuardPolicy()
+    }
+  }
+
+  function rememberRefusal({ inbound, body, headers, result, logBag, requestId }) {
     if (!refusalEnabled()) return
     const contentRefusal = isUpstreamRefusal(result, logBag)
     const timed = result?.policy?.rememberRefusal === true
     if (!contentRefusal && !timed) return
     const repo = refusalRepo()
     if (!repo) return
+    const fingerprint = refusalFingerprint(body, inbound)
     try {
       const ttl = Number(result?.policy?.refusalTtlMs) || 0
       repo.remember({
-        fingerprint: refusalFingerprint(body, inbound),
+        fingerprint,
         model: body?.model || inbound?.model || '',
         requestId,
         errorMessage: logBag.error_message || result?.body?.error?.message || null,
         preview: refusalPreview(body, inbound),
         expiresAt: contentRefusal || ttl <= 0 ? null : new Date(Date.now() + ttl).toISOString(),
+        signature: refusalPromptSignature(inbound, body),
       })
-    } catch {}
+    } catch {
+      return
+    }
+    if (!contentRefusal || !refusalPolicy().device_block_enabled) return
+    banRefusalDevice(inboundRefusalDeviceId({ inbound, body, headers }), {
+      requestId,
+      fingerprint,
+      reason: 'refusal_guard',
+    })
   }
 
   async function streamAndAssembleClaudeMessage({
@@ -339,7 +383,7 @@ export function createHandleProtocol(deps) {
       noGoFallback,
       ensureCredential: (exec) => ensureWorkerCredential(exec),
       onEvent: async (line) => {
-        if (/kin_response_headers/.test(String(line))) return
+        if (/response_headers/.test(String(line))) return
         applyClaudeSSELineToMessage(restoreToolNamesInSSELine(line, toolNames), assembler)
       },
     })
@@ -353,6 +397,8 @@ export function createHandleProtocol(deps) {
   async function handleProtocol(req, res, protocol, pathName) {
     const logCtx = requestLog.start(req, { protocol, pathName })
     res._kinRequestId = logCtx.request_id
+    // Registers its own 'finish' listener first so status/headers are final when finish() runs.
+    requestLog.tapResponse?.(logCtx, res)
     const logBag = {
       protocol,
       model: null,
@@ -382,6 +428,7 @@ export function createHandleProtocol(deps) {
       stop_reason: null,
       session_id: null,
       reasoning_effort: null,
+      outbound_session_id: null,
     }
     res.on('finish', () => {
       try {
@@ -546,10 +593,7 @@ export function createHandleProtocol(deps) {
         return json(res, 200, mock)
       }
     }
-    if (applyDistillGuard({ req, inbound, body: ctx.body, fp, logBag, requestId: logCtx.request_id, res })) {
-      return
-    }
-    if (applyRefusalGuard({ inbound, body: ctx.body, logBag, requestId: logCtx.request_id, res })) {
+    if (await applyProtocolIntercept({ req, inbound, body: ctx.body, fp, logBag, requestId: logCtx.request_id, res })) {
       return
     }
     if (platform.platform === 'openai') {
@@ -583,6 +627,7 @@ export function createHandleProtocol(deps) {
             },
           },
           projectRoot: cfg.paths.project,
+          captureOutbound: logCtx.capture_outbound === true,
           ...codexSticky,
         })
       }
@@ -598,6 +643,7 @@ export function createHandleProtocol(deps) {
         writeSSEHeaders,
         routing,
         projectRoot: cfg.paths.project,
+        captureOutbound: logCtx.capture_outbound === true,
         ...codexSticky,
       })
     }
@@ -661,10 +707,7 @@ export function createHandleProtocol(deps) {
       }
     } else ctx.body = applyMinMaxTokens(ctx.body, getRouting()?.compatibility?.min_max_tokens)
 
-    if (applyDistillGuard({ req, inbound, body: ctx.body, fp, logBag, requestId: logCtx.request_id, res })) {
-      return
-    }
-    if (applyRefusalGuard({ inbound, body: ctx.body, logBag, requestId: logCtx.request_id, res })) {
+    if (await applyProtocolIntercept({ req, inbound, body: ctx.body, fp, logBag, requestId: logCtx.request_id, res })) {
       return
     }
     const officialClient = isOfficialClaudeClient(fp.client_class)
@@ -709,6 +752,10 @@ export function createHandleProtocol(deps) {
     // One-shot test calls (sub2api account test, new-api channel test) keep their
     // sticky identity but never hold a session seat the main conversation needs.
     const seatless = isProbe || isShortProbeRequest(inbound)
+    // Seat = inbound device (R1/R2); the API key never scopes it.
+    const seatKey = seatless
+      ? null
+      : resolveSeatIdentity({ inbound, body: ctx.body, headers: req.headers, clientIp: clientIp(req) }).key
     const sessionKeys = stickyRouter?.sessionPoolKeys
       ? stickyRouter.sessionPoolKeys(req, inbound, {
           sessionId: inboundIdentity.sessionId,
@@ -737,10 +784,6 @@ export function createHandleProtocol(deps) {
       stickyRouter?.unbind?.(familyKey)
       familyVmId = null
     }
-    // An explicit child counts against its root's conversation window, not a
-    // new one. Without a local root record there is no relation to trust.
-    const rootWindowKey = parentSession ? stickyRouter?.canonicalSessionKey?.(parentSession) || null : null
-    const windowKey = rootWindowKey && stickyRouter?.resolve?.(rootWindowKey) ? rootWindowKey : undefined
     const stickyBound =
       stickyKey && typeof stickyRouter?.resolve === 'function' ? stickyRouter.resolve(stickyKey) : null
     const outboundSessionId = resolveOutboundSessionId(callerSession, {
@@ -858,6 +901,8 @@ export function createHandleProtocol(deps) {
           } catch {}
         }
       }
+      // The api backend forwards the converted body untouched: its session is the outbound one.
+      logBag.outbound_session_id = sessionIdForLog(sessionIdFromOutboundBody(ctx.body) || logBag.session_id)
       logBag.account_id = result?.accountId || null
       logBag.final_account_id = result?.accountId || null
       logBag.upstream_status = result?.status ?? null
@@ -878,7 +923,7 @@ export function createHandleProtocol(deps) {
         if (!res.headersSent) {
           const mapped = mapProtocolClientError(result, logBag, 'api_pool_exhausted')
           if (!isClientCancelledResult(result)) stats.errors++
-          return json(res, mapped.status, mapped.body)
+          return sendMapped(res, mapped)
         }
         if (result?.ok && protocol !== 'anthropic.messages') res.write('data: [DONE]\n\n')
         return res.end()
@@ -887,7 +932,7 @@ export function createHandleProtocol(deps) {
         if (isClientCancelledResult(result)) return finishClientCancel(res, result, logBag)
         const mapped = mapProtocolClientError(result, logBag, 'upstream_error')
         stats.errors++
-        return json(res, mapped.status, mapped.body)
+        return sendMapped(res, mapped)
       }
       let output
       const clientBody = hidePersonaUsageOnMessage(result.body, personaHideTokens)
@@ -925,6 +970,7 @@ export function createHandleProtocol(deps) {
     const { abortController, detachClientAbort } = createClientAbort(req, res)
 
     const clientStream = isClientStream(inbound, req.headers)
+    const streamTracker = clientStream && protocol === 'anthropic.messages' ? createAnthropicStreamTracker() : null
     const upstreamStream = true
     const requestedDelivery = String(
       req.headers['x-kin-delivery'] || getRouting()?.failover?.delivery_mode || 'realtime',
@@ -958,7 +1004,7 @@ export function createHandleProtocol(deps) {
         deviceKey,
         skipSessionSeat: seatless,
         familyKey,
-        windowKey,
+        seatKey,
         familyVmId,
         pinVmId,
         ownerScope,
@@ -1058,7 +1104,7 @@ export function createHandleProtocol(deps) {
             }
             preserveCacheBreakpoints = true
             cacheTtl = requestedCacheTtl
-            if (getRouting()?.logging?.mode === 'debug') logBag.outbound_body = hopBody
+            if (logCtx.capture_outbound) logBag.outbound_body = hopBody
 
             // 0注入 hides CLI billing + env and the standing Node left in the leftover.
             // 官方提示词 must show real usage.
@@ -1090,6 +1136,7 @@ export function createHandleProtocol(deps) {
               requestId: logCtx.request_id,
             })
             noteCachePrefix(selected, attemptSessionId, hopBody)
+            logBag.outbound_session_id = sessionIdForLog(sessionIdFromOutboundBody(hopBody) || attemptSessionId)
             return { body: hopBody, meta: { toolNames: {}, sessionId: attemptSessionId, cliHop: true, requestContext } }
           }
 
@@ -1147,7 +1194,7 @@ export function createHandleProtocol(deps) {
             authScheme: isApiKeyMode(credMode) ? 'apikey' : 'oauth',
             want1m,
           })
-          if (getRouting()?.logging?.mode === 'debug') logBag.outbound_body = prepared.body
+          if (logCtx.capture_outbound) logBag.outbound_body = prepared.body
           logBag.outbound_headers = redactHeaders(prepared.headers || {})
           logBag.outbound_summary = summarizeBody(prepared.body)
           logBag.cache_continuity = describeCacheContinuity({
@@ -1161,6 +1208,7 @@ export function createHandleProtocol(deps) {
             requestId: logCtx.request_id,
           })
           noteCachePrefix(selected, attemptSessionId, prepared.body)
+          logBag.outbound_session_id = sessionIdForLog(sessionIdFromOutboundBody(prepared.body) || attemptSessionId)
           return { body: prepared.body, meta: { toolNames: prepared.toolNames, sessionId: attemptSessionId } }
         },
         callAttempt: async ({ candidate, body, attemptMeta, deliveryMode: attemptDelivery, signal, onCommit }) => {
@@ -1226,11 +1274,12 @@ export function createHandleProtocol(deps) {
                 onCommit()
               },
               onEvent: async (line) => {
-                if (/kin_response_headers/.test(String(line))) return
+                if (/response_headers/.test(String(line))) return
                 line = restoreToolNamesInSSELine(line, attemptMeta?.toolNames || {})
                 if (personaHideTokens) line = hidePersonaUsageInSseLine(line, personaHideTokens, cacheTtl)
                 keepalive.observeLine(line)
                 if (protocol === 'anthropic.messages') {
+                  streamTracker?.observe(line)
                   if (!res.headersSent) writeSSEHeaders(res)
                   res.write(String(line).endsWith('\n') ? String(line) : String(line) + '\n')
                   return
@@ -1289,7 +1338,7 @@ export function createHandleProtocol(deps) {
       logBag.error_code = logBag.error_code || 'content_filter_refusal'
       logBag.error_message = logBag.error_message || 'upstream stop_reason=refusal'
     }
-    rememberRefusal({ inbound, body: ctx.body, result, logBag, requestId: logCtx.request_id })
+    rememberRefusal({ inbound, body: ctx.body, headers: req.headers, result, logBag, requestId: logCtx.request_id })
 
     if (result?.accountId) {
       try {
@@ -1302,7 +1351,7 @@ export function createHandleProtocol(deps) {
           .filter(Boolean)
           .join('\n')
         const headers = extraHeadersFromLimitError(limitText, result.headers || {})
-        const exhausted = !result.ok && (Number(result.status) === 429 || isPlanLimitMessage(limitText))
+        const exhausted = isAccountQuotaExhausted(result, limitText)
         accountQuota.ingestHeaders(result.accountId, headers, healthReal ? null : logBag.usage, {
           exhausted,
           status: result.status,
@@ -1346,8 +1395,10 @@ export function createHandleProtocol(deps) {
         stats.errors++
         logBag.error_code = result?.body?.error?.code || 'stream_incomplete'
         logBag.error_message = result?.body?.error?.message || 'Stream did not reach a verified terminal state'
+        const closing = isRecoverableTruncation(result) && !res.writableEnded ? streamTracker?.closingEvents() : null
+        if (closing) res.write(closing)
       }
-      rememberRefusal({ inbound, body: ctx.body, result, logBag, requestId: logCtx.request_id })
+      rememberRefusal({ inbound, body: ctx.body, headers: req.headers, result, logBag, requestId: logCtx.request_id })
       return res.end()
     }
 
@@ -1382,5 +1433,86 @@ export function createHandleProtocol(deps) {
     return json(res, 200, ctx.body)
   }
 
-  return { handleProtocol, mapProtocolClientError, applyDistillGuard, streamAndAssembleClaudeMessage }
+  /** POST /v1/alpha/search (Codex web search): same logging, auth and body handling as handleProtocol. */
+  async function handleSearch(req, res, pathName) {
+    const protocol = 'openai.search'
+    const logCtx = requestLog.start(req, { protocol, pathName })
+    res._kinRequestId = logCtx.request_id
+    requestLog.tapResponse?.(logCtx, res)
+    const logBag = {
+      protocol,
+      model: null,
+      stream: false,
+      inbound_summary: null,
+      upstream_status: null,
+      vm_id: null,
+      account_id: null,
+      usage: null,
+      error_code: null,
+      error_message: null,
+      via: 'codex-search',
+      attempt_count: null,
+      final_state: null,
+    }
+    res.on('finish', () => {
+      try {
+        const groupId = req.apiKeyRecord?.group_id ?? 1
+        requestLog.finish(logCtx, {
+          status: res.statusCode || 0,
+          api_key_kind: req.apiKeyKind || null,
+          api_key_id: req.apiKeyRecord?.id || null,
+          user_id: req.apiKeyRecord?.user_id ?? null,
+          group_id: groupId,
+          rate_multiplier: deps.groupsRepo.rateMultiplier(groupId),
+          ...logBag,
+        })
+      } catch {}
+    })
+    if (!requireAuth(req, res)) {
+      logBag.error_code = req.authError?.code || ErrorCode.INVALID_API_KEY
+      logBag.error_message = req.authError?.message || 'Invalid credentials'
+      logBag.api_key_presented = presentedApiKeyForLog(req.presentedApiKey)
+      return
+    }
+    let body
+    try {
+      body = await readBody(req, cfg.limits.max_body_bytes)
+    } catch (error) {
+      stats.errors++
+      logBag.error_code = error?.body?.error?.code || ErrorCode.INVALID_JSON
+      logBag.error_message = error?.body?.error?.message || String(error?.message || error)
+      if (error?.body?.error) return json(res, error.status || 400, error.body)
+      return json(
+        res,
+        400,
+        makeError({
+          type: ErrorType.INVALID_REQUEST,
+          code: ErrorCode.INVALID_JSON,
+          message: String(error?.message || error),
+          status: 400,
+        }).body,
+      )
+    }
+    logBag.model = typeof body?.model === 'string' ? body.model : null
+    logBag.inbound_summary = summarizeBody(body)
+    return handleCodexSearch({
+      req,
+      res,
+      body,
+      logBag,
+      stats,
+      json,
+      routing: getRouting() || {},
+      projectRoot: cfg.paths.project,
+      stickyRouter,
+    })
+  }
+
+  return {
+    handleProtocol,
+    handleSearch,
+    mapProtocolClientError,
+    applyProtocolIntercept,
+    streamAndAssembleClaudeMessage,
+  }
 }

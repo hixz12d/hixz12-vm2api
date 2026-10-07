@@ -19,36 +19,30 @@ import {
 } from 'lucide-react'
 import type { NavGroup, NavItem, SidebarData } from '../types'
 
-/**
- * 侧栏按「多常用」分组，不按实现分：
- * 常用 = 三件日常事（看状态、管 Key 和分组、导入 / 管理账号）；
- * 高级 = 很少碰的底层页，功能全保留，只是不和常用项混在一起。
- * url 与权限 view 名保持不变。
- */
+// 监控组对应 claude-code-hub 的 仪表盘 / 使用记录 / 限额管理：
+// 总览看集群健康，统计看趋势与排行，日志看逐条请求，用量看账号限额。
+// 标题统一取 VIEW_TITLES（fork 文案），url 与权限 view 名保持不变。
 const ALL_GROUPS: NavGroup[] = [
   {
-    title: '常用',
+    title: '监控',
     items: [
       { title: VIEW_TITLES.overview, url: '/overview', icon: LayoutDashboard },
+      { title: VIEW_TITLES.statistics, url: '/statistics', icon: ChartColumn },
+      { title: VIEW_TITLES.logs, url: '/logs', icon: ScrollText },
+      { title: VIEW_TITLES.usage, url: '/usage', icon: Gauge },
+    ],
+  },
+  {
+    title: '资源',
+    items: [
+      { title: VIEW_TITLES.cluster, url: '/cluster', icon: Boxes },
       { title: VIEW_TITLES.vm, url: '/vm', icon: Users, lamp: 'accounts' },
-      { title: VIEW_TITLES.keys, url: '/keys', icon: KeyRound },
       { title: VIEW_TITLES.import, url: '/import', icon: Download },
       { title: VIEW_TITLES.proxies, url: '/proxies', icon: Cable },
     ],
   },
   {
-    title: '记录与设置',
-    items: [
-      { title: VIEW_TITLES.usage, url: '/usage', icon: Gauge },
-      { title: VIEW_TITLES.statistics, url: '/statistics', icon: ChartColumn },
-      { title: VIEW_TITLES.logs, url: '/logs', icon: ScrollText },
-      { title: VIEW_TITLES.settings, url: '/settings', icon: Settings },
-      { title: VIEW_TITLES.users, url: '/users', icon: UserCog },
-    ],
-  },
-  {
-    title: '高级',
-    folded: true,
+    title: '协议',
     items: [
       { title: VIEW_TITLES.models, url: '/models', icon: Sparkles },
       { title: VIEW_TITLES.protocol, url: '/protocol', icon: Shield },
@@ -57,9 +51,16 @@ const ALL_GROUPS: NavGroup[] = [
         url: '/system',
         icon: MessageSquareText,
       },
+      { title: VIEW_TITLES.keys, url: '/keys', icon: KeyRound },
+    ],
+  },
+  {
+    title: '系统',
+    items: [
+      { title: VIEW_TITLES.settings, url: '/settings', icon: Settings },
+      { title: VIEW_TITLES.users, url: '/users', icon: UserCog },
       { title: VIEW_TITLES.wrap, url: '/wrap', icon: Layers },
       { title: VIEW_TITLES.database, url: '/database', icon: Database },
-      { title: VIEW_TITLES.cluster, url: '/cluster', icon: Boxes },
     ],
   },
 ]

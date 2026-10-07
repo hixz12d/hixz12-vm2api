@@ -1,17 +1,23 @@
 # Fork 运行兼容性
 
-## 当前策略：优先采用上游 v1.3.106
+## 当前策略：优先采用上游 v1.3.123
 
-融合上游 `6735621b`（v1.3.106，含 v1.3.96–v1.3.105）。保留 fork 历史与定制管理台，源码、预编译前端及 CLI 补丁同步维护。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
+融合上游 `4a3e6136`（v1.3.123，含 v1.3.107–v1.3.122）。保留 fork 历史与定制管理台，源码、预编译前端及 CLI 补丁同步维护。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
 
-- 采用 v1.3.96–v1.3.106：宿主独占换票（槽内 CLI 带 `CLAUDE_CODE_KIN_HOST_REFRESH=1` 只重读宿主凭证）、官方初装与 `setup-token` 改用槽内 cli-node、auto mode 分类识别不再依赖判决格式（#220）、Codex Fast / UA 0.160.0、出口 PID 核对、首条 user 跳过纯 `<system-reminder>` 作会话指纹（#236）、代理名称（迁移 `028`）、`usage_logs` 加 `session_id` / `reasoning_effort`（迁移 `027`）、DNS type 64/65 开关。`cli-node`、`kin-kernel`、`kin-egress`、`kin-oauth-auth`、`kin-codex-kernel` 都有变化，Node、内核、CLI 必须一起上线并 `wrap-cli/sync`。
-- 采用上游下线压测页（`/loadtest` 及其管理 API）；侧栏「高级」组随之去掉压测。
-- 采用上游重写的日志页（`/logs`，滚动日志 + 详情抽屉）和新统计页（`/statistics`，放在侧栏「记录与设置」组「用量」之后）。fork 在旧日志详情里的「账号分组 / 密钥名称」改到新详情「会话信息」区：`usage-logs-view.mjs` 的 `lookupNames` 增加 `groups`，行字段 `groupName`（旧行无 `group_id` 按默认分组 1）。合并上游时注意 `toUsageLogRow` 与 `summary-tab.tsx` 这两处。
-- Key 页复制采用上游 `copyText`（HTTP 下也能复制，失败时转弹层），文案保留 fork 写法。
+- 采用 v1.3.107–v1.3.123：Claude Code 2.1.293 身份与 Haiku 5.5；内核线协议和环境变量去掉 `kin_` / `KIN_` 前缀（`kin-kernel`、`kin-kernel.bin`、`kin-codex-kernel`、`cli-node` 必须一起上线并 `wrap-cli/sync`）；协议入口前置闸门（蒸馏硬规则、可编辑硬正则、拒答缓存、可选决策模型，决策模型默认关闭）；拒答缓存近似匹配；Usage Policy 拒答永久缓存并返回 503 `refusal_guard`、不冷却账号；Codex `/v1/alpha/search`、OpenAI 独立额度闸门 `codex.quota`；日志记录出站 Session（迁移 `029`）、拒答近似与设备封禁表（迁移 `030`）、拦截记录（迁移 `031`）；Claude 流中途断开补 `max_tokens` 收尾；遥测 sidecar 自愈；实验性 ARM64 控制面（本 fork 不用）。
+- 拒答封设备（fork 定制，`refusal-guard.mjs` 的 `refusalGuardPolicy`）：上游默认开启，fork 改为未设置时关闭，管理台「协议 → 拒答缓存 → 封禁 device」可手动打开。原因：一次拒答就永久封掉该用户 Claude Code 的设备 ID，经 Sub2API 转发的用户会被整机拉黑。拒答缓存本身照常生效。
+- 号池采用上游设备座位规划（v1.3.109–v1.3.110：按入站 device 计席位、FIFO 排队、`queue_max`、排队超时 529 `pool_overloaded`、balanced / fill 策略），删除 Claude 会话窗口（`max_sessions` / `session_idle_min`）及 fork 的 `windowKey` 根会话窗口计数；旧策略名（WRR / 轮询 / LRU / fill-first）按 balanced 处理。
+- 智能评分保留为第三种策略 `smart`（生产在用）：`normalizePoolRouting` 白名单含 `smart`；新设备开席时 `openNewSeat` 先在可开席 VM 中按评分选，排不上分的按 balanced 补位，座位上限、额度预留、排队检查在评分之前；直接选号路径仍走 `smartRank`。活跃会话数改为“已占座位数”和“在途请求数”取大（上游已不记会话窗口）。管理台号池设置的策略卡片加回「智能评分」（`pool-pane.tsx` 的 `strategyOf`），否则保存设置会把 smart 改成平衡；实时态势的下一席预估对 smart 按平衡近似。
+- 分组隔离与 `retryAccountId` 贯穿新调度路径：`eligibleCandidates` 按 `groupScope`、`retryAccountId` 过滤，直接选号、座位、排队授予、`peekAccount` 都用过滤后的候选；直接选号预留前再查一次分组；座位 key（`scopedSeatKey`）带分组 ID，不同分组的 Key 不共用座位。合并上游时注意 `selectAndReserve` / `selectSeat` / `eligibleCandidates` 的这两个参数、`scopedSeatKey`、`normalizePoolRouting` 白名单与 `openNewSeat` 的 smart 分支。
+- 宿主防火墙 INPUT 放行沿用 fork 规则（只放行本桥接网段到网关监听端口），不叠加上游 v1.3.107 以子网为目的地址的同类规则，避免重复放行。
+- Codex 选号沿用上游 `listVms(..., { codex: { quota } })`，再按 API Key 分组过滤。
+- 管理台：侧栏采用上游四组（监控 / 资源 / 协议 / 系统），保留 fork `VIEW_TITLES` 白话标题、账号状态灯，「用户」放在系统组；总览保留 fork 交换台布局，按上游去重（费用在用量页、趋势在统计页）；设置页粘性 / 号池 / 配额三页采用上游可视化调度设置（fork 白话文案未保留，只保留分区标题、简介与 13rem 导航宽度）；上游删除凭证调度等级页，等级改在账号详情「调度」块设置；账号列表加上游全局排队与席位标签，保留 fork 按钮和状态筛选；日志详情「会话信息」同时显示账号分组、Key 名称、出站 Session 和客户端 Session（合并时注意 `summary-tab.tsx`、`panel-usage-logs.ts`、`usage-logs-view.mjs` 的 `toUsageLogRow`）；`index.html` 保留 fork 主题用的 Google Fonts；README 保留 fork 精简版。
+- cli-hop 出站体：采用上游 `downgradeUngatedThinkingDisplay`，之后仍过 fork 的 `preserveClientToolEnvironment`。
+- 仓内 `cli-node` 以上游 v1.3.123 cli-node（`c0edfaef`，Claude Code 2.1.293）为基线打 `caller-system-v3+safeguards-v1` 补丁，并删掉上游新增的无条件 safeguards 转发与 afk-mode beta，成品 SHA-256 `6c8164fc…`（见 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md)、`share/wrap-cli/PATCH.json`）。
 
 - 采用 v1.3.91 的 native 错误与恢复：CLI 的真实 HTTP / 网络错误（code、status、type、message、retry-after）原样返回，不再统一成 `incomplete_response`；请求失败或执行位全忙都不再回收 CLI，恢复由内核（关闭未 ack 的 slot、限次重启 CLI）和 watchdog（限次重启容器）有界执行。Node 每个 hop 带 `request_id`，客户端断开时调内核 `/internal/v1/cancel`。依赖新 `kin-kernel` 与新 `cli-node`，Node、内核、CLI 必须一起上线。
 - watchdog 探测放宽（fork 定制，`kernel-watchdog.mjs`）：健康探测等待 `kernel_watchdog.health_timeout_ms`（默认 3000，范围 500–15000），连续 `kernel_watchdog.fail_threshold` 次（默认 3，范围 1–10，约 1 分钟）探测需要重启才进入“递增等待 → 重启容器”流程；中间一次健康就清零，并清掉尚未开始重启的等待状态。原因：上游探测只等 800 毫秒、单次失败就进入重启流程，会误杀正在出结果的槽位。合并上游时 `kernel-watchdog.mjs` 有冲突要保留这两项及连续失败计数。
-- 采用 #191（cli-hop 的 `stop_reason=max_tokens` 视为正常截断）：Node 删除旧 `max_tokens<=64 → 1024` 规避分支，`compatibility.min_max_tokens` 下限仍生效。仓内 `cli-node` 以上游 v1.3.103 新 cli-node（`cb585bb6`，源码 `51e51f4a…`）为基线打 `caller-system-v3+safeguards-v1` 补丁，成品 SHA-256 `89e08a33…`（见 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md)、`share/wrap-cli/PATCH.json`）。
+- 采用 #191（cli-hop 的 `stop_reason=max_tokens` 视为正常截断）：Node 删除旧 `max_tokens<=64 → 1024` 规避分支，`compatibility.min_max_tokens` 下限仍生效。
 - auto mode 服务端检查（fork 定制）：cli-hop 上 `prepareCliHopBody` 只在 `compatibility.auto_mode_server` 非 `false`、调用方 `safeguards` 为数组、`anthropic-beta` 含 `dangerous-tool-use-YYYY-MM-DD` 时保留 `safeguards` 并写内部字段 `kin_safeguards_beta`，否则两者都删；`cli-node` 补丁把 beta 并入出站 `anthropic-beta`，不外发内部字段。只放行这一个调用方 beta。
 - auto mode 分类请求（上游 v1.3.94）与 fork safeguards 并存：`handle-protocol.mjs` 用 `classifyClaudeRequestPurpose` 得到 `requestContext`，分类请求不走 Node persona、不做 fork 的“调用方 system 快照重建”（cli-hop 重建条件是 `!requestContext && !officialTraffic`），普通请求仍按 fork 重建。cli-hop 调用 `prepareCliHopBody` 时同时传 `safeguardsBeta`、`autoModeServer`、`requestContext`；分类请求在 `prepareCliHopBody` 内走上游 `prepareClassifierBody`，之后仍过 fork 的 `applyCliHopSafeguards`（beta 不合规就删 `safeguards`）。合并上游时用 `git grep -n "requestContext\|safeguardsBeta\|kin_safeguards_beta" -- src` 核对 `handle-protocol.mjs`、`outbound-attempt.mjs` 这两处。
 - 采用上游槽位终端（`src/lib/vm/slot-shell.mjs`、`web/src/components/ws-terminal.tsx`、`vm-shell-card.tsx`）：仅管理员，经 30 秒一次性 ticket 打开 WebSocket；反代必须对 `^/api/panel/(cluster/nodes|vms)/[^/]+/shell$` 透传 Upgrade（见 `docs/nginx-shell.md`）。
@@ -164,6 +170,8 @@ v1.3.56（Fable 权益探测标记 Max）只在上游分支 `cursor/fix-supervis
 - 智能评分与设备亲和同时存在时，采用上游顺序：设备主 VM 可预留时优先，否则再按号池策略（含 `smart`）选号。
 
 ## 同步历史
+
+- `upstream/main 6735621b`：同步至 v1.3.106（宿主独占换票、新日志页与统计页、代理名称、下线压测页），`cli-node` 在 v1.3.103 上重打补丁。
 
 - `upstream/main 06f090b1`：同步至 v1.3.95（槽位终端、Claude 原生限额重置、auto mode 分类请求与 fork safeguards 并存、官方 Setup Token 区分、自定义 DoH），`cli-node` 在 v1.3.94 上重打补丁。
 

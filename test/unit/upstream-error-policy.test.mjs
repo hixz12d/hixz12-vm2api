@@ -539,31 +539,31 @@ test('200 refusal with empty visible output is content_filter, not success', () 
   assert.equal(policy.reason, 'content_filter_refusal')
 })
 
-test('502 usage-policy refusal stops only this request and remembers it without account cooldown', () => {
-  const policy = classifyUpstreamResult({
-    ok: false,
-    status: 502,
-    terminalState: 'incomplete',
-    body: {
-      type: 'error',
-      error: {
-        type: 'api_error',
-        message:
-          'provider error: provider error: API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup)',
+test('Usage Policy API Error stops the request and is cached with no expiry', () => {
+  const msg =
+    'API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup). Try rephrasing the request or attempting a different approach.'
+  for (const status of [400, 502]) {
+    const policy = classifyUpstreamResult({
+      ok: false,
+      status,
+      terminalState: 'rejected',
+      body: {
+        type: 'error',
+        error: { type: status === 400 ? 'invalid_request_error' : 'api_error', message: msg },
       },
-    },
-  })
-  assert.equal(policy.action, 'stop')
-  assert.equal(policy.scope, 'request')
-  assert.equal(policy.reason, 'provider_refusal')
-  assert.equal(policy.retrySameAccount, false)
-  assert.equal(policy.decision.scope, 'request')
-  assert.equal(policy.decision.action, 'return')
-  assert.equal(policy.rememberRefusal, true)
-  assert.equal(policy.refusalTtlMs, 60 * 60 * 1000)
-  assert.equal(policy.cooldownUntil, null)
-  assert.equal(shouldContinue(policy), false)
-  assert.notEqual(policy.reason, 'content_filter_refusal')
+    })
+    assert.equal(policy.action, 'stop', String(status))
+    assert.equal(policy.reason, 'usage_policy_refusal')
+    assert.equal(policy.scope, 'request')
+    assert.equal(policy.rememberRefusal, true)
+    assert.equal(policy.refusalTtlMs, 0)
+    assert.equal(policy.cooldownUntil, null)
+    assert.equal(shouldContinue(policy), false)
+    assert.equal(policy.decision.origin, 'client')
+    assert.notEqual(policy.action, 'repair-and-retry')
+    assert.notEqual(policy.reason, 'invalid_request')
+    assert.notEqual(policy.reason, 'provider_pause')
+  }
 })
 
 test('assistant prefill 400 is repairable', () => {

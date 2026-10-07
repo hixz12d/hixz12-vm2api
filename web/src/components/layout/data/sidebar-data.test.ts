@@ -40,28 +40,22 @@ describe('sidebar permissions', () => {
     )
   })
 
-  it('puts the three daily jobs first and low-level pages under 高级', () => {
-    const groups = navGroupsFor(null)
-    const daily = groups[0].items.map((item) => item.url)
-    const advanced = groups.find((group) => group.title === '高级')
+  it('keeps the monitoring pages together in hub order', () => {
+    const groups = navGroupsFor([
+      'usage',
+      'logs',
+      'statistics',
+      'overview',
+      'vm',
+    ])
 
-    expect(daily).toEqual(
-      expect.arrayContaining(['/overview', '/vm', '/keys', '/import'])
-    )
-    expect(advanced?.items.map((item) => item.url)).toEqual(
-      expect.arrayContaining(['/wrap', '/protocol', '/database', '/system'])
-    )
-  })
-
-  it('shows statistics next to usage, ahead of logs', () => {
-    const groups = navGroupsFor(['usage', 'statistics', 'logs'])
-    const items = groups.flatMap((group) => group.items)
-
-    expect(items.map((item) => item.url)).toEqual([
-      '/usage',
+    expect(groups[0].title).toBe('监控')
+    expect(groups[0].items.map((item) => item.url)).toEqual([
+      '/overview',
       '/statistics',
       '/logs',
+      '/usage',
     ])
-    expect(items[1].title).toBe('统计')
+    expect(groups[1].items.map((item) => item.url)).toEqual(['/vm'])
   })
 })

@@ -17,7 +17,8 @@ BASELINES = {
     "cli-node-v1.3.88": "057ddffd6b18bcd4bd136caffc4145e8ebde6d641bee2219423d0b08da7ae920",
     "cli-node-v1.3.91": "125ce8dfd4d87d54851b1ad2e1dec7c4e96df56b7da8588ab2c916d628e4322f",
     "cli-node-v1.3.94": "ef30963b3fe4ddd0dda08247ff31edce8d61d03535c1af2328d09ade132b0d06",
-    "cli-node": "51e51f4a5ea9067d1da2f3482fa8beb2682e2a52693cde21dfc22c4c8a4cf7fb",
+    "cli-node-v1.3.103": "51e51f4a5ea9067d1da2f3482fa8beb2682e2a52693cde21dfc22c4c8a4cf7fb",
+    "cli-node": "884a04fdcb186a5122c6da50acac7597fb2b20c3745045ab8a5826f792d43beb",
     "cc-node": "6fef71bdda7ad0929681711efee472552635f88b0a6ead51f711d10e03f55ca5",
 }
 
@@ -31,7 +32,11 @@ def replace_once(source, before, after):
 
 def patch(source, name):
     prompt = "systemPrompt2" if name == "legacy-cli-node" else "systemPrompt"
-    if name in ("cli-node", "cli-node-v1.3.94", "cli-node-v1.3.91"):
+    if name == "cli-node":
+        # v1.3.123 forwards any caller `safeguards` with a fixed afk-mode beta;
+        # rewire that path back onto the fork's gated caller beta.
+        return patch_upstream_safeguards(patch_current_cli(source))
+    if name in ("cli-node-v1.3.103", "cli-node-v1.3.94", "cli-node-v1.3.91"):
         # v1.3.94 classifier jobs bypass leftoverFromSystemPrompt and build
         # system from the wire request, so the same hunks leave them untouched.
         return patch_safeguards(patch_current_cli(source), signature_tail="  onResponseHeaders,\n  onError\n}) {")
@@ -174,6 +179,43 @@ function systemFromRequest(request2) {''')
                           '    const kinSafeguards = useBetas && isKinQuerySource(options2.querySource) ? options2.kinSafeguards : undefined;\n'
                           '    if (kinSafeguards && !filteredBetas.includes(kinSafeguards.beta))\n'
                           '      filteredBetas.push(kinSafeguards.beta);\n')
+    source = replace_once(source, '      ...speed !== undefined && { speed }\n    };\n  };',
+                          '      ...speed !== undefined && { speed },\n'
+                          '      ...kinSafeguards && { safeguards: kinSafeguards.safeguards }\n    };\n  };')
+    return source
+
+
+def patch_upstream_safeguards(source):
+    """Same contract as patch_safeguards on a CLI that already plumbs `safeguards`.
+
+    Upstream sends `request2.safeguards` whenever present and appends
+    `afk-mode-2026-01-31`. Replace both with the fork gate: an array plus a valid
+    `kin_safeguards_beta`, and only that caller beta is added.
+    """
+    source = replace_once(source, 'function systemFromRequest(request2) {', r'''function kinSafeguardsFromRequest(request2) {
+  const safeguards = request2.safeguards;
+  const beta = request2.kin_safeguards_beta;
+  if (!Array.isArray(safeguards))
+    return;
+  if (typeof beta !== "string" || !/^dangerous-tool-use-\d{4}-\d{2}-\d{2}$/.test(beta))
+    return;
+  return { safeguards, beta };
+}
+function systemFromRequest(request2) {''')
+    source = replace_once(source, '      safeguards: request2.safeguards,\n',
+                          '      kinSafeguards: kinSafeguardsFromRequest(request2),\n')
+    source = replace_once(source, '  safeguards,\n  contextManagement,\n  onResponseHeaders,\n  onError\n}) {',
+                          '  kinSafeguards,\n  contextManagement,\n  onResponseHeaders,\n  onError\n}) {')
+    source = replace_once(source, '      safeguards,\n      outputConfigOverride: outputConfig,\n',
+                          '      kinSafeguards,\n      outputConfigOverride: outputConfig,\n')
+    source = replace_once(source, '    const presentBetas = withServerSafeguardBeta(betasParams.filter(Boolean), options2.safeguards != null);\n'
+                          '    const filteredBetas = isKinQuerySource(options2.querySource) ? mergeOfficialExtraBetas(presentBetas) : presentBetas;\n',
+                          '    const presentBetas = betasParams.filter(Boolean);\n'
+                          '    const filteredBetas = isKinQuerySource(options2.querySource) ? mergeOfficialExtraBetas(presentBetas) : presentBetas;\n'
+                          '    const kinSafeguards = useBetas && isKinQuerySource(options2.querySource) ? options2.kinSafeguards : undefined;\n'
+                          '    if (kinSafeguards && !filteredBetas.includes(kinSafeguards.beta))\n'
+                          '      filteredBetas.push(kinSafeguards.beta);\n')
+    source = replace_once(source, '      ...options2.safeguards != null ? { safeguards: options2.safeguards } : {},\n', '')
     source = replace_once(source, '      ...speed !== undefined && { speed }\n    };\n  };',
                           '      ...speed !== undefined && { speed },\n'
                           '      ...kinSafeguards && { safeguards: kinSafeguards.safeguards }\n    };\n  };')

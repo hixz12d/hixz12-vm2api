@@ -7,6 +7,7 @@ import path from 'node:path'
 import { createHandleProtocol } from '../../src/lib/protocol/handle-protocol.mjs'
 import { StickyRouter } from '../../src/lib/pool/sticky-router.mjs'
 import { CRS_OFFICIAL_AGENT_PROMPT } from '../../src/lib/identity/crs-persona.mjs'
+import { sessionIdFromOutboundBody } from '../../src/lib/identity/identity-rewrite.mjs'
 import { DEFAULT_AGENT_STANDING } from '../../src/lib/identity/persona-template.mjs'
 import { resolveInferenceBackend, messagesUrl } from '../../src/lib/pool/api-protocol.mjs'
 
@@ -211,6 +212,82 @@ test('OAuth cli-hop applies the resolved Protocol custom persona template', asyn
     assert.ok(prepared?.body)
     assert.equal(prepared.body.system.length, 1)
     assert.equal(prepared.body.system[0].text, 'CUSTOM_PERSONA UTC')
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('logs the session id actually sent upstream, not the caller one', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-outbound-session-'))
+  const routingFile = path.join(root, 'routing.json')
+  fs.writeFileSync(routingFile, JSON.stringify({ compatibility: {} }))
+  const vm = { id: 'vm-01', claude: { mode: 'oauth' } }
+  const selected = {
+    vmId: vm.id,
+    accountId: 'account-1',
+    vm,
+    exec: { vmId: vm.id, vm, homeDir: path.join(root, 'home'), oauth: { account_uuid: 'account-1' } },
+  }
+  let prepared = null
+  let logged = null
+  const response = { ...fakeResponse(), on: (event, fn) => event === 'finish' && (response.finish = fn) }
+  const handler = createHandleProtocol({
+    json: (_res, status, body) => {
+      response.status = status
+      return body
+    },
+    writeSSEHeaders() {},
+    readBody: async () => ({
+      model: 'claude-haiku-4-5',
+      messages: [{ role: 'user', content: 'hello' }],
+      metadata: { user_id: JSON.stringify({ device_id: 'caller-dev', session_id: 'caller-sess' }) },
+    }),
+    requireAuth: () => true,
+    cfg: {
+      rewrite: { enabled: false },
+      intercept: { rules: [] },
+      distill: { enabled: false },
+      limits: { max_body_bytes: 1024 * 1024, upstream_timeout_ms: 2000, stream_idle_timeout_ms: 2000 },
+      paths: { data: root, project: root },
+    },
+    requestLog: {
+      start: () => ({ request_id: 'outbound-session-test', mode: 'normal' }),
+      finish: (_ctx, extra) => {
+        logged = extra
+      },
+    },
+    stickyRouter: { extractPoolKey: () => null, collectPoolKeys: () => [] },
+    accountQuota: {},
+    apiKeyStore: {},
+    apiScheduler: {},
+    apiEndpointStore: {},
+    stats: { errors: 0, requests: 0, by_route: {}, passthrough: 0, rewrite: 0, convert: 0 },
+    routingConfigPath: routingFile,
+    routingConfig: { compatibility: {}, failover: {} },
+    failoverRunner: {
+      async run(opts) {
+        prepared = await opts.applyAttempt(opts.canonicalBody, selected)
+        return { ok: false, status: 503, body: { error: { type: 'server_error', code: 'x', message: 'stop' } } }
+      },
+    },
+    groupsRepo: { rateMultiplier: () => 1 },
+  })
+  const req = {
+    method: 'POST',
+    url: '/v1/messages',
+    headers: { authorization: 'Bearer master', 'user-agent': 'claude-cli/2.1.241 (external, cli)' },
+    apiKeyKind: 'master',
+    once() {},
+    off() {},
+  }
+  try {
+    await handler.handleProtocol(req, response, 'anthropic.messages', '/v1/messages')
+    response.finish?.()
+    const sent = sessionIdFromOutboundBody(prepared.body) || prepared.meta.sessionId
+    assert.ok(sent)
+    assert.equal(logged.session_id, 'caller-sess')
+    assert.equal(logged.outbound_session_id, sent)
+    assert.notEqual(logged.outbound_session_id, 'caller-sess')
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }
@@ -522,6 +599,30 @@ test('inbound session and device keys match across API keys at the protocol entr
   }
 })
 
+test('the protocol entry hands the device seat key to the pool, independent of the API key', async () => {
+  const { dir, router } = realStickyRouter()
+  try {
+    const turn = {
+      messages: [{ role: 'user', content: 'please refactor the scheduler module and explain every single change' }],
+    }
+    const a = await captureRunOpts({
+      body: sessionBody({ device_id: 'dev-seat', session_id: 'sess-seat' }, turn),
+      stickyRouter: router,
+      apiKeyRecord: { id: 'key-a', group_id: 1 },
+    })
+    const b = await captureRunOpts({
+      body: sessionBody({ device_id: 'dev-seat', session_id: 'sess-other' }, turn),
+      stickyRouter: router,
+      apiKeyRecord: { id: 'key-b', group_id: 1 },
+    })
+    assert.equal(a.skipSessionSeat, false)
+    assert.equal(a.seatKey, 'seat:dev:dev-seat')
+    assert.equal(b.seatKey, a.seatKey)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('shared API key keeps different devices apart at the protocol entry', async () => {
   const { dir, router } = realStickyRouter()
   try {
@@ -642,7 +743,9 @@ test('Claude Code sub-agent hops run as child sessions of the main session', asy
     const nested = await agentHop('agent-c', 'agent-a')
 
     assert.equal(main.stickyKey, 'sess:main-sess')
-    assert.equal(main.windowKey, undefined)
+    // A one-shot short turn ('hello') holds no seat even with a device id.
+    assert.equal(main.skipSessionSeat, true)
+    assert.equal(main.seatKey, null)
     // Each agent queues on its own session, never behind the main one.
     const keys = [main.stickyKey, a.stickyKey, b.stickyKey, nested.stickyKey]
     assert.equal(new Set(keys).size, keys.length)
@@ -650,8 +753,6 @@ test('Claude Code sub-agent hops run as child sessions of the main session', asy
     assert.deepEqual(a.stickyKeys, [a.stickyKey])
     for (const child of [a, b, nested]) {
       assert.match(child.stickyKey, /^sess:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
-      // Session seat counts against the main session; placement follows its VM.
-      assert.equal(child.windowKey, 'sess:main-sess')
       assert.equal(child.familyKey, 'family2:main-sess')
       assert.equal(child.familyVmId, 'vm-cc')
       assert.equal(child.deviceKey, main.deviceKey)

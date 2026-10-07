@@ -38,6 +38,7 @@ import { clearVmRestriction } from '@/features/vm/clear-restriction'
 import { CreateVmDialog } from '@/features/vm/create-vm-dialog'
 import { VmListSkeleton } from '@/features/vm/list-skeleton'
 import { vmsListQueryOptions } from '@/features/vm/queries'
+import { usePoolSeatStream } from '@/features/vm/use-pool-seat-stream'
 import { VmActionsProvider } from '@/features/vm/vm-actions-provider'
 import {
   filterVms,
@@ -77,6 +78,7 @@ const VIEW_KEY = 'vm_list_view'
 export function VmListPage() {
   const me = useQuery(meQueryOptions())
   const vmsQ = useQuery(vmsListQueryOptions(5000))
+  usePoolSeatStream()
   const usage = useQuery({
     ...usageQueryOptions(5000),
     enabled: me.data?.role !== 'user',
@@ -134,6 +136,7 @@ export function VmListPage() {
     onError: (error: Error) => toast.error(error.message),
   })
   const vms: Vm[] = vmsQ.data?.items || []
+  const poolQueue = vmsQ.data?.pool_queue
   const accounts = usage.data?.accounts
   const canCreate =
     me.data?.role === 'admin' ||
@@ -148,6 +151,18 @@ export function VmListPage() {
       fluid
       extra={
         <div className='flex items-center gap-2'>
+          {poolQueue ? (
+            <span
+              className={cn(
+                'me-1 text-xs text-muted-foreground tabular-nums',
+                poolQueue.global_queue_depth > 0 &&
+                  'text-[color:var(--status-warn)]'
+              )}
+              title='还没落到任何账号、在等新席位的 Claude 请求数 / 允许排队数量（上限按全部排队请求计，含各账号上的排队，见状态列）'
+            >
+              全局排队 {poolQueue.global_queue_depth}/{poolQueue.queue_max}
+            </span>
+          ) : null}
           {canCreate ? (
             <Button
               variant='outline'
