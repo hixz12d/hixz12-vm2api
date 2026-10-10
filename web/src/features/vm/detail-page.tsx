@@ -50,6 +50,7 @@ import { QueryGate } from '@/components/query-gate'
 import { StatusMark } from '@/components/status-mark'
 import { LabelStrip, Lamp } from '@/components/switchboard-parts'
 import { dashboardQueryOptions } from '@/features/overview/queries'
+import { proxiesForVmBind } from '@/features/proxies/proxy-sort'
 import { proxiesQueryOptions } from '@/features/proxies/queries'
 import { routingQueryOptions } from '@/features/settings/queries'
 import { accountLamp } from '@/features/vm/account-lines'
@@ -202,11 +203,8 @@ export function VmDetailPage() {
   })
   const pool = proxies.data?.proxies || []
   const boundId = String(proxy.id || vm.proxy_id || '')
-  const free = pool.filter((p) => {
-    if (!p.enabled || p.status === 'dead' || p.blocked_reason) return false
-    const ids = p.bound_vm_ids || (p.bound_vm_id ? [p.bound_vm_id] : [])
-    return !ids.includes(id) && ids.length < (p.bind_limit || 5)
-  })
+  // 本地代理固定第一。已绑到本槽的留在下拉里，否则正在用它时列表里没有。
+  const free = proxiesForVmBind(pool, id, 5)
   const pol =
     (seed.data?.seed_policy as Record<string, unknown> | undefined) || {}
   const syncTelemetry =
@@ -428,6 +426,7 @@ export function VmDetailPage() {
             proxy={proxy}
             boundId={boundId}
             free={free}
+            pool={pool}
             bindId={bindId}
             onBindIdChange={setBindId}
             onUnbind={() =>
@@ -500,16 +499,21 @@ export function VmDetailPage() {
           />
           <TabsContent value='seed' className='space-y-3 pt-4'>
             <p className='text-sm text-muted-foreground'>
-              导入完整 OAuth 凭证后，系统会在这个账号的运行环境里装一遍官方
-              Claude Code。这里决定装完后要不要改掉官方默认的几项配置：开关打开
-              = 删掉那一项，关闭 = 保持官方默认值。一般不用动。
+              导入完整 OAuth 凭证后，系统会在这个账号的运行环境里安装官方
+              Claude Code。这里控制安装后的配置，遥测是否发送以这里的开关为准。
             </p>
-            <SeedPolicyCard
-              policy={pol}
-              saving={saveSeed.isPending}
-              syncTelemetry={syncTelemetry}
-              onSave={(next) => saveSeed.mutate(next)}
-            />
+            {seed.data ? (
+              <SeedPolicyCard
+                policy={pol}
+                saving={saveSeed.isPending}
+                syncTelemetry={syncTelemetry}
+                onSave={(next) => saveSeed.mutate(next)}
+              />
+            ) : (
+              <p className='text-sm text-muted-foreground'>
+                {seed.isError ? '种子策略读取失败' : '读取种子策略…'}
+              </p>
+            )}
           </TabsContent>
         </Tabs>
         <ConfirmDialog

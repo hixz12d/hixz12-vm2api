@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { ApiKeyItem } from '@/types/panel-keys'
+import type { ApiKeyItem, VmPool } from '@/types/panel-keys'
+import type { Vm } from '@/types/panel-vm'
+import { isCodexVm } from '@/lib/vm-kind'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -18,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { AccountGroup } from './groups-query'
-import type { KeyLimitsDraft } from './key-payload'
+import type { KeyGroupType, KeyLimitsDraft } from './key-payload'
 
 const CONC = [0, 1, 2, 4, 8, 16, 20, 32, 64]
 const QUOTA_CREATE = [0, 1000, 5000, 10000, 50000]
@@ -104,6 +106,8 @@ export function KeyLimitsDialog({
   onSubmit,
   groups,
   canAssignGroup = false,
+  vms = [],
+  pools,
 }: {
   mode: 'create' | 'edit'
   open: boolean
@@ -113,21 +117,16 @@ export function KeyLimitsDialog({
   onSubmit: (draft: KeyLimitsDraft) => void
   groups: AccountGroup[]
   canAssignGroup?: boolean
+  vms?: Vm[]
+  pools?: VmPool[]
 }) {
-  const [draft, setDraft] = useState<KeyLimitsDraft>({
-    name: '',
-    category: 'oauth',
-    group_id: 1,
-    max_concurrency: 20,
-    quota_requests: 0,
-    quota_usd: 0,
-    rpm: 0,
-    expires_in_days: 30,
-  })
+  const [draft, setDraft] = useState<KeyLimitsDraft>(blankDraft())
 
   useEffect(() => {
     if (!open) return
     if (mode === 'edit' && initial) {
+      const pooled = !!pools && !!initial.vm_pool_id
+      const group = pooled ? 'pool' : groupOf(initial.group_type)
       setDraft({
         name: initial.name || '',
         category: initial.category === 'api' ? 'api' : 'oauth',
@@ -137,23 +136,24 @@ export function KeyLimitsDialog({
         quota_usd: Number(initial.quota_usd ?? 0),
         rpm: Number(initial.rpm ?? 0),
         expires_in_days: 0,
+        group_type: group,
+        allowed_vms:
+          group === 'all' || group === 'pool' ? [] : initial.allowed_vms || [],
+        ...(pools ? { vm_pool_id: initial.vm_pool_id || '' } : {}),
       })
       return
     }
-    setDraft({
-      name: '',
-      category: 'oauth',
-      group_id: 1,
-      max_concurrency: 20,
-      quota_requests: 0,
-      quota_usd: 0,
-      rpm: 0,
-      expires_in_days: 30,
-    })
+    setDraft(blankDraft())
+    // pools is only the option list. Reloading it must not wipe an open form.
   }, [open, mode, initial])
 
   const quotaOpts = mode === 'edit' ? QUOTA_EDIT : QUOTA_CREATE
   const rpmOpts = mode === 'edit' ? RPM_EDIT : RPM_CREATE
+  const listed = vmsInGroup(vms || [], draft.group_type)
+  const scopeBlocked =
+    draft.group_type === 'pool'
+      ? !draft.vm_pool_id
+      : draft.group_type !== 'all' && draft.allowed_vms.length === 0
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -281,6 +281,104 @@ export function KeyLimitsDialog({
               />
             </Field>
           ) : null}
+          <Field label='额外调用范围' hint='与账号分组同时生效，只会缩小范围，不会跨组'>
+            <Select
+              value={draft.group_type}
+              onValueChange={(v) => {
+                const group = v === 'pool' ? 'pool' : groupOf(v)
+                const keep = new Set(
+                  vmsInGroup(vms || [], group).map((vm) => vm.id)
+                )
+                setDraft((d) => ({
+                  ...d,
+                  group_type: group,
+                  allowed_vms:
+                    group === 'all' || group === 'pool'
+                      ? []
+                      : d.allowed_vms.filter((id) => keep.has(id)),
+                  ...(pools
+                    ? { vm_pool_id: group === 'pool' ? d.vm_pool_id || '' : '' }
+                    : {}),
+                }))
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='all'>不额外限制</SelectItem>
+                {pools ? <SelectItem value='pool'>账号池</SelectItem> : null}
+                <SelectItem value='anthropic'>anthropic</SelectItem>
+                <SelectItem value='openai'>openai</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          {draft.group_type === 'pool' ? (
+            <Field label='账号池'>
+              <Select
+                value={draft.vm_pool_id || ''}
+                onValueChange={(id) =>
+                  setDraft((d) => ({ ...d, vm_pool_id: id }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder='选择账号池' />
+                </SelectTrigger>
+                <SelectContent>
+                  {(pools || []).map((pool) => (
+                    <SelectItem key={pool.id} value={pool.id}>
+                      {pool.name}
+                      {pool.enabled ? '' : ' · 停用'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : draft.group_type === 'all' ? (
+            <p className='text-xs text-muted-foreground sm:col-span-2'>
+              不额外限制平台或账号，仍然只使用所属账号分组里的账号。
+            </p>
+          ) : (
+            <div className='sm:col-span-2'>
+              <Field label='可用账号'>
+                <div className='max-h-40 space-y-1 overflow-y-auto rounded-md border p-2'>
+                  {listed.length === 0 ? (
+                    <p className='text-xs text-muted-foreground'>
+                      该平台下没有账号
+                    </p>
+                  ) : (
+                    listed.map((vm) => (
+                      <label
+                        key={vm.id}
+                        className='flex items-center gap-2 text-sm'
+                      >
+                        <input
+                          type='checkbox'
+                          className='size-3.5'
+                          checked={draft.allowed_vms.includes(vm.id)}
+                          onChange={(e) => {
+                            const on = e.target.checked
+                            setDraft((d) => ({
+                              ...d,
+                              allowed_vms: on
+                                ? [...d.allowed_vms, vm.id]
+                                : d.allowed_vms.filter((id) => id !== vm.id),
+                            }))
+                          }}
+                        />
+                        <span className='truncate'>
+                          {vm.name || vm.email || vm.id}
+                        </span>
+                        <span className='font-mono text-xs text-muted-foreground'>
+                          {vm.id}
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </Field>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button
@@ -297,7 +395,8 @@ export function KeyLimitsDialog({
               !groups.some(
                 (g) => g.id === draft.group_id && g.status === 'active'
               ) ||
-              (mode === 'create' && !draft.name.trim())
+              (mode === 'create' && !draft.name.trim()) ||
+              scopeBlocked
             }
             loading={pending}
           >
@@ -307,4 +406,30 @@ export function KeyLimitsDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function blankDraft(): KeyLimitsDraft {
+  return {
+    name: '',
+    category: 'oauth',
+    group_id: 1,
+    max_concurrency: 20,
+    quota_requests: 0,
+    quota_usd: 0,
+    rpm: 0,
+    expires_in_days: 30,
+    group_type: 'all',
+    allowed_vms: [],
+  }
+}
+
+function groupOf(value: string | undefined): KeyGroupType {
+  if (value === 'anthropic' || value === 'openai') return value
+  return 'all'
+}
+
+function vmsInGroup(vms: Vm[], group: KeyGroupType): Vm[] {
+  if (group === 'openai') return vms.filter((vm) => isCodexVm(vm))
+  if (group === 'anthropic') return vms.filter((vm) => !isCodexVm(vm))
+  return []
 }

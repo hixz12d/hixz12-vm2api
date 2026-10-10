@@ -1,5 +1,6 @@
 import type { Vm } from '@/types/panel-vm'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 import { Tabs } from '@/components/ui/tabs'
 import { VmOpsTab } from './detail-ops-tab'
@@ -7,23 +8,25 @@ import { VmOpsTab } from './detail-ops-tab'
 function render(vm: Vm) {
   const noop = () => {}
   return renderToStaticMarkup(
-    <Tabs defaultValue='ops'>
-      <VmOpsTab
-        vm={vm}
-        proxy={{}}
-        officialCc={true}
-        credType='oauth'
-        canRefresh={true}
-        refreshBlocked=''
-        savingTimezone={false}
-        onAction={noop}
-        onRefresh={noop}
-        onTimezoneSave={noop}
-        onTimezoneFollowProxy={noop}
-        onReset={noop}
-        onDelete={noop}
-      />
-    </Tabs>
+    <QueryClientProvider client={new QueryClient()}>
+      <Tabs defaultValue='ops'>
+        <VmOpsTab
+          vm={vm}
+          proxy={{}}
+          officialCc={true}
+          credType='oauth'
+          canRefresh={true}
+          refreshBlocked=''
+          savingTimezone={false}
+          onAction={noop}
+          onRefresh={noop}
+          onTimezoneSave={noop}
+          onTimezoneFollowProxy={noop}
+          onReset={noop}
+          onDelete={noop}
+        />
+      </Tabs>
+    </QueryClientProvider>
   )
 }
 

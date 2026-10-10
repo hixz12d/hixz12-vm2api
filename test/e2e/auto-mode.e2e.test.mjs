@@ -266,7 +266,8 @@ async function harness(t, layout = 'zero', cliPath = cli) {
     kernel.kill('SIGKILL')
     await closed
   })
-  for (let i = 0; i < 100 && !fs.existsSync(socketPath) && kernel.exitCode == null; i++)
+  // A rebuilt UPX CLI can take over 5s to cold-start on a CPU-capped Windows Docker bind mount.
+  for (let i = 0; i < 400 && !fs.existsSync(socketPath) && kernel.exitCode == null; i++)
     await new Promise((resolve) => setTimeout(resolve, 50))
   assert.ok(fs.existsSync(socketPath), log.slice(-1200))
   const health = JSON.parse((await unixRequest(socketPath, token, '/internal/health')).text)

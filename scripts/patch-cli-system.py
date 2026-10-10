@@ -18,7 +18,8 @@ BASELINES = {
     "cli-node-v1.3.91": "125ce8dfd4d87d54851b1ad2e1dec7c4e96df56b7da8588ab2c916d628e4322f",
     "cli-node-v1.3.94": "ef30963b3fe4ddd0dda08247ff31edce8d61d03535c1af2328d09ade132b0d06",
     "cli-node-v1.3.103": "51e51f4a5ea9067d1da2f3482fa8beb2682e2a52693cde21dfc22c4c8a4cf7fb",
-    "cli-node": "884a04fdcb186a5122c6da50acac7597fb2b20c3745045ab8a5826f792d43beb",
+    "cli-node-v1.3.123": "884a04fdcb186a5122c6da50acac7597fb2b20c3745045ab8a5826f792d43beb",
+    "cli-node": "facc1f8194bd271809c06edb15735e0bdd2459ba72b5d6be2ab30359578557a5",
     "cc-node": "6fef71bdda7ad0929681711efee472552635f88b0a6ead51f711d10e03f55ca5",
 }
 
@@ -33,8 +34,8 @@ def replace_once(source, before, after):
 def patch(source, name):
     prompt = "systemPrompt2" if name == "legacy-cli-node" else "systemPrompt"
     if name == "cli-node":
-        # v1.3.123 forwards any caller `safeguards` with a fixed afk-mode beta;
-        # rewire that path back onto the fork's gated caller beta.
+        return patch_wire_safeguards(patch_current_cli(source))
+    if name == "cli-node-v1.3.123":
         return patch_upstream_safeguards(patch_current_cli(source))
     if name in ("cli-node-v1.3.103", "cli-node-v1.3.94", "cli-node-v1.3.91"):
         # v1.3.94 classifier jobs bypass leftoverFromSystemPrompt and build
@@ -182,6 +183,45 @@ function systemFromRequest(request2) {''')
     source = replace_once(source, '      ...speed !== undefined && { speed }\n    };\n  };',
                           '      ...speed !== undefined && { speed },\n'
                           '      ...kinSafeguards && { safeguards: kinSafeguards.safeguards }\n    };\n  };')
+    return source
+
+
+def patch_wire_safeguards(source):
+    """Preserve the fork gate on v1.3.125+'s wireBody/request-beta path.
+
+    The new nativeExtras path must never leak the internal beta field. Infer
+    all other protocol gates normally, but safeguards use only the caller beta.
+    """
+    source = replace_once(source, 'function systemFromRequest(request2) {', r'''function kinSafeguardsFromRequest(request2) {
+  const safeguards = request2.safeguards;
+  const beta = request2.kin_safeguards_beta;
+  if (!Array.isArray(safeguards))
+    return;
+  if (typeof beta !== "string" || !/^dangerous-tool-use-\d{4}-\d{2}-\d{2}$/.test(beta))
+    return;
+  return { safeguards, beta };
+}
+function systemFromRequest(request2) {''')
+    source = replace_once(source, '      safeguards: request2.safeguards,\n',
+                          '      kinSafeguards: kinSafeguardsFromRequest(request2),\n')
+    source = replace_once(source, '  safeguards,\n  contextManagement,\n  onResponseHeaders,\n  onError\n}) {',
+                          '  kinSafeguards,\n  contextManagement,\n  onResponseHeaders,\n  onError\n}) {')
+    source = replace_once(source, '      safeguards,\n      outputConfigOverride: outputConfig,\n',
+                          '      kinSafeguards,\n      outputConfigOverride: outputConfig,\n')
+    source = replace_once(source, '    const nativeExtras = {};',
+                          '    const kinSafeguards = isKinQuerySource(options2.querySource) ? options2.kinSafeguards : undefined;\n'
+                          '    const nativeExtras = {};')
+    source = replace_once(source, '      ...options2.safeguards != null ? { safeguards: options2.safeguards } : {},\n',
+                          '      ...kinSafeguards ? { safeguards: kinSafeguards.safeguards } : {},\n')
+    source = replace_once(source, '    const gatedBetas = withRequestProtocolBetas(requestBetas, params);',
+                          '    const gatedBetas = withRequestProtocolBetas(\n'
+                          '      requestBetas.filter((beta) => !/^dangerous-tool-use-/.test(beta)),\n'
+                          '      { ...params, safeguards: undefined }\n'
+                          '    );\n'
+                          '    if (kinSafeguards && !gatedBetas.includes(kinSafeguards.beta))\n'
+                          '      gatedBetas.push(kinSafeguards.beta);')
+    source = replace_once(source, '    safeguards: true\n  };',
+                          '    safeguards: true,\n    kin_safeguards_beta: true\n  };')
     return source
 
 

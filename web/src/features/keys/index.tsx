@@ -25,6 +25,7 @@ import { QueryGate } from '@/components/query-gate'
 import { Cord, Lamp, type CordKey } from '@/components/switchboard-parts'
 import { meQueryOptions } from '@/features/auth/queries'
 import { apiKeysQueryOptions } from '@/features/keys/queries'
+import { vmsListQueryOptions } from '@/features/vm/queries'
 import { GroupsDialog } from './groups-dialog'
 import { groupsQueryOptions, type AccountGroup } from './groups-query'
 import {
@@ -39,6 +40,8 @@ import {
 import { KeyLimitsDialog } from './key-limits-dialog'
 import { keyLimitsPayload, type KeyLimitsDraft } from './key-payload'
 import { KeyRevealDialog, type RevealedKey } from './key-reveal-dialog'
+import { KeyStatsDialog } from './key-stats-dialog'
+import { VmPoolsCard, vmPoolsQueryOptions } from './vm-pools-card'
 
 /** 分组名里带 Max / Pro / GPT 时给对应的线色，和总览页一致。 */
 function cordOf(name: string): CordKey {
@@ -60,11 +63,15 @@ export function KeysPage() {
   const me = useQuery(meQueryOptions())
   const isAdmin = me.data?.role === 'admin'
   const [groupsOpen, setGroupsOpen] = useState(false)
+  const pools = useQuery({ ...vmPoolsQueryOptions(), enabled: isAdmin })
+  const vms = useQuery(vmsListQueryOptions())
+  const vmItems = vms.data?.items || []
   const [createOpen, setCreateOpen] = useState(false)
   const [editId, setEditId] = useState('')
-  const [delId, setDelId] = useState('')
+  const [statsId, setStatsId] = useState('')
   const [rotateId, setRotateId] = useState('')
   const [revealed, setRevealed] = useState<RevealedKey | null>(null)
+  const [delId, setDelId] = useState('')
   const keys = q.data?.keys || []
   const editing = keys.find((k) => k.id === editId) || null
   const rotating = keys.find((k) => k.id === rotateId) || null
@@ -261,6 +268,7 @@ export function KeysPage() {
                     onCopy={() => void copyPlain(k)}
                     onRotate={() => setRotateId(k.id)}
                     onEdit={() => setEditId(k.id)}
+                    onStats={() => setStatsId(k.id)}
                     onToggle={() =>
                       toggle.mutate({
                         id: k.id,
@@ -351,6 +359,7 @@ export function KeysPage() {
         </section>
       </div>
 
+      {isAdmin ? <VmPoolsCard vms={vmItems} /> : null}
       <KeyLimitsDialog
         groups={groupItems}
         canAssignGroup={isAdmin}
@@ -358,6 +367,8 @@ export function KeysPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         pending={create.isPending}
+        vms={vmItems}
+        pools={isAdmin ? pools.data?.pools || [] : undefined}
         onSubmit={(draft) => create.mutate(draft)}
       />
       <KeyLimitsDialog
@@ -369,6 +380,8 @@ export function KeysPage() {
           if (!open) setEditId('')
         }}
         initial={editing}
+        vms={vmItems}
+        pools={isAdmin ? pools.data?.pools || [] : undefined}
         pending={edit.isPending}
         onSubmit={(draft) => {
           if (!editId) return
@@ -379,6 +392,13 @@ export function KeysPage() {
         <GroupsDialog open={groupsOpen} onOpenChange={setGroupsOpen} />
       )}
       <KeyRevealDialog value={revealed} onClose={() => setRevealed(null)} />
+      <KeyStatsDialog
+        item={keys.find((k) => k.id === statsId) || null}
+        vms={vmItems}
+        onOpenChange={(open) => {
+          if (!open) setStatsId('')
+        }}
+      />
       <ConfirmDialog
         open={!!rotateId}
         onOpenChange={() => setRotateId('')}
@@ -444,6 +464,7 @@ function KeyLine({
   onCopy,
   onRotate,
   onEdit,
+  onStats,
   onToggle,
   onReset,
   onDelete,
@@ -455,6 +476,7 @@ function KeyLine({
   onCopy: () => void
   onRotate: () => void
   onEdit: () => void
+  onStats: () => void
   onToggle: () => void
   onReset: () => void
   onDelete: () => void
@@ -531,6 +553,7 @@ function KeyLine({
 
       <div className='min-w-0'>
         <Cord cord={cordOf(groupName)} name={groupName} />
+        <p className='mt-1 text-xs text-muted-foreground'>{scopeText(item)}</p>
         <p
           className={cn(
             'mt-1 text-xs',
@@ -540,7 +563,7 @@ function KeyLine({
           {item.category === 'api'
             ? 'API 直连（不走账号分组）'
             : reach
-              ? `能用 ${reach} 个账号`
+              ? `分组含 ${reach} 个账号，仍受调用范围限制`
               : '现在用不到任何账号'}
         </p>
       </div>
@@ -570,6 +593,9 @@ function KeyLine({
       </div>
 
       <div className='flex items-center justify-end gap-1'>
+        <Button size='sm' variant='ghost' disabled={busy} onClick={onStats}>
+          统计
+        </Button>
         <Button
           size='sm'
           variant='outline'
@@ -606,4 +632,13 @@ function KeyLine({
       </div>
     </li>
   )
+}
+
+function scopeText(item: ApiKeyItem): string {
+  if (item.vm_pool_id) return `账号池 · ${item.vm_pool_name || item.vm_pool_id}`
+  if (item.group_type === 'anthropic')
+    return `Anthropic · ${item.allowed_vms?.length || 0} 台`
+  if (item.group_type === 'openai')
+    return `OpenAI · ${item.allowed_vms?.length || 0} 台`
+  return '调用范围：不额外限制（仍受账号分组约束）'
 }

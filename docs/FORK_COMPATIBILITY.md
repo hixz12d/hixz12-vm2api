@@ -1,9 +1,12 @@
 # Fork 运行兼容性
 
-## 当前策略：优先采用上游 v1.3.123
+## 当前策略：优先采用上游 v1.3.135
 
-融合上游 `4a3e6136`（v1.3.123，含 v1.3.107–v1.3.122）。保留 fork 历史与定制管理台，源码、预编译前端及 CLI 补丁同步维护。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
+融合上游 `e1a91e46`（v1.3.135，新增 v1.3.124–v1.3.135）。保留 fork 历史与定制管理台，源码、预编译前端及 CLI 补丁同步维护。本地合并不代表已提交、推送或上线；生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
 
+- 采用 v1.3.124–v1.3.135：密钥平台 / 账号范围、可复用账号池、账号 JSON 导入导出、风险审计替代协议页、模型页与 Haiku 5.5 默认 100K 上限、可配置流空闲超时和可选工具参数流式下发、缓存命中统计修复、OAuth 换票状态修复、代理 IPv6 地理信息、节点本地出口及透明 TCP 按唯一 DNS 域名转发。新增迁移 `032`–`035`；上线前必须备份，不覆盖生产持久配置。
+- 上游 `keyScope` 与 fork `groupScope` 取交集：Claude 直接选号、设备座位、排队、只读额度 / token 查询及 Codex 候选均保留两个限制，空池不放宽到全局。原 `group_id` 分组、分组修改权限、智能评分和账号同步不变；上游 `vm_pool_id` 不自动迁移或替换现有分组。
+- Key 页面保留 fork 的分组连线布局，加入账号池、调用范围和 Key 统计；“不额外限制”仍受原账号分组约束。侧栏使用 `/risk` 风险审计入口，保留白话标题及主题；`web/dist` 从合并源码重建。
 - 采用 v1.3.107–v1.3.123：Claude Code 2.1.293 身份与 Haiku 5.5；内核线协议和环境变量去掉 `kin_` / `KIN_` 前缀（`kin-kernel`、`kin-kernel.bin`、`kin-codex-kernel`、`cli-node` 必须一起上线并 `wrap-cli/sync`）；协议入口前置闸门（蒸馏硬规则、可编辑硬正则、拒答缓存、可选决策模型，决策模型默认关闭）；拒答缓存近似匹配；Usage Policy 拒答永久缓存并返回 503 `refusal_guard`、不冷却账号；Codex `/v1/alpha/search`、OpenAI 独立额度闸门 `codex.quota`；日志记录出站 Session（迁移 `029`）、拒答近似与设备封禁表（迁移 `030`）、拦截记录（迁移 `031`）；Claude 流中途断开补 `max_tokens` 收尾；遥测 sidecar 自愈；实验性 ARM64 控制面（本 fork 不用）。
 - 拒答封设备（fork 定制，`refusal-guard.mjs` 的 `refusalGuardPolicy`）：上游默认开启，fork 改为未设置时关闭，管理台「协议 → 拒答缓存 → 封禁 device」可手动打开。原因：一次拒答就永久封掉该用户 Claude Code 的设备 ID，经 Sub2API 转发的用户会被整机拉黑。拒答缓存本身照常生效。
 - 号池采用上游设备座位规划（v1.3.109–v1.3.110：按入站 device 计席位、FIFO 排队、`queue_max`、排队超时 529 `pool_overloaded`、balanced / fill 策略），删除 Claude 会话窗口（`max_sessions` / `session_idle_min`）及 fork 的 `windowKey` 根会话窗口计数；旧策略名（WRR / 轮询 / LRU / fill-first）按 balanced 处理。
@@ -12,8 +15,8 @@
 - 宿主防火墙 INPUT 放行沿用 fork 规则（只放行本桥接网段到网关监听端口），不叠加上游 v1.3.107 以子网为目的地址的同类规则，避免重复放行。
 - Codex 选号沿用上游 `listVms(..., { codex: { quota } })`，再按 API Key 分组过滤。
 - 管理台：侧栏采用上游四组（监控 / 资源 / 协议 / 系统），保留 fork `VIEW_TITLES` 白话标题、账号状态灯，「用户」放在系统组；总览保留 fork 交换台布局，按上游去重（费用在用量页、趋势在统计页）；设置页粘性 / 号池 / 配额三页采用上游可视化调度设置（fork 白话文案未保留，只保留分区标题、简介与 13rem 导航宽度）；上游删除凭证调度等级页，等级改在账号详情「调度」块设置；账号列表加上游全局排队与席位标签，保留 fork 按钮和状态筛选；日志详情「会话信息」同时显示账号分组、Key 名称、出站 Session 和客户端 Session（合并时注意 `summary-tab.tsx`、`panel-usage-logs.ts`、`usage-logs-view.mjs` 的 `toUsageLogRow`）；`index.html` 保留 fork 主题用的 Google Fonts；README 保留 fork 精简版。
-- cli-hop 出站体：采用上游 `downgradeUngatedThinkingDisplay`，之后仍过 fork 的 `preserveClientToolEnvironment`。
-- 仓内 `cli-node` 以上游 v1.3.123 cli-node（`c0edfaef`，Claude Code 2.1.293）为基线打 `caller-system-v3+safeguards-v1` 补丁，并删掉上游新增的无条件 safeguards 转发与 afk-mode beta，成品 SHA-256 `6c8164fc…`（见 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md)、`share/wrap-cli/PATCH.json`）。
+- cli-hop 出站体：采用上游 `withRequestProtocolBetas` 和 `MessageRequest.betas`，由新版 CLI 按请求字段生成必要 beta，不再降级 `thinking.display=updates`；仍经过 fork 的 `preserveClientToolEnvironment`。
+- 仓内 `cli-node` 以上游 `cc438892`（Claude Code 2.1.293）为基线重打 `caller-system-v3+safeguards-v1` 补丁；适配 `wireBody` / `nativeExtras`，阻止内部 `kin_safeguards_beta` 外发，保留调用方 safeguards 门禁。成品 SHA-256 `8d0b8ef1…`；内核采用上游并确认 `bin/kin-kernel` 与槽位 `kin-kernel.bin` 相同（见 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md)、`share/wrap-cli/PATCH.json`）。
 
 - 采用 v1.3.91 的 native 错误与恢复：CLI 的真实 HTTP / 网络错误（code、status、type、message、retry-after）原样返回，不再统一成 `incomplete_response`；请求失败或执行位全忙都不再回收 CLI，恢复由内核（关闭未 ack 的 slot、限次重启 CLI）和 watchdog（限次重启容器）有界执行。Node 每个 hop 带 `request_id`，客户端断开时调内核 `/internal/v1/cancel`。依赖新 `kin-kernel` 与新 `cli-node`，Node、内核、CLI 必须一起上线。
 - watchdog 探测放宽（fork 定制，`kernel-watchdog.mjs`）：健康探测等待 `kernel_watchdog.health_timeout_ms`（默认 3000，范围 500–15000），连续 `kernel_watchdog.fail_threshold` 次（默认 3，范围 1–10，约 1 分钟）探测需要重启才进入“递增等待 → 重启容器”流程；中间一次健康就清零，并清掉尚未开始重启的等待状态。原因：上游探测只等 800 毫秒、单次失败就进入重启流程，会误杀正在出结果的槽位。合并上游时 `kernel-watchdog.mjs` 有冲突要保留这两项及连续失败计数。

@@ -27,7 +27,7 @@ describe('sidebar permissions', () => {
         '/logs',
         '/models',
         '/overview',
-        '/protocol',
+        '/risk',
         '/proxies',
         '/settings',
         '/statistics',

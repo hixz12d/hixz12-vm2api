@@ -2,78 +2,62 @@
 
 ## 当前状态
 
-源码融合上游 `4a3e6136`（v1.3.123）。仓内 `cli-node` 基于上游 v1.3.123 cli-node（`c0edfaef`，Claude Code 2.1.293）重新提取，应用 `caller-system-v3+safeguards-v1` 并用官方 Bun 重建；`cc-node` 保持已验证的 `caller-system-v1` 二进制。`kin-kernel` / `kin-kernel.bin` 采用上游 v1.3.123 原版（线协议与环境变量已去掉 `kin_` / `KIN_` 前缀，必须与新 cli-node 一起上线）。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准；下文记录的是本地验证。
+源码融合上游 `e1a91e46`（v1.3.135）。仓内 `cli-node` 基于上游 `cc438892`（Claude Code 2.1.293）提取，应用 `caller-system-v3+safeguards-v1` 并用官方 Bun 重建；`cc-node` 保持已验证的 `caller-system-v1` 二进制。`bin/kin-kernel` 与槽位 `kin-kernel.bin` 已采用上游相同内容，新 Node、内核和 CLI 应一起上线。下文仅记录本地验证，生产状态以部署仓库 `docs/RUNBOOK.md` 为准。
 
-唯一补丁实现是 `scripts/patch-cli-system.py`，固定输入源码 SHA-256；未知上游版本拒绝应用。`cli-node` 对应当前上游，`cli-node-v1.3.103`、`cli-node-v1.3.94`、`cli-node-v1.3.91`、`cli-node-v1.3.88`、`cli-node-v1.3.85` 可复现前五版，`cc-node` 对应原固定基线，`legacy-cli-node` 可复现旧版补丁。逐文件基线和成品哈希见 [PATCH.json](../share/wrap-cli/PATCH.json)。
+唯一补丁实现是 `scripts/patch-cli-system.py`，固定输入源码 SHA-256；未知上游版本拒绝应用。`cli-node` 对应当前上游；`cli-node-v1.3.123`、`cli-node-v1.3.103`、`cli-node-v1.3.94`、`cli-node-v1.3.91`、`cli-node-v1.3.88`、`cli-node-v1.3.85` 可复现旧版；`cc-node` 对应原固定基线，`legacy-cli-node` 对应早期补丁。逐文件基线和成品哈希见 [PATCH.json](../share/wrap-cli/PATCH.json)。
 
 ## 修复契约
 
 - Node 的 cli-hop 路径保留调用方顶层 system，`zero` / `official` / `official_full` 不将其搬成 user reminder。历史 HTTP 行为保持原样。
 - CLI 按 billing、可选身份句、网关时区、调用方文本组装 system，保留调用方文本和空白，不注入槽位 cwd、平台、OS 或 Notes。
-- 上游新版已修复 caller system 丢失，但仍整块删除以 `# Environment` 开头的调用方内容。fork 只删除独立 billing、身份句和纯时区块；客户端环境、agent、Notes 原文继续保留。
-- 请求阶段读取 `KIN_KERNEL_CONFIG` 或 `/run/kin/kernel.json` 的 `system_layout` 与 `timezone`；缺失配置时才回退环境变量。启动时档位握手沿用旧内核契约。上游 2.1.293 自己的面板缓存 TTL 读取改用 `KERNEL_CONFIG` 或 `/run/guest/kernel.json`，在当前 `/run/kin` 挂载下读不到时回落 1h；生产全局 TTL 本就是 1h，暂不处理。
-- cc-node 保留 native/crag 配置初始化、workload/debug 引用修复；crag 仅还原首个传输用 `<system>` 块，普通 user 中的同名标签不提升为 system，工具续轮保留当前槽位 system，新任务重置。
-- 常驻约束采用上游默认关闭语义：缺 map/key 为关闭，显式 true 才开启。关闭后不得残留前一请求约束。
+- fork 只删除独立 billing、身份句和纯时区块，不整块删除以 `# Environment` 开头的调用方内容。
+- 请求阶段读取 `KIN_KERNEL_CONFIG` 或 `/run/kin/kernel.json` 的 `system_layout` 与 `timezone`；缺失配置时回退环境变量。启动档位握手保持上游契约。上游面板缓存 TTL 读取 `KERNEL_CONFIG` 或 `/run/guest/kernel.json`，当前 `/run/kin` 挂载下读不到时回落 1h；生产全局 TTL 本就是 1h，本次未改变此行为。
+- cc-node 保留 native/crag 配置初始化、workload/debug 引用修复；crag 只还原首个传输用 `<system>` 块，不提升普通 user 同名标签，工具续轮保留当前槽位 system，新任务重置。
+- 常驻约束采用上游默认关闭语义：缺 map/key 为关闭，显式 true 才开启。
 
 ## auto mode 分类请求
 
-上游 v1.3.94 起，Node 识别出 Claude Code auto mode 分类请求后，在内核信封里带 `request_context`（`purpose=auto_mode_classifier`），cli-node 按上游分类契约处理：system 直接取请求原文（`classifierSystemBlocks`，只去掉调用方 billing 再前置 CLI billing），不经过 `layoutSystemBlocks` / `leftoverFromSystemPrompt`；保留 cache_control、thinking、max_tokens、temperature、stop_sequences，不加 effort、context_management 和 Kin 缓存断点。
+Node 识别 Claude Code auto mode 分类请求后，在内核信封里带 `request_context`（`purpose=auto_mode_classifier`）。CLI 直接采用 `classifierSystemBlocks` 处理调用方 system，不经过 `layoutSystemBlocks` / `leftoverFromSystemPrompt`，所以 fork 普通 system 过滤不影响分类原文。
 
-- fork 的 system 过滤只在 `leftoverFromSystemPrompt` 里，分类请求走不到这里，所以补丁保持原样，不需要为分类请求另加跳过逻辑；分类请求的 system 与上游逐字一致。
-- safeguards 规则对分类请求同样生效：Node 的分类分支先 `prepareClassifierBody` 再过 fork 的 safeguards 门禁，cli-node 的 `kinSafeguardsFromRequest` 在分类与普通请求上判断相同。
-- 新内核只在 CLI 健康信息报告 `classifier_request_context` 时才派发分类请求；旧 fork cli-node 会被拒绝（`classifier_runtime_unsupported`），所以新内核、新 cli-node、新 Node 必须一起上线。
+保留上游分类的 cache_control、thinking、max_tokens、temperature、stop_sequences 与模型适配规则，不加普通请求的 effort、context_management 和缓存断点。`prepareCliHopBody` 分类分支之后仍执行 fork safeguards 门禁。内核要求 CLI 报告 `classifier_request_context` 能力。
 
 ## auto mode 服务端检查（safeguards）
 
-Claude Code auto mode 在请求体带 `safeguards`、在 `anthropic-beta` 带 `dangerous-tool-use-YYYY-MM-DD`，服务端在 `message_delta.delta.safeguard_results` 返回结论。内核不转发信封请求头，所以 Node 把该 beta 放进 hop body 的内部字段 `kin_safeguards_beta`。
+调用方需同时传入数组 `safeguards` 与合法 `dangerous-tool-use-YYYY-MM-DD` beta，且 `compatibility.auto_mode_server` 未关闭。Node 将 beta 放入内部字段 `kin_safeguards_beta`，CLI 将 safeguards 与该 beta 一起发给上游；任一条件不满足则两者均不发。内部字段不得发给 Anthropic。
 
-- cli-node 只有在 `safeguards` 是数组、且 `kin_safeguards_beta` 匹配 `^dangerous-tool-use-\d{4}-\d{2}-\d{2}$` 时，才把 `safeguards` 原样放进出站请求体，并把该 beta 并入出站 `anthropic-beta`（去重）。任一条件不满足则两者都不发。`kin_safeguards_beta` 从不发给 Anthropic。
-- 回复方向不需要补丁：内核与 CLI 原样转出 `message_delta`，`safeguard_results` 保留。
-- 补丁只新增 `kinSafeguardsFromRequest` 并在 `runJob` → 出站参数之间传一个 `kinSafeguards` 选项，不改缓存和计费函数。v1.3.94 的补丁锚点与 v1.3.91 相同，改动内容逐行相同。
-- 上游 2.1.293 自带一套 safeguards 转发：请求带 `safeguards` 就无条件外发，并由 `withServerSafeguardBeta` 固定追加 `afk-mode-2026-01-31` beta。补丁的 `patch_upstream_safeguards` 删掉这两处，换回上面的 fork 门禁；出站不会出现 afk-mode beta。
-- 内核会把 job JSON 按键名重新排序后交给 CLI，`safeguards` 的值不变、键顺序会变。
+当前 CLI 使用上游 `wireBody` / `nativeExtras` 传递请求字段，并由 `withRequestProtocolBetas` 推导协议 beta。补丁的 `patch_wire_safeguards`：
+
+- 由 `kinSafeguardsFromRequest` 校验数组与日期格式，沿 native 调用链传 `kinSafeguards`。
+- 把 `kin_safeguards_beta` 加入 `NATIVE_OWNED_FIELDS`，避免 `nativeExtras` 原样外发内部字段。
+- 移除未经门禁的 safeguards 转发；仅在校验通过时写出 safeguards。
+- 推导其他协议 beta 时排除 safeguards 的固定日期自动推导，清除旧 dangerous-tool-use 项后只加入通过门禁的调用方 beta，去重；不恢复旧版 afk-mode beta。
+- 不改回复方向，内核与 CLI 继续转出 `message_delta`。
+
+v1.3.123 的旧 `patch_upstream_safeguards` 仅供复现旧基线；它不能应用到当前 wireBody 结构。
 
 ## 缓存与预览
 
-采用上游 v1.3.83 的 Node 消息断点：清洗 caller cache_control 后重建最后消息和符合条件的倒数第二 user 断点，使用会话 pin 的 TTL；native CLI 保留消息标记并处理 system/tools 断点（分类请求除外，见上节）。新 cli-node 的 `applyKinOwnedCacheMarkers`、`capCacheMarkers` 等缓存和计费函数未被 fork 补丁修改，与当前上游源码逐字一致。
+采用上游 Node 消息断点与新版请求字段 beta；native CLI 保留消息标记并管理 system/tools 断点，分类请求除外。8 个缓存和计费函数及两个分类函数在当前上游源码与补丁源码之间逐字一致。cc-node 未更新。
 
-cc-node 二进制未更新，其 5m / 1h 双消息断点、总断点数不超过 4 的验证沿用上一次融合结果（git 历史中的证据文件）。这里验证的是隔离模拟请求的出站形状，不代表真实缓存命中、费用或长期稳定性。
+管理台 system 预览沿用 fork 分段逻辑。预览和模拟请求不代表真实缓存命中或费用；system 或断点变化可能产生首次冷缓存。
 
-管理台最终 system 预览继续采用 fork 的 CLI 分段逻辑；调用方内容用占位符表示。请求头覆盖、真实正文与最终 wire 应以请求抓取为准，不能把预览当作缓存证据。system 或断点变化可能导致首次冷缓存。
+## 本地验证
 
-## 本次验证
+- 成品 SHA-256 `8d0b8ef1…`，48,549,616 字节；Linux `--version` 为 `2.1.293 (Claude Code)`。官方 Bun `.text` / `.rodata` 一致，单入口 `/$bunfs/root/cli.js`，graph flags=7。
+- `cli-node-v1.3.123` 模式复现上一版补丁源码 SHA-256 `83ecc3a8…`。
+- 现有 auto mode 联调：合并后 fork Node → 实际上游内核 → 新 CLI → 容器内 HTTP 模拟上游，3 项通过，旧 CLI 拒绝用例因未指定旧 CLI 跳过 1 项。覆盖 zero/identity、分类正文、错误、取消和并发。首次冷启动超过原用例 5 秒等待上限，将测试等待改为 20 秒后通过；生产超时未变。
+- 复用现有模拟服务验证 8 种 safeguards 输入：两项齐全、缺 beta、缺 safeguards、非法 beta，以及绕过 Node 直接向内核提交非数组 / 缺 beta / beta 单独存在 / 非法 beta。均符合门禁；上游没有内部字段与 afk-mode beta。
+- 环境：本地 `node:22-trixie-slim` Docker，CPU 1.5 核、内存 3 GiB、无外网、源码只读挂载、虚构凭据。二进制复制到容器临时目录执行，未访问生产。
 
-v1.3.123 cli-node（源码 `884a04fd…`）相对上一基线 v1.3.103（`51e51f4a…`）：版本 2.1.284 → 2.1.293；新增 Haiku 5.5 型号、计费、1M 与 effort；握手帧和环境变量去掉 `kin_` / `KIN_` 前缀（`host_ready`、`CLAUDE_CODE_NATIVE_SLOTS`、`SLOT_TZ` 等，新 `kin-kernel.bin` 用同一套名字）；新增上游 safeguards 转发（见上节，已由补丁换回 fork 门禁）。`leftoverFromSystemPrompt`、`classifierSystemBlocks`、`validClassifierContext` 与 8 个缓存和计费函数与 v1.3.103 逐字相同，caller-system 部分原样应用。
+证据摘要见 [CLI_UPSTREAM_MERGE_EVIDENCE.json](CLI_UPSTREAM_MERGE_EVIDENCE.json)。早期完整系统/缓存联调见 [CLI_SYSTEM_PATCH_EVIDENCE.json](CLI_SYSTEM_PATCH_EVIDENCE.json)，不可当作当前版本重新验证的结果。
 
-- 成品 SHA-256 `6c8164fc…`（48,547,864 字节），各阶段哈希见 PATCH.json。`cli-node-v1.3.103` 模式复现出上一版补丁源码哈希（`ce2bfc4a…`）。
-- 单入口 `/$bunfs/root/cli.js`、graph flags=7、`.text` / `.rodata` 与官方 Bun 一致；Linux 下 `--version` 输出 `2.1.293 (Claude Code)`。
-- 上游 `test/e2e/auto-mode.e2e.test.mjs`（上游 Node + 新内核 + 新成品，Debian trixie 容器；新内核需要 glibc 2.38+）：3 项通过，1 项按设计跳过（旧 CLI 用例）。
-- 实际内核 → 新成品 → 模拟上游的 safeguards 检查：两项都合规时上游收到原样 `safeguards` 和一次该 beta；缺 beta、缺 safeguards、beta 不带日期、safeguards 非数组时两者都不发；任何情况都没有 `kin_safeguards_beta` 和 afk-mode beta，调用方 `# Environment` 内容保留。同一检查用上游原版 CLI 会因 afk beta 外发而失败。
-- 未验证：合并后 fork Node（`prepareCliHopBody`）到新成品的端到端、真实 Anthropic、生产请求和缓存命中。上线后按 RUNBOOK 做请求级验证。
-
-以下为 v1.3.95 融合时的完整验证，补丁行为至今未变。验证环境为本地 Linux Docker，无外网，根文件系统只读，CPU 限制 1.5 核，使用虚构凭据与容器内 HTTP 模拟上游。
-
-- 经上游 v1.3.95 实际 Rust 内核（`kin-kernel --gateway-worker`，随附 glibc239，local_cli / 2 槽位）调用新 cli-node；请求体由合并后的真实 `prepareCliHopBody` 生成，经 `go-worker-client` 信封送入内核。
-- 返回给调用方的 SSE 保留 `safeguard_results`，到 `message_stop` 结束。
-- 错误透传：上游 400、529（带 `retry-after`）、只有 `message_start` 的空流分别返回 `upstream_invalid_request`、`upstream_overloaded`（`retry_after` 7）、`upstream_empty_stream`，带原始 status 和 message；之后的正常请求不受影响，内核 `closed_slots` 0、`cli_restarts` 0。
-- safeguards：两者都有时上游收到相同的 `safeguards` 和一次该 beta；Node 开关关闭、缺 beta、缺 safeguards，以及直接构造的只有一个字段、beta 不带日期、safeguards 非数组，上游都没有这两项；任何情况下上游都看不到 `kin_safeguards_beta`。
-- auto mode 分类请求：system 中混入身份句和纯时区块时也原样外发（fork 过滤未作用），cache_control、`thinking: disabled`、temperature 0、max_tokens、`stop_sequences` 与输入一致，无 effort / context_management；带 safeguards 时按 fork 规则放行或删除；tool 格式和 adaptive 模型的 2048 余量按上游契约。上游 `test/e2e/auto-mode.e2e.test.mjs` 与两个 `auto-mode*` 单测在合并后源码上用新 cli-node 全部通过（20/20），其中新内核会拒绝把分类请求派给上一版 fork cli-node。
-- 回归：调用方 Windows 环境及首尾空白原样保留、无槽位环境注入、5m / 1h 缓存标记、`kernel.json` 热读（档位与时区，不重启）；#191：上游 `stop_reason=max_tokens` 正常结束，无错误事件。
-- 新产物与官方 Bun 的 `.text` / `.rodata` 一致；单入口 `/$bunfs/root/cli.js`、graph flags=7 已核对；上述缓存和计费函数及上游两个分类函数在补丁前后与上游 v1.3.94 源码逐字一致；`cli-node-v1.3.91` 模式复现出上一版相同的补丁源码哈希。
-
-本次证据见 [CLI_UPSTREAM_MERGE_EVIDENCE.json](CLI_UPSTREAM_MERGE_EVIDENCE.json)。旧版实际 Rust 内核联调证据保留在 [CLI_SYSTEM_PATCH_EVIDENCE.json](CLI_SYSTEM_PATCH_EVIDENCE.json)。
-
-未验证：生产 `/v1/messages`、真实 Anthropic 对该 beta、`safeguards` 及分类请求的响应、真实 Windows Claude Code auto mode、真实缓存命中率和长时间观察。
+未验证：真实 Anthropic、生产请求、Windows Claude Code auto mode、真实缓存命中和长期运行；本次 safeguards 抓取复用分类路径，普通请求 system/TTL 热切换未重跑。上线后仍需按 RUNBOOK 验证请求级路由。
 
 ## 维护与复现
 
-当前 cli-node 原始文件从 `cb585bb63df4fbada4005306299f60fdfb1b1996:share/wrap-cli/cli-node` 导出（SHA-256 `7b23385e…`）；cc-node 原始文件从 `336729010c6040236bdcd507923737eb4abb1178:share/wrap-cli/cc-node` 导出。用 Git Bash 或 Linux 的 `git show <commit>:<path> > file` 二进制安全导出，不通过 PowerShell 文本重定向。
+当前原始 CLI 从 `cc438892e8c4f20837c56c8d13ec58619b97fc1d:share/wrap-cli/cli-node` 导出（SHA-256 `643f5523…`）；cc-node 从 `336729010c6040236bdcd507923737eb4abb1178:share/wrap-cli/cc-node` 导出。用 Git Bash 或 Linux 的 `git show <commit>:<path> > file` 二进制安全导出，不通过 PowerShell 文本重定向。
 
-提取工具在部署仓库 `scripts/research/extract-cli-bundle.py` 支持同一 Bun 格式的带/不带 shebang 两种入口；正式旧研究产物 `../artifacts/cli-node-rebuild/` 保持原样。
-
-固定使用 **官方 Bun 1.3.14+0d9b296af linux-x64-baseline**，压缩包 SHA-256：`a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7`；UPX 5.2.1（`upx-5.2.1-amd64_linux.tar.xz`）。不要用嵌入式 CLI 的 `BUN_BE_BUN` 编译替代官方构建器；该方式生成的 ELF 启动崩溃，已弃用。
-
-在 Linux 临时目录执行（Bun、UPX 使用已核对工具路径）：
+提取工具为部署仓库 `scripts/research/extract-cli-bundle.py`。固定使用官方 **Bun 1.3.14+0d9b296af linux-x64-baseline**，压缩包 SHA-256 `a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7`；UPX 5.2.1（`upx-5.2.1-amd64_linux.tar.xz`）。不要用嵌入 CLI 的 `BUN_BE_BUN` 替代官方编译器。
 
 ```bash
 upx -d -o cli-node.unpacked cli-node.original
@@ -85,6 +69,6 @@ python /repo/scripts/patch-cli-system.py cli-node cli-node.unpacked cli-node.pat
 upx -1 -o cli-node.fixed build/cli.js
 ```
 
-cc-node 仍使用脚本的 `cc-node` 模式及其固定基线；旧 cli-node 使用 `legacy-cli-node`。保留输出名 `cli.js`，重命名成品不影响内嵌入口。重新构建可能改变 ELF 整体哈希，必须同时核对源码、graph flags 和请求形状；分类请求可用上游 `test/e2e/auto-mode.e2e.test.mjs`（`KIN_AUTOMODE_CLI` 指向新成品）在 Linux 下核对。
+保留输出名 `cli.js`。重建可能改变整体 ELF 哈希，需核对源码、graph flags、官方运行时与请求形状；现有 `test/e2e/auto-mode.e2e.test.mjs` 支持 `KIN_AUTOMODE_CLI` / `KIN_AUTOMODE_KERNEL` 指向验证产物。
 
-发布时通过 fork 镜像安装已验证二进制，不能只改某个运行槽位。管理端下载上游 Release 会覆盖 fork CLI；使用后需重新核对 PATCH.json。生产上线仍按部署 RUNBOOK 执行备份、空闲确认、构建隔离、出口恢复及请求级验证。
+发布通过 fork 镜像安装二进制，不能只改某个运行槽位。管理端下载上游 Release 会覆盖 fork CLI，使用后必须重新核对 PATCH.json。生产上线仍按部署 RUNBOOK 做一次备份、构建隔离、出口恢复和请求级验证。

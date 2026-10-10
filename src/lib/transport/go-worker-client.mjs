@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { prepareOutboundHeaders } from '../protocol/outbound-attempt.mjs'
 import { sanitizeAnthropicBodyForBetaTokens } from '../protocol/anthropic-policy.mjs'
-import { downgradeUngatedThinkingDisplay } from '../protocol/thinking.mjs'
+import { withRequestProtocolBetas } from '../protocol/claude-code-betas.mjs'
 import { sealClaudeCodeCch } from '../identity/cch.mjs'
 import { preserveClientToolEnvironment } from '../identity/client-tool-environment.mjs'
 import { credentialModeFromOauth } from '../oauth/credential-mode.mjs'
@@ -416,11 +416,11 @@ export function finalizeWorkerPayload({ body, reqHeaders, exec, identity, want1m
     credentialMode: credMode,
     want1m: want1m === true,
   })
-  const beta = headers?.['anthropic-beta'] || ''
-  // cli-hop must not run the full beta sanitizer: that lifts role=system and
-  // breaks the cached prefix. display=updates is still gated by a beta this
-  // header rebuild often drops.
-  const gated = cliHop ? downgradeUngatedThinkingDisplay(body, beta) : sanitizeAnthropicBodyForBetaTokens(body, beta)
+  const betas = withRequestProtocolBetas(String(headers?.['anthropic-beta'] || '').split(','), body)
+  headers['anthropic-beta'] = betas.join(',')
+  // Envelope headers are discarded; the existing MessageRequest.betas channel
+  // carries request gates to the native CLI, which builds the actual HTTP wire.
+  const gated = cliHop ? { ...body, betas } : sanitizeAnthropicBodyForBetaTokens(body, headers['anthropic-beta'])
   return { headers, body: sealClaudeCodeCch(preserveClientToolEnvironment(gated)) }
 }
 

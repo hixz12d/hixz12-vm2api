@@ -515,7 +515,7 @@ export function CredentialFlow() {
                     : '这个账号的所有请求都从这条代理出去，官方看到的就是它的 IP。选一条现成的，或粘贴一条新的 SOCKS5。'
                 }
               >
-                <ImportProxyStep vmId={vmId} />
+                <ImportProxyStep vmId={vmId} nodeId={current?.node_id} />
               </Block>
             ) : null}
 

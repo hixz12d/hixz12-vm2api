@@ -47,6 +47,7 @@ import {
   scoreFactors,
 } from './smart-score.mjs'
 import { PLATFORM_SCOPE, normalizeOwnerId, vmMatchesOwnerScope } from '../admin/resource-owner.mjs'
+import { keyAllowsVm } from '../admin/key-scope.mjs'
 import {
   kernelFaults,
   rustKernelBusy,
@@ -389,6 +390,7 @@ export class PoolScheduler extends EventEmitter {
     deviceVmId = null,
     ownerScope = PLATFORM_SCOPE,
     groupScope = null,
+    keyScope = null,
     stickyKeys = null,
   } = {}) {
     const startedAt = Date.now()
@@ -436,6 +438,7 @@ export class PoolScheduler extends EventEmitter {
         retryAccountId,
         ownerScope,
         groupScope,
+        keyScope,
       })
       // A gated family home (quota, credential, excluded) is a migration
       // signal for the caller. Busy is not: it still yields a candidate.
@@ -555,6 +558,7 @@ export class PoolScheduler extends EventEmitter {
     deviceVmId = null,
     ownerScope = PLATFORM_SCOPE,
     groupScope = null,
+    keyScope = null,
   } = {}) {
     const startedAt = Date.now()
     const failoverDeadline = Number(deadline) || Number.POSITIVE_INFINITY
@@ -597,7 +601,7 @@ export class PoolScheduler extends EventEmitter {
       for (;;) {
         if (signal?.aborted) throw makeAbortError()
         if (ticket?.granted) return finish(ticket.granted)
-        candidates = await this.eligibleCandidates({ model, excluded, signal, retryAccountId, ownerScope, groupScope })
+        candidates = await this.eligibleCandidates({ model, excluded, signal, retryAccountId, ownerScope, groupScope, keyScope })
         // A grant can land while eligibility was being re-read.
         if (ticket?.granted) return finish(ticket.granted)
         if (familyVm && !candidates.some((candidate) => candidate.vmId === familyVm)) familyGated = true
@@ -889,6 +893,7 @@ export class PoolScheduler extends EventEmitter {
     retryAccountId = null,
     ownerScope = PLATFORM_SCOPE,
     groupScope = null,
+    keyScope = null,
   } = {}) {
     const now = Date.now()
     this.runtimeRepo?.clearExpired?.(now)
@@ -906,6 +911,7 @@ export class PoolScheduler extends EventEmitter {
       if (!pin && platformMismatch(model, vm)) continue
       if (!vmMatchesOwnerScope(vm, ownerScope)) continue
       if (groupScope && !groupScope.allowsVm(vm.id)) continue
+      if (!keyAllowsVm(keyScope, vm)) continue
       const accountId = accountIdOf(vm, this.projectRoot)
       if (!accountId || excluded.has(accountId) || excluded.has(vm.id)) continue
       // Explicit affinity narrows candidates without bypassing group or quota gates.
@@ -1400,8 +1406,8 @@ export class PoolScheduler extends EventEmitter {
   }
 
   /** Read-only current account. Never bind, unbind, or reserve. */
-  async peekAccount({ model, stickyKey = null, signal, ownerScope = PLATFORM_SCOPE, groupScope = null } = {}) {
-    const candidates = await this.eligibleCandidates({ model, signal, ownerScope, groupScope })
+  async peekAccount({ model, stickyKey = null, signal, ownerScope = PLATFORM_SCOPE, groupScope = null, keyScope = null } = {}) {
+    const candidates = await this.eligibleCandidates({ model, signal, ownerScope, groupScope, keyScope })
     if (!candidates.length) {
       const empty = emptyPoolFailure(model, candidates)
       return { ok: false, code: empty.reason, retry_after_ms: empty.retry_after_ms }

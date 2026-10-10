@@ -1,3 +1,5 @@
+export type KeyGroupType = 'all' | 'anthropic' | 'openai' | 'pool'
+
 export type KeyLimitsDraft = {
   name: string
   category: 'oauth' | 'api'
@@ -7,6 +9,9 @@ export type KeyLimitsDraft = {
   quota_usd: number
   rpm: number
   expires_in_days: number
+  group_type: KeyGroupType
+  allowed_vms: string[]
+  vm_pool_id?: string
 }
 
 function nonNegative(value: number, label: string): number {
@@ -15,13 +20,17 @@ function nonNegative(value: number, label: string): number {
   return value
 }
 
+function groupTypeOf(value: string): KeyGroupType {
+  if (value === 'anthropic' || value === 'openai') return value
+  return 'all'
+}
+
 export function keyLimitsPayload(
   draft: KeyLimitsDraft,
   mode: 'create' | 'edit'
 ): Record<string, unknown> {
   const requests = nonNegative(draft.quota_requests, '请求额度')
   if (!Number.isInteger(requests)) throw new Error('请求额度必须是整数')
-
   const body: Record<string, unknown> = {
     category: draft.category,
     max_concurrency: nonNegative(draft.max_concurrency, '并发'),
@@ -33,6 +42,25 @@ export function keyLimitsPayload(
     if (!Number.isSafeInteger(draft.group_id) || draft.group_id <= 0)
       throw new Error('请选择有效分组')
     body.group_id = draft.category === 'api' ? 1 : draft.group_id
+  }
+  if (draft.group_type === 'pool') {
+    const vm_pool_id = String(draft.vm_pool_id || '').trim()
+    if (!vm_pool_id) throw new Error('选择一个账号池')
+    body.group_type = 'all'
+    body.allowed_vms = []
+    body.vm_pool_id = vm_pool_id
+  } else {
+    const group_type = groupTypeOf(draft.group_type)
+    const allowed_vms =
+      group_type === 'all'
+        ? []
+        : [...new Set(draft.allowed_vms.map((id) => id.trim()).filter(Boolean))]
+    if (group_type !== 'all' && allowed_vms.length === 0) {
+      throw new Error('至少选择一台 VM')
+    }
+    body.group_type = group_type
+    body.allowed_vms = allowed_vms
+    if (draft.vm_pool_id !== undefined) body.vm_pool_id = null
   }
   if (mode === 'create') {
     body.name = draft.name.trim()
