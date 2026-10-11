@@ -153,6 +153,31 @@ function fableRequiresMaxError(details = {}) {
   }
 }
 
+const QUOTA_GUARD_TOO_LARGE_MESSAGE =
+  '临近额度闸线，本请求预估未命中缓存过大，未发往上游。请缩短上下文、等待窗口重置，或稍后再试。'
+
+function quotaGuardTooLargeError(details = {}) {
+  return {
+    ok: false,
+    status: 429,
+    via: 'pool-failover',
+    terminalState: 'exhausted',
+    body: {
+      type: 'error',
+      error: {
+        type: 'rate_limit_error',
+        code: 'quota_guard_request_too_large',
+        message: QUOTA_GUARD_TOO_LARGE_MESSAGE,
+        details: {
+          ...details,
+          message_en:
+            'Near the quota safety line, this request looks like a large uncached prompt and was not sent upstream.',
+        },
+      },
+    },
+  }
+}
+
 function selectedHasRefresh(selected) {
   if (selected?.hasRefresh === true || selected?.hasRefresh === false) return selected.hasRefresh
   const cred = selected?.workerStatus?.credential || selected?.state?.worker_status?.credential || {}
@@ -373,6 +398,7 @@ function selectionFailure(selected, { excluded, lastPolicy, lastResult, hops }) 
   }
   if (CAPACITY_SELECTION_REASONS.has(reason)) return poolOverloadedError(details)
   if (reason === 'pool_rate_limited') return poolRateLimitedError(details)
+  if (reason === 'quota_guard_request_too_large') return quotaGuardTooLargeError(details)
   return poolError('account_pool_exhausted', 'No eligible Claude accounts remain', details)
 }
 
@@ -577,6 +603,7 @@ export class FailoverRunner {
     groupScope = null,
     keyScope = null,
     countUsage = true,
+    quotaRequest = null,
   } = {}) {
     if (!this.scheduler) throw new Error('FailoverRunner requires a scheduler')
     if (typeof callAttempt !== 'function') throw new Error('FailoverRunner requires callAttempt')
@@ -706,6 +733,10 @@ export class FailoverRunner {
           ownerScope,
           groupScope,
           keyScope,
+          quotaRequest: {
+            body: requestBody,
+            sessionId: outboundSessionId || quotaRequest?.sessionId || stickyKey,
+          },
         }
         if (avoid) {
           const elsewhere = await this.scheduler.selectAndReserve({ ...selectArgs, avoid, allowWait: false })

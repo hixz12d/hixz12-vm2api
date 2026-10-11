@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpCircle, Copy, ExternalLink, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
@@ -21,10 +21,34 @@ async function copyText(text: string) {
 
 export function AboutPane() {
   const qc = useQueryClient()
-  const version = useQuery(versionQueryOptions())
+  const [upgradeTarget, setUpgradeTarget] = useState<string | null>(null)
+  const version = useQuery({
+    ...versionQueryOptions(),
+    refetchInterval: (query) =>
+      upgradeTarget || query.state.data?.upgrade?.state === 'running'
+        ? 2000
+        : false,
+  })
   const changelog = useQuery(changelogQueryOptions())
   const [confirmOpen, setConfirmOpen] = useState(false)
   const data = version.data
+  const updateRunning = !!upgradeTarget || data?.upgrade?.state === 'running'
+
+  useEffect(() => {
+    if (!upgradeTarget) return
+    if (data?.upgrade?.target !== upgradeTarget) return
+    if (data.upgrade.state === 'failed') {
+      setUpgradeTarget(null)
+      toast.error('升级失败，后端未完成验证，请检查更新日志')
+    } else if (
+      data.upgrade.state === 'succeeded' &&
+      data.current_tag === upgradeTarget
+    ) {
+      setUpgradeTarget(null)
+      window.location.reload()
+    }
+  }, [data, upgradeTarget])
+
   const upgrade = useMutation({
     mutationFn: () =>
       api<ReleaseStatus>('/api/panel/update', {
@@ -40,14 +64,11 @@ export function AboutPane() {
         toast.success(`已是最新 ${payload.current_tag}`)
         return
       }
-      toast.success(
-        payload?.started
-          ? `已开始升级到 ${payload.target || payload.latest_tag}，控制面会短暂中断，稍后刷新`
-          : '已返回升级命令'
-      )
-      await qc.invalidateQueries({
-        queryKey: versionQueryOptions().queryKey,
-      })
+      if (payload?.started) {
+        setUpgradeTarget(payload.target || payload.latest_tag)
+        qc.setQueryData(versionQueryOptions().queryKey, payload)
+        toast.info(`正在升级到 ${payload.target || payload.latest_tag}`)
+      }
     },
     onError: (error: Error) => {
       setConfirmOpen(false)
@@ -67,7 +88,8 @@ export function AboutPane() {
         error instanceof TypeError ||
         /failed to fetch|network|load failed/i.test(error.message)
       ) {
-        toast.success('服务正在重启，稍等一会儿再刷新本页')
+        toast.info('连接中断，正在检查后端更新状态')
+        void qc.invalidateQueries({ queryKey: versionQueryOptions().queryKey })
         return
       }
       toast.error(error.message)
@@ -130,6 +152,19 @@ export function AboutPane() {
               GitHub 不可达（{data.source_error}）。仍可复制宿主机命令。
             </p>
           ) : null}
+          {updateRunning ? (
+            <Alert>
+              <AlertTitle>
+                正在更新到 {upgradeTarget || data?.upgrade?.target}
+              </AlertTitle>
+              <AlertDescription>等待后端重启和版本验证。</AlertDescription>
+            </Alert>
+          ) : data?.upgrade?.state === 'failed' ? (
+            <Alert variant='destructive'>
+              <AlertTitle>更新失败</AlertTitle>
+              <AlertDescription>{data.upgrade.log_command}</AlertDescription>
+            </Alert>
+          ) : null}
           {data?.needs_wrap_cli_sync ? (
             <Alert>
               <AlertTitle>升级后还要重装账号里的内核</AlertTitle>
@@ -159,7 +194,7 @@ export function AboutPane() {
         </CardHeader>
         <CardContent className='space-y-3'>
           <p className='text-sm text-muted-foreground'>
-            在服务器上执行下面的命令升级。会保留配置（.env）、账号数据（vms、data），不会删除任何账号的运行环境。
+            定制部署请使用运维发布脚本，避免覆盖定制功能。以下更新入口仅适用于上游原版部署；会保留配置和账号数据，不删除账号容器。
           </p>
           <pre className='overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs'>
             {data?.upgrade_command ||
@@ -182,7 +217,9 @@ export function AboutPane() {
             </Button>
             <Button
               size='sm'
-              disabled={!data?.update_available || upgrade.isPending}
+              disabled={
+                !data?.update_available || upgrade.isPending || updateRunning
+              }
               onClick={() => setConfirmOpen(true)}
             >
               <ArrowUpCircle />
@@ -213,7 +250,7 @@ export function AboutPane() {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`升级到 ${data?.latest_tag || ''}？`}
-        desc='会重建管理服务的容器，这段时间管理台和对外接口都会暂时打不开。不会删除账号，也不改配置和数据。如果你用的是双实例轮换部署，请按部署文档手动升级，不要点这里。'
+        desc='会重建管理服务的容器，管理台和对外接口会短暂不可用。定制部署应使用运维发布脚本，保留账号、配置和 CLI 补丁。'
         confirmText='开始升级'
         cancelBtnText='取消'
         destructive

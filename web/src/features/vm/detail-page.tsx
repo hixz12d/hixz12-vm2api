@@ -68,6 +68,7 @@ import {
   type SyncResult,
 } from '@/features/vm/probe-status'
 import { vmQueryOptions, vmSeedQueryOptions } from '@/features/vm/queries'
+import { RuntimeChip } from '@/features/vm/runtime-chip'
 import {
   SchedulableSwitch,
   vmSchedulableProps,
@@ -311,6 +312,7 @@ export function VmDetailPage() {
             <Lamp tone={lamp.lamp} className='size-3' />
             <LabelStrip className='text-sm'>{vm.name || vm.id}</LabelStrip>
             <PlatformChip vm={vm} />
+            <RuntimeChip vm={vm} className='text-[11px]' />
             <NodeChip nodeId={vm.node_id} className='text-[11px]' />
             {claudeTier(vm).key !== 'none' ? (
               <StatusMark tone={claudeTier(vm)} variant='pill' />

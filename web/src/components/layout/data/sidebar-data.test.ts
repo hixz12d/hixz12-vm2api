@@ -30,7 +30,7 @@ describe('sidebar permissions', () => {
         '/risk',
         '/proxies',
         '/settings',
-        '/statistics',
+        '/specs',        '/statistics',
         '/system',
         '/usage',
         '/users',

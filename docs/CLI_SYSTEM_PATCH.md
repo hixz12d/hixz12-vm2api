@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-源码融合上游 `e1a91e46`（v1.3.135）。仓内 `cli-node` 基于上游 `cc438892`（Claude Code 2.1.293）提取，应用 `caller-system-v3+safeguards-v1` 并用官方 Bun 重建；`cc-node` 保持已验证的 `caller-system-v1` 二进制。`bin/kin-kernel` 与槽位 `kin-kernel.bin` 已采用上游相同内容，新 Node、内核和 CLI 应一起上线。下文仅记录本地验证，生产状态以部署仓库 `docs/RUNBOOK.md` 为准。
+源码融合上游 `984f108e`（v1.3.144）；新版 payload 的 CLI 基线与现有补丁相同，本次保留已校验二进制，不重新打补丁。仓内 `cli-node` 基于上游 `cc438892`（Claude Code 2.1.293）提取，应用 `caller-system-v3+safeguards-v1` 并用官方 Bun 重建；`cc-node` 保持已验证的 `caller-system-v1` 二进制。`bin/kin-kernel` 与槽位 `kin-kernel.bin` 已采用上游相同内容，新 Node、内核和 CLI 应一起上线。下文仅记录本地验证，生产状态以部署仓库 `docs/RUNBOOK.md` 为准。
 
 唯一补丁实现是 `scripts/patch-cli-system.py`，固定输入源码 SHA-256；未知上游版本拒绝应用。`cli-node` 对应当前上游；`cli-node-v1.3.123`、`cli-node-v1.3.103`、`cli-node-v1.3.94`、`cli-node-v1.3.91`、`cli-node-v1.3.88`、`cli-node-v1.3.85` 可复现旧版；`cc-node` 对应原固定基线，`legacy-cli-node` 对应早期补丁。逐文件基线和成品哈希见 [PATCH.json](../share/wrap-cli/PATCH.json)。
 

@@ -422,7 +422,7 @@ export function VmListPage() {
                   无法恢复：运行环境、凭证、出口代理绑定会一起删除，它所在的分组里也会少掉它。
                 </p>
                 <p className='text-muted-foreground'>
-                  如果它是当前正在调度的账号，要先在详情页把调度切到别的账号。输入{' '}
+                  还有其他账号时，当前活跃账号需先切换活跃再删除；仅剩一个时可以直接删除。输入{' '}
                   <b className='text-foreground'>{deleteTarget.id}</b> 确认。
                 </p>
               </div>

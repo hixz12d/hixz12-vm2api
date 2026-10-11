@@ -28,7 +28,9 @@ VM2API_DB_SECRET='再一串'
 
 不是一个父容器里多个子进程。
 
-原生 Claude 槽默认内存上限为 `1g`，可用 `KIN_VM_MEMORY` 显式覆盖。常驻 native host 与临时官方 CLI 同时运行会超过旧的 `500m` 上限；额度 API 探测本身不应额外启动推理 CLI。已有容器不会因控制面升级自动扩大限制，可在核对宿主余量后使用 `docker update --memory 1g --memory-swap 1g kin-<槽>`，不重建容器。
+槽位默认内存上限为 `512m`，在面板「规格」或 `routing.json` 的 `vm.memory` 配置（`256m` / `512m` / `1g` / `2g` / `4g` / `8g` / `16g`）。创建时可按槽覆盖，结果写在该槽 `vm.machine.memory`。已不再读取 `KIN_VM_MEMORY`。低于 1G 时，常驻 native host 与临时官方 CLI 同时运行可能 OOM；额度 API 探测本身不应额外启动推理 CLI。已有容器不会因控制面升级自动改内存，可在核对宿主余量后使用 `docker update --memory 1g --memory-swap 1g kin-<槽>`，不重建容器。
+
+KVM 槽需要宿主 `/dev/kvm` 可读写（控制面在容器内时，用一次 `--device /dev/kvm` 的探测容器确认）。没有 KVM 时不要在生产打开 `vm.allow_tcg`：那是 TCG 软件模拟，仅供测试。
 
 出现 `native stdin: Broken pipe` 时同时检查容器 OOM 事件与 CLI 子进程，不能只看 Rust PID 1 是否存活。CLI 退出或输出管道关闭后，内核必须清零 `cli_pid` / `ready_slots`、终止在途请求并拒绝新任务，由宿主 watchdog 恢复槽；不重放已发送的推理请求。
 
@@ -78,6 +80,7 @@ cd /opt/vm2api && cp .env.example .env && chmod 600 .env
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
+本 fork 继续随 Git 发布已校验的内核、补丁 CLI 和本地构建的 `web/dist`，不自动下载原版 payload 覆盖定制。前端改动后先运行 `pnpm -C web build`，再构建控制面镜像。
 本 fork 默认沿用本地 Ubuntu、Debian、Arch、Fedora 四种 `kin-os/*` 标签，不会自动切换现有槽位的镜像名称。入口默认串行准备缺失镜像，生产环境应提前构建：
 
 ```bash
@@ -189,11 +192,11 @@ location / {
 
 ## 本机 Node（备选）
 
-仓内已有 `bin/kin-*`。还要 `npm ci`、`pnpm -C web install --frozen-lockfile && npm run build:web`，以及占位 `vms/active.json`。单元：[deploy/vm2api.service](deploy/vm2api.service)。细节见 [BUILD.md](BUILD.md)。
+`npm run fetch:payload` 拉 `bin/kin-{kernel,codex-kernel,oauth-auth}` 与 `share/`；`npm run build:egress && npm run build:worker`；`npm ci`、`pnpm -C web install --frozen-lockfile && npm run build:web`；以及占位 `vms/active.json`。单元：[deploy/vm2api.service](deploy/vm2api.service)。细节见 [BUILD.md](BUILD.md)。
 
 ## 一键安装 / 更新
 
-`deploy/install.sh` 默认拉 ghcr 预构建镜像，不在目标机编译。控制台是仓内 `web/dist`，打进镜像，不再在镜像构建里跑 `pnpm build`。`--from-source` 也只拷贝这份预编译产物。不碰已有非空 `.env` 字段、`vms/`、`data/`，不 `docker rm` 槽。
+`deploy/install.sh` 默认拉 ghcr 预构建镜像，不在目标机编译，只下载 `docker-compose.yml`、`.env.example`、`VERSION`、`CHANGELOG.md`、`deploy/install.sh`（ARM64 另加 `deploy/prepare-arm64.py`）。`--from-source` 在目标机按 `Dockerfile` 多阶段构建：编 `web/dist` 与 Go helper，按 `deploy/payload.json` 下载 payload。不碰已有非空 `.env` 字段、`vms/`、`data/`，不 `docker rm` 槽。
 
 ### 两类安装错误
 
@@ -227,7 +230,7 @@ sudo bash /opt/vm2api/deploy/install.sh upgrade --version v1.2.22
 sudo bash /opt/vm2api/deploy/install.sh check
 ```
 
-面板：`GET /api/panel/version`、`GET /api/panel/changelog`、`POST /api/panel/update`（`{ confirm: true }` 才会在已挂 `docker.sock` 的机器上拉起升级助手）。容器里没有宿主机 git 仓时返回 `409 host_upgrade_required`，响应里带同一条 curl 命令。
+面板：`GET /api/panel/version`、`GET /api/panel/changelog`、`POST /api/panel/update`。确认更新后，控制面会通过已挂载的 `docker.sock` 自省当前 Compose 项目和全部配置文件，拉起独立升级助手。助手记录更新前正常运行的槽位，按源码/镜像模式更新，保留已有 `src/config` 配置并 `--force-recreate` 控制面；通过健康检查、版本接口和槽位详情接口确认后端版本正确、此前健康的槽内内核仍能通过控制面鉴权，完成后才报告成功。忙碌但进程健康的槽位不视为故障；更新前已故障或停止的槽位不计入本次回归检查。助手失败时保留 `docker logs vm2api-upgrade-<project>`；容器里没有可识别的 Compose 服务时返回 `409 host_upgrade_required`，响应里带同一条 curl 命令。槽位内核健康检查不调用模型，不消耗上游额度。
 
 ## 已部署机升级到 1.2.22
 

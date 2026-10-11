@@ -1,8 +1,15 @@
 # Fork 运行兼容性
 
-## 当前策略：优先采用上游 v1.3.135
+## 当前策略：优先采用上游 v1.3.144
 
-融合上游 `e1a91e46`（v1.3.135，新增 v1.3.124–v1.3.135）。保留 fork 历史与定制管理台，源码、预编译前端及 CLI 补丁同步维护。本地合并不代表已提交、推送或上线；生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
+融合上游 `984f108e`（v1.3.144，新增 v1.3.136–v1.3.144）。上游 v1.3.140 重写历史并删除预编译产物；本次以已融合的旧上游 `e1a91e46` 文件树为三方基线，保留 fork 已发布历史并把新版上游作为合并父节点，不强推重写旧提交。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
+
+- 采用新版 KVM/运行规格与账号导入流程、pi 消息级 effort、默认工具参数流式下发、临界额度大请求保护、代理改绑/标志修复、继承全局引擎的 watchdog、租户日志隔离（迁移 `036`）、默认关闭的 Claude Code 专用入口、策略拒绝日志、空账号池启动与决策模型 key 池。运行规格与新导入页沿用 fork 的主题与账号叫法；既有账号仍保持 Docker 形态，不转成 KVM。
+- 分组隔离保留：`eligibleCandidates` 的重读同时携带 `retryAccountId`、`groupScope`、`keyScope` 与新版 `quotaRequest`；健康缓存仍经 `healthDecisionForGroup`。新额度保护只缩小组内候选，不能跨组回退；watchdog 继续默认 3 秒探测、连续 3 次失败。
+- 内存兼容：`routing.vm.memory` 优先，未配置时兼容现有 `KIN_VM_MEMORY`；前后端均支持 `1536m`，保持生产 1.5 GiB 默认，不悄悄降到 512 MiB。显式规格不被环境变量覆盖，现有容器不重建。
+- 构建继续采用 fork 已验证的产物契约：`web/dist` 在本地从融合源码重建并入库，内核及补丁 CLI 继续入库，生产镜像只打包，不在受限 VPS 上重编前端或下载原版 CLI。上游 `deploy/payload.json` 与 fetch 工具保留供核验，但不进入 fork 的 Dockerfile。新增 KVM 构建上下文入镜像；Docker/KVM 请求路径均只检查已准备镜像，不现场拉取或构建。
+- 上游 payload 的 `cli-node` / `cc-node` 原版哈希与当前 PATCH.json 的补丁基线一致，本次不重打 CLI 补丁，不替换任何运行二进制。保留 trixie glibc 兼容、OAuth JSON 启动检查、crag 安装、调用方 system 与 safeguards 门禁。发布拉上游使用 `--no-tags`，不覆盖重写前的本地标签。
+- KVM/远程槽特征采集走上游 guest reader；本地 Docker 槽保留 fork 的 Python 采集器与字段验证。KVM runner 镜像在未配置注册表时仍使用上游完整 registry 名，不产生以 `/` 开头的非法标签。
 
 - 采用 v1.3.124–v1.3.135：密钥平台 / 账号范围、可复用账号池、账号 JSON 导入导出、风险审计替代协议页、模型页与 Haiku 5.5 默认 100K 上限、可配置流空闲超时和可选工具参数流式下发、缓存命中统计修复、OAuth 换票状态修复、代理 IPv6 地理信息、节点本地出口及透明 TCP 按唯一 DNS 域名转发。新增迁移 `032`–`035`；上线前必须备份，不覆盖生产持久配置。
 - 上游 `keyScope` 与 fork `groupScope` 取交集：Claude 直接选号、设备座位、排队、只读额度 / token 查询及 Codex 候选均保留两个限制，空池不放宽到全局。原 `group_id` 分组、分组修改权限、智能评分和账号同步不变；上游 `vm_pool_id` 不自动迁移或替换现有分组。

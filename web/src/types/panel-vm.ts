@@ -28,6 +28,13 @@ export type ProxyGeo = {
   error?: string | null
 }
 
+export type LocalBoundNode = {
+  node_id: string | null
+  /** Admin-only display name. Tenants never receive this field. */
+  node_name?: string | null
+  bound_vm_ids: string[]
+}
+
 export type VmProxySnap = {
   id?: string
   host?: string
@@ -57,6 +64,15 @@ export type VmProxySnap = {
   geo?: ProxyGeo | null
   /** 公网 IPv6 出口地理位置；从未检测过为 null。 */
   geo_v6?: ProxyGeo | null
+  /** 槽位所在节点；仅本地代理的槽位视图会带。共享池行没有这一项。 */
+  node_id?: string | null
+  /**
+   * 节点显示名。Admin 本地代理槽位视图：控制面为 null，节点为标签。
+   * 字段出现即允许展示节点名；租户响应省略该字段。
+   */
+  node_name?: string | null
+  /** Admin 本地代理池行：按节点分组的绑定。租户省略。 */
+  bound_nodes?: LocalBoundNode[]
 }
 
 export type InferenceEngine = 'auto' | 'go' | 'rust'
@@ -109,12 +125,50 @@ export type VmCircuit = {
   open_ms: number
 }
 
+/** 槽位执行形态。缺省按 docker 展示。 */
+export type RuntimeType = 'docker' | 'kvm'
+
+/** `GET /cluster/local` 与 `GET /vms/create-options` 的 KVM 探测。 */
+export type KvmProbe = {
+  ok: boolean
+  accel: 'kvm' | 'tcg' | null
+  error: string | null
+}
+
+/** `GET /api/panel/vms/create-options` 剥壳后的 payload（`api()` 已拆 `data`）。 */
+export type VmCreateOptions = {
+  vm: unknown
+  kvm: KvmProbe
+}
+
+export type VmSmbios = {
+  manufacturer?: string
+  product?: string
+  version?: string
+  family?: string
+  serial?: string
+  uuid?: string
+}
+
+/** 创建时固化到槽位的机器规格。旧槽可能缺省。 */
+export type VmMachine = {
+  memory?: string
+  vcpus?: number
+  disk_gb?: number
+  cpu_model?: string
+  mac?: string
+  smbios?: VmSmbios
+  disk_serial?: string
+}
+
 export type Vm = {
   id: string
   name?: string
   owner_user_id?: string | null
   /** 所在集群节点；null / 缺省 = 本机。远端槽位不支持官方初装、wrap-cli、换内核等。 */
   node_id?: string | null
+  /** Admin-only cluster node label for `node_id`. Tenants never receive this. */
+  node_name?: string | null
   origin?: string | null
   email?: string
   status?: string
@@ -228,6 +282,11 @@ export type Vm = {
   dataplane?: 'wrap' | 'cc' | 'crag' | null
   resolved_dataplane?: 'wrap' | 'cc' | 'crag' | null
   kernel?: string
+  /** docker | kvm。缺省按 docker 展示。 */
+  runtime_type?: RuntimeType | null
+  /** 创建时固化的机器规格；旧槽可能缺省。 */
+  machine?: VmMachine | null
+
   region?: string
   /** 槽位环境时区（容器 `TZ` + persona `# Environment`）。 */
   timezone?: string | null

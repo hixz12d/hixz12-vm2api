@@ -198,6 +198,9 @@ function scopedSeatKey(seatKey, scope = PLATFORM_SCOPE, groupScope = null) {
  */
 function emptyPoolFailure(model, candidates, now = Date.now()) {
   if (isFableModel(model)) return { reason: 'fable_requires_max', retry_after_ms: null }
+  if ((candidates?.rejections?.quota_guard_request_too_large || 0) > 0) {
+    return { reason: 'quota_guard_request_too_large', retry_after_ms: null }
+  }
   const { rate_limited: limited = null, overloaded = null } = candidates?.cooldowns || {}
   if (overloaded != null) {
     const until = limited == null ? overloaded : Math.min(overloaded, limited)
@@ -392,6 +395,7 @@ export class PoolScheduler extends EventEmitter {
     groupScope = null,
     keyScope = null,
     stickyKeys = null,
+    quotaRequest = null,
   } = {}) {
     const startedAt = Date.now()
     const pinned = !!String(pinVmId || '').trim()
@@ -439,6 +443,7 @@ export class PoolScheduler extends EventEmitter {
         ownerScope,
         groupScope,
         keyScope,
+        quotaRequest,
       })
       // A gated family home (quota, credential, excluded) is a migration
       // signal for the caller. Busy is not: it still yields a candidate.
@@ -559,6 +564,7 @@ export class PoolScheduler extends EventEmitter {
     ownerScope = PLATFORM_SCOPE,
     groupScope = null,
     keyScope = null,
+    quotaRequest = null,
   } = {}) {
     const startedAt = Date.now()
     const failoverDeadline = Number(deadline) || Number.POSITIVE_INFINITY
@@ -601,7 +607,7 @@ export class PoolScheduler extends EventEmitter {
       for (;;) {
         if (signal?.aborted) throw makeAbortError()
         if (ticket?.granted) return finish(ticket.granted)
-        candidates = await this.eligibleCandidates({ model, excluded, signal, retryAccountId, ownerScope, groupScope, keyScope })
+        candidates = await this.eligibleCandidates({ model, excluded, signal, retryAccountId, ownerScope, groupScope, keyScope, quotaRequest })
         // A grant can land while eligibility was being re-read.
         if (ticket?.granted) return finish(ticket.granted)
         if (familyVm && !candidates.some((candidate) => candidate.vmId === familyVm)) familyGated = true
@@ -894,6 +900,7 @@ export class PoolScheduler extends EventEmitter {
     ownerScope = PLATFORM_SCOPE,
     groupScope = null,
     keyScope = null,
+    quotaRequest = null,
   } = {}) {
     const now = Date.now()
     this.runtimeRepo?.clearExpired?.(now)
@@ -902,6 +909,7 @@ export class PoolScheduler extends EventEmitter {
     // Accounts dropped by an upstream 429 / 529 cooldown; an empty pool reports
     // that cause (pool_rate_limited / pool_overload_cooldown) instead of 503.
     candidates.cooldowns = { rate_limited: null, overloaded: null }
+    candidates.rejections = { quota_guard_request_too_large: 0 }
     const pin = pinVmId ? String(pinVmId).trim() : ''
     for (const summary of summaries) {
       if (signal?.aborted) throw makeAbortError()
@@ -925,6 +933,7 @@ export class PoolScheduler extends EventEmitter {
         now,
         signal,
         pinned: !!pin,
+        quotaRequest,
       })
       if (!eligibility.ok) {
         const kind = eligibility.reason
@@ -932,6 +941,8 @@ export class PoolScheduler extends EventEmitter {
           const until = Number(eligibility.until) || 0
           const prev = candidates.cooldowns[kind]
           candidates.cooldowns[kind] = prev == null ? until : Math.min(prev, until)
+        } else if (kind === 'quota_guard_request_too_large') {
+          candidates.rejections.quota_guard_request_too_large += 1
         }
         continue
       }
@@ -964,13 +975,13 @@ export class PoolScheduler extends EventEmitter {
         availableAt: eligibility.availableAt || null,
         waitReason: eligibility.waitReason || null,
         cooldownReason: state?.cooldown_reason || null,
+        quotaRequest,
         exec: this.executionContext(vm, accountId),
       })
     }
     return candidates
   }
-
-  async checkEligibility({ vm, accountId, state, model, now, signal, pinned = false }) {
+  async checkEligibility({ vm, accountId, state, model, now, signal, pinned = false, quotaRequest = null }) {
     // sub2api IsSchedulable: rate_limit_reset_at / overload_until gate before any
     // passive Extra reading or health hop. Pins are diagnostics and still reach the slot.
     const hardBlock = pinned ? null : hardBlockOf(state, now)
@@ -1142,7 +1153,7 @@ export class PoolScheduler extends EventEmitter {
       if (familyInflight >= fableCap) markWait('fable_concurrency')
     }
     if (this.accountQuota && !pinned) {
-      const quotaGate = this.accountQuota.canAccept(accountId, { tier: vmTierOf(vm) })
+      const quotaGate = this.accountQuota.canAccept(accountId, { tier: vmTierOf(vm), quotaRequest })
       if (!quotaGate.ok) {
         if (quotaGate.reason === 'concurrency_limit') markWait('concurrency_limit')
         else if (quotaGate.reason === 'rpm_limit') markWait('rpm_limit', quotaGate.detail?.reset_at)
@@ -1485,6 +1496,7 @@ export class PoolScheduler extends EventEmitter {
     const quotaReservation = this.accountQuota?.tryAcquire?.(candidate.accountId, {
       skipGate: !!skipQuota,
       tier: vmTierOf(candidate.vm),
+      quotaRequest: candidate.quotaRequest,
     })
     if (quotaReservation && !quotaReservation.ok) return null
     // A pin is an operator diagnostic: it reaches the slot without taking the probe.
@@ -1516,6 +1528,7 @@ export class PoolScheduler extends EventEmitter {
 
   markSuccess(candidate, { workerStatus = null, countUsage = true } = {}) {
     const now = Date.now()
+    if (countUsage !== false) this.accountQuota?.noteBandSettled?.(candidate.accountId)
     const prev = this.runtimeRepo?.get?.(candidate.accountId)
     if (countUsage !== false) this.lastUsed.set(candidate.accountId, now)
     this.runtimeRepo?.upsert?.({

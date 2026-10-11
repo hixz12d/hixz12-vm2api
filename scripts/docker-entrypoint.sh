@@ -15,20 +15,9 @@ if [ -d /opt/vm2api/image-config ]; then
   done
 fi
 
-if [ ! -f "$ROOT/vms/active.json" ]; then
-  printf '%s\n' '{ "active_vm": "vm-01" }' > "$ROOT/vms/active.json"
-fi
-if [ ! -f "$ROOT/vms/vm-01.json" ]; then
-  cat > "$ROOT/vms/vm-01.json" <<'EOF'
-{
-  "id": "vm-01",
-  "name": "vm-01",
-  "status": "stopped",
-  "schedulable": false,
-  "policy": { "maxConcurrency": 2 }
-}
-EOF
-fi
+# No seeded vm-01. A fresh fleet is empty. Seeding an active placeholder made
+# the only slot undeletable: DELETE refuses the active VM, and the next start
+# would recreate the files.
 
 ensure_bin() {
   name="$1"
@@ -77,7 +66,6 @@ if [ -d /opt/vm2api/image-wrap-cli ]; then
     fi
   done
 fi
-
 if [ -f /opt/vm2api/image-crag/kin-kernel ]; then
   mkdir -p "$ROOT/share/crag"
   src="/opt/vm2api/image-crag/kin-kernel"
