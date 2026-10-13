@@ -195,8 +195,7 @@ export function OfficialCcSettingsPane({
             <p className='text-xs text-muted-foreground'>
               技术细节：安装过程固定走 cli-hop
               通道（inference.engine=rust），打完招呼后会在账号里查一次 /usage
-              来确认套餐等级，失败会重试 2 次。换内核组合在「设置 →
-              请求改写」或「内核」页。
+              来确认套餐等级，失败会重试 2 次。换内核组合在「内核」页。
             </p>
           </CollapsibleContent>
         </Collapsible>

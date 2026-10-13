@@ -12,6 +12,7 @@ import {
   type DetailState,
   LogDetailDialog,
 } from '@/features/logs/log-detail/log-detail-dialog'
+import { AccountScopeSettings } from './account-scope'
 import { Panel } from './blocks'
 import { DistillSettings } from './distill-settings'
 import { RiskFeed } from './feed'
@@ -147,6 +148,10 @@ export function RiskAuditPage() {
           今日计数读取失败：{(stats.error as Error).message}
         </p>
       ) : null}
+
+      <div className='mt-6'>
+        <AccountScopeSettings />
+      </div>
 
       <div
         id='risk-panel'

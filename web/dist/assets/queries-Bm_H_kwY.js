@@ -1,0 +1,1 @@
+import{h as e,j as t}from"./button-DQnB5G5k.js";function n(n){return t({queryKey:[`panel`,`dashboard`],queryFn:()=>e(`/api/panel/dashboard`),...n?{refetchInterval:n,refetchOnWindowFocus:!1}:{}})}function r(n){return t({queryKey:[`panel`,`usage`],queryFn:()=>e(`/api/panel/usage`),...n?{refetchInterval:n,refetchOnWindowFocus:!1}:{}})}export{r as n,n as t};

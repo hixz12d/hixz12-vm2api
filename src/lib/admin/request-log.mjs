@@ -639,6 +639,10 @@ export class RequestLogStore {
     return this.repo.totals()
   }
 
+  hasSuccessfulRequest(opts = {}) {
+    return this.repo.hasSuccessfulRequest(opts)
+  }
+
   billingStats(opts = {}) {
     return this.repo.billingStats(opts)
   }

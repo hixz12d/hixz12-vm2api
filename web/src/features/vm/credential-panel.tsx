@@ -385,12 +385,12 @@ function ClaudeCredentialPanel({
           <Hint>
             {kind === 'setup-token'
               ? !sessionKey.trim()
-                ? '粘贴浏览器 Cookie 里的 sessionKey（sk-ant-sid01- 开头），系统会通过这个账号的出口代理换一张完整权限的凭证，并在账号设置里打开 Help improve Claude。按 Setup Token 方式运行，不安装官方 Claude Code。直接贴 access token 也可以，但不会增加权限。'
+                ? '粘贴浏览器 Cookie 里的 sessionKey（sk-ant-sid01- 开头），系统会通过这个账号的出口代理换一张完整权限的凭证，换好后读取账号身份。按 Setup Token 方式运行，不安装官方 Claude Code。直接贴 access token 也可以，但不会增加权限。'
                 : SESSION_KEY_PREFIX.test(sessionKey.trim())
                   ? '认出是 sessionKey：会换一张完整权限的凭证，按 Setup Token 方式运行。'
                   : '认出是 access token：会按 Setup Token 直接保存，不增加权限。'
               : !sessionKey.trim()
-                ? '粘贴浏览器 Cookie 里的 sessionKey（sk-ant-sid 开头），系统会通过出口代理换一张完整权限的凭证，并在账号设置里打开 Help improve Claude。粘贴 access token 则直接保存，不增加权限。'
+                ? '粘贴浏览器 Cookie 里的 sessionKey（sk-ant-sid 开头），系统会通过出口代理换一张完整权限的凭证，换好后读取账号身份。粘贴 access token 则直接保存，不增加权限。'
                 : SESSION_KEY_PREFIX.test(sessionKey.trim())
                   ? '认出是 sessionKey：会换一张完整权限的凭证。'
                   : '认出是 access token：会直接保存，不增加权限。'}
@@ -469,8 +469,8 @@ function ClaudeCredentialPanel({
           </div>
           <Hint>
             {kind === 'setup-token'
-              ? `打开授权页的浏览器要走同一条代理（${proxyHint || '这个账号的出口代理'}），授权码要完整复制，包括 # 后面的部分。按 Setup Token 方式运行，不安装官方 Claude Code。`
-              : `打开授权页的浏览器要走同一条代理（${proxyHint || '这个账号的出口代理'}），授权码要完整复制，包括 # 后面的部分。`}
+              ? `打开授权页的浏览器要走同一条代理（${proxyHint || '这个账号的出口代理'}），授权码要完整复制，包括 # 后面的部分。换好后读取账号身份。按 Setup Token 方式运行，不安装官方 Claude Code。`
+              : `打开授权页的浏览器要走同一条代理（${proxyHint || '这个账号的出口代理'}），授权码要完整复制，包括 # 后面的部分。换好后读取账号身份。`}
           </Hint>
         </div>
       ) : (

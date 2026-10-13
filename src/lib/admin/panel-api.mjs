@@ -39,6 +39,7 @@ import { proxyBlockedReason } from '../vm/proxy-policy.mjs'
 import { socksProxyFamily, normalizeSocksHost } from '../vm/socks-address.mjs'
 import { accountTierKey, isNearLimit, normalizeTiers, resolveTierPolicy } from '../pool/quota-tiers.mjs'
 import { applyVmQuotaConfig, applyVmQuotaPolicy, vmQuotaOverrideOf, vmQuotaView } from '../pool/vm-quota-override.mjs'
+import { GATE_OPEN, gatePolicyFields, gateZone, quotaGateOf } from '../pool/quota-gate.mjs'
 import { inferClaudeTier } from '../pool/claude-tier.mjs'
 import { listQuotaFromHeaders, isOfficialWindowLimited } from '../pool/quota-window.mjs'
 import { hardBlockOf } from '../pool/rate-limit-service.mjs'
@@ -46,6 +47,7 @@ import { unitCircuit } from '../pool/unit-circuit.mjs'
 import { accountIdOf, normalizePoolRouting } from '../pool/pool-scheduler.mjs'
 import { codexMaxSessions } from '../pool/codex-slot-pool.mjs'
 import { resolveCredentialScheduleLevel } from '../pool/credential-weight.mjs'
+import { activeHoursZoneOf, evaluateActiveHours } from '../pool/active-hours.mjs'
 import {
   evaluateAccount,
   credStatusFromAvailability,
@@ -538,11 +540,13 @@ export async function buildDashboard({
       tokens_out: accounts.reduce((s, a) => s + (a.tokens_out || 0), 0),
       cache_read_tokens: accounts.reduce((s, a) => s + (a.cache_read_tokens || 0), 0),
       cache_creation_tokens: accounts.reduce((s, a) => s + (a.cache_creation_tokens || 0), 0),
-      ...cacheHitStats({
-        input_tokens: accounts.reduce((s, a) => s + (a.tokens_in || 0), 0),
-        cache_read_tokens: accounts.reduce((s, a) => s + (a.cache_read_tokens || 0), 0),
-        cache_creation_tokens: accounts.reduce((s, a) => s + (a.cache_creation_tokens || 0), 0),
-      }),
+      ...cacheHitStats(
+        billing?.total || {
+          input_tokens: accounts.reduce((s, a) => s + (a.tokens_in || 0), 0),
+          cache_read_tokens: accounts.reduce((s, a) => s + (a.cache_read_tokens || 0), 0),
+          cache_creation_tokens: accounts.reduce((s, a) => s + (a.cache_creation_tokens || 0), 0),
+        },
+      ),
       fable_max_per_account: Number(
         routingConfig?.concurrency?.fable_max_per_account ?? pool.fable_max_per_account ?? 4,
       ),
@@ -1086,17 +1090,20 @@ export async function buildProbeOne({
     lastProbe: qAfter.last_probe,
     probeSource: qAfter.probe_source,
     quota: qAfter,
-    policy: applyVmQuotaPolicy(
-      resolveTierPolicy(
-        {
-          tiers: accountQuota?.tiers,
-          quota: accountQuota?.config,
-          concurrency: accountQuota?.concurrency,
-        },
-        tier,
+    policy: {
+      ...applyVmQuotaPolicy(
+        resolveTierPolicy(
+          {
+            tiers: accountQuota?.tiers,
+            quota: accountQuota?.config,
+            concurrency: accountQuota?.concurrency,
+          },
+          tier,
+        ),
+        vmQuotaOverrideOf(vm),
       ),
-      vmQuotaOverrideOf(vm),
-    ),
+      ...gatePolicyFields(applyVmQuotaConfig(accountQuota?.config || {}, vmQuotaOverrideOf(vm))),
+    },
   })
   const data = {
     vm_id: id,
@@ -1439,11 +1446,13 @@ export function buildUsage({ accountQuota, cfg, requestLog = null }) {
       tokens_out: accounts.reduce((s, a) => s + (a.tokens_out || 0), 0),
       cache_read_tokens: accounts.reduce((s, a) => s + (a.cache_read_tokens || 0), 0),
       cache_creation_tokens: accounts.reduce((s, a) => s + (a.cache_creation_tokens || 0), 0),
-      ...cacheHitStats({
-        input_tokens: accounts.reduce((s, a) => s + (a.tokens_in || 0), 0),
-        cache_read_tokens: accounts.reduce((s, a) => s + (a.cache_read_tokens || 0), 0),
-        cache_creation_tokens: accounts.reduce((s, a) => s + (a.cache_creation_tokens || 0), 0),
-      }),
+      ...cacheHitStats(
+        billing?.total || {
+          input_tokens: accounts.reduce((s, a) => s + (a.tokens_in || 0), 0),
+          cache_read_tokens: accounts.reduce((s, a) => s + (a.cache_read_tokens || 0), 0),
+          cache_creation_tokens: accounts.reduce((s, a) => s + (a.cache_creation_tokens || 0), 0),
+        },
+      ),
       today_cost: billing?.today?.total_cost || 0,
       total_cost: billing?.total?.total_cost || 0,
       peak_5h: Math.max(0, ...accounts.map((a) => a.utilization_5h), 0),
@@ -1815,9 +1824,12 @@ function enrichVm(v, accountQuota, active, extras = {}) {
         },
         tierKey,
       )
-  const policy = isCodex ? openAIGlobalPolicy : applyVmQuotaPolicy(inheritedPolicy, quotaOverride)
+  const policy = isCodex
+    ? openAIGlobalPolicy
+    : { ...applyVmQuotaPolicy(inheritedPolicy, quotaOverride), ...gatePolicyFields(vmQuotaConfig) }
   const safety = Number(policy.limit_5h ?? policy.safety_ratio ?? 0.85)
   const weeklySafety = Number(policy.limit_7d ?? policy.weekly_safety_ratio ?? 0.8)
+  const quotaGate = quotaGateOf(policy)
   // Codex keeps its own conversation window (vm max_sessions); Claude rows report planner seats.
   const codexSessions = isCodex
     ? accountQuota?.sessions?.snapshot?.(acc?.account_id || v.account_uuid || v.id, {
@@ -1857,6 +1869,9 @@ function enrichVm(v, accountQuota, active, extras = {}) {
       v.cooldown_reason ||
       null,
   })
+  const activeHours = v.active_hours || null
+  const activeHoursZone = activeHoursZoneOf(activeHours, v)
+  const activeHoursState = evaluateActiveHours(activeHours, undefined, v.timezone)
   if (isCodex && v.quota_policy?.reason && (availability.accept || availability.key === 'quota')) {
     const window = v.quota_policy.reason.includes('5h') ? '5h' : '7d'
     Object.assign(availability, {
@@ -1867,6 +1882,18 @@ function enrichVm(v, accountQuota, active, extras = {}) {
       reason: v.quota_policy.reason,
       window,
       until: v.quota_policy.restricted_until,
+    })
+  }
+  // Rest only repaints a slot that would otherwise accept — real failures
+  // (revoke, quota, cooldown) keep their own reason.
+  if (activeHours && !activeHoursState.active && availability.accept === true) {
+    Object.assign(availability, {
+      key: 'rest',
+      text: '休息时段',
+      accept: false,
+      usable: true,
+      reason: 'rest_period',
+      until: activeHoursState.until,
     })
   }
   const restrictionUntil =
@@ -1962,6 +1989,10 @@ function enrichVm(v, accountQuota, active, extras = {}) {
     weight: v.weight ?? 1,
     schedule_level: scheduleLevel.level,
     schedule_level_mode: scheduleLevel.mode,
+    active_hours: activeHours,
+    active_hours_timezone: activeHours ? activeHoursZone : null,
+    // Window state on its own: availability may carry a stronger reason (cool, quota).
+    active_hours_active: activeHours ? activeHoursState.active : null,
     claude_code_version: v.claude_code_version,
     utilization_5h: u5,
     utilization_7d: u7,
@@ -2042,13 +2073,16 @@ function enrichVm(v, accountQuota, active, extras = {}) {
     seats_grace: isCodex ? null : Number(seatRow?.seats_grace) || 0,
     queue_depth: isCodex ? null : Number(seatRow?.queue_depth) || 0,
     conc_waiting: isCodex ? null : Number(seatRow?.conc_waiting) || 0,
-    inflight: isCodex ? openAIRuntimeSignals(v.id).inFlight : (acc?.inflight ?? 0),
+    inflight: isCodex ? openAIRuntimeSignals(v.id).inFlight : Number(seatRow?.inflight ?? acc?.inflight ?? 0),
     requests: acc?.requests ?? v.stats?.requests ?? 0,
     tokens_in: acc?.tokens_in ?? 0,
     tokens_out: acc?.tokens_out ?? 0,
     cache_read_tokens: acc?.cache_read_tokens || 0,
     cache_creation_tokens: acc?.cache_creation_tokens || 0,
-    near_limit: (u5 != null && u5 >= safety) || (u7 != null && u7 >= weeklySafety),
+    near_limit: isCodex
+      ? (u5 != null && u5 >= safety) || (u7 != null && u7 >= weeklySafety)
+      : (u5 != null && gateZone(u5, safety, quotaGate) !== GATE_OPEN) ||
+        (u7 != null && gateZone(u7, weeklySafety, quotaGate) !== GATE_OPEN),
     fingerprint: v.fingerprint || null,
     runtime: v.runtime || null,
     ip: v.ip || v.runtime?.ip || null,

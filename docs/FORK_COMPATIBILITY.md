@@ -1,14 +1,20 @@
 # Fork 运行兼容性
 
-## 当前策略：优先采用上游 v1.3.144
+## 当前策略：优先采用上游 v1.3.158
 
-融合上游 `984f108e`（v1.3.144，新增 v1.3.136–v1.3.144）。上游 v1.3.140 重写历史并删除预编译产物；本次以已融合的旧上游 `e1a91e46` 文件树为三方基线，保留 fork 已发布历史并把新版上游作为合并父节点，不强推重写旧提交。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
+融合上游 `0f7008c6`（v1.3.158，新增 v1.3.145–v1.3.158），沿用 v1.3.144 的合并历史。源码、二进制和前端产物已完成本地验证；本文件记录源码兼容策略，本地验证证据不代表生产验收。生产部署状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
+
+- 采用临近额度线时优先完成已占座请求、限制临界区并发、按缓存未命中输入判断大请求；保留分组与 Key 账号范围交集、智能评分、同账号重试及拒答默认不封设备。
+- 采用每账号工作时段（Claude / Codex）、风险规则按账号类型 / 套餐 / 账号范围生效、普通 Key 不能伪造健康探测头绕过计费、面板会话文件原子写入与 0600 权限、DNS TCP 多次查询修复。
+- 采用槽位读取缓存、GPT 凭证调度修复、每条消息 effort、官方请求字段 beta、OAuth bootstrap 与凭据 generation、首字耗时和缓存统计修复。无新增数据库迁移、依赖变更；不覆盖生产持久配置。
+- 管理台采用欢迎 / 登录 / 引导页、代理地区筛选与节点矩阵、新协议设置和工作时段编辑；保留 fork 主题、账号线视图、分组管理及“用量”页。用量路由、侧栏、admin / super 页面权限与原有回归断言一并保留。引导中的“自用 / 中转”预设需管理员手动应用，本次不应用。
+- `payload-2026.10.12-effort` 的 wrap 内核与 OAuth helper 按清单下载并校验；CLI 在新基线上重打 `caller-system-v3+safeguards-v1`，适配 `assembleMessageRequest`，在可选字段回填后再次执行 safeguards 门禁，防止绕过 Node 时原始字段重新流出。`cc-node`、Codex/crag 内核和 glibc 不变。Go worker / egress 由融合后的源码编译，前端重新构建。具体校验见 [CLI_UPSTREAM_MERGE_EVIDENCE.json](CLI_UPSTREAM_MERGE_EVIDENCE.json)。
 
 - 采用新版 KVM/运行规格与账号导入流程、pi 消息级 effort、默认工具参数流式下发、临界额度大请求保护、代理改绑/标志修复、继承全局引擎的 watchdog、租户日志隔离（迁移 `036`）、默认关闭的 Claude Code 专用入口、策略拒绝日志、空账号池启动与决策模型 key 池。运行规格与新导入页沿用 fork 的主题与账号叫法；既有账号仍保持 Docker 形态，不转成 KVM。
 - 分组隔离保留：`eligibleCandidates` 的重读同时携带 `retryAccountId`、`groupScope`、`keyScope` 与新版 `quotaRequest`；健康缓存仍经 `healthDecisionForGroup`。新额度保护只缩小组内候选，不能跨组回退；watchdog 继续默认 3 秒探测、连续 3 次失败。
 - 内存兼容：`routing.vm.memory` 优先，未配置时兼容现有 `KIN_VM_MEMORY`；前后端均支持 `1536m`，保持生产 1.5 GiB 默认，不悄悄降到 512 MiB。显式规格不被环境变量覆盖，现有容器不重建。
 - 构建继续采用 fork 已验证的产物契约：`web/dist` 在本地从融合源码重建并入库，内核及补丁 CLI 继续入库，生产镜像只打包，不在受限 VPS 上重编前端或下载原版 CLI。上游 `deploy/payload.json` 与 fetch 工具保留供核验，但不进入 fork 的 Dockerfile。新增 KVM 构建上下文入镜像；Docker/KVM 请求路径均只检查已准备镜像，不现场拉取或构建。
-- 上游 payload 的 `cli-node` / `cc-node` 原版哈希与当前 PATCH.json 的补丁基线一致，本次不重打 CLI 补丁，不替换任何运行二进制。保留 trixie glibc 兼容、OAuth JSON 启动检查、crag 安装、调用方 system 与 safeguards 门禁。发布拉上游使用 `--no-tags`，不覆盖重写前的本地标签。
+- 保留 trixie glibc 兼容、OAuth JSON 启动检查、crag 安装、调用方 system 与 safeguards 门禁；内核与 CLI 必须与控制面一起发布并同步槽位。发布拉上游使用 `--no-tags`，不覆盖重写前的本地标签。
 - KVM/远程槽特征采集走上游 guest reader；本地 Docker 槽保留 fork 的 Python 采集器与字段验证。KVM runner 镜像在未配置注册表时仍使用上游完整 registry 名，不产生以 `/` 开头的非法标签。
 
 - 采用 v1.3.124–v1.3.135：密钥平台 / 账号范围、可复用账号池、账号 JSON 导入导出、风险审计替代协议页、模型页与 Haiku 5.5 默认 100K 上限、可配置流空闲超时和可选工具参数流式下发、缓存命中统计修复、OAuth 换票状态修复、代理 IPv6 地理信息、节点本地出口及透明 TCP 按唯一 DNS 域名转发。新增迁移 `032`–`035`；上线前必须备份，不覆盖生产持久配置。
@@ -23,7 +29,7 @@
 - Codex 选号沿用上游 `listVms(..., { codex: { quota } })`，再按 API Key 分组过滤。
 - 管理台：侧栏采用上游四组（监控 / 资源 / 协议 / 系统），保留 fork `VIEW_TITLES` 白话标题、账号状态灯，「用户」放在系统组；总览保留 fork 交换台布局，按上游去重（费用在用量页、趋势在统计页）；设置页粘性 / 号池 / 配额三页采用上游可视化调度设置（fork 白话文案未保留，只保留分区标题、简介与 13rem 导航宽度）；上游删除凭证调度等级页，等级改在账号详情「调度」块设置；账号列表加上游全局排队与席位标签，保留 fork 按钮和状态筛选；日志详情「会话信息」同时显示账号分组、Key 名称、出站 Session 和客户端 Session（合并时注意 `summary-tab.tsx`、`panel-usage-logs.ts`、`usage-logs-view.mjs` 的 `toUsageLogRow`）；`index.html` 保留 fork 主题用的 Google Fonts；README 保留 fork 精简版。
 - cli-hop 出站体：采用上游 `withRequestProtocolBetas` 和 `MessageRequest.betas`，由新版 CLI 按请求字段生成必要 beta，不再降级 `thinking.display=updates`；仍经过 fork 的 `preserveClientToolEnvironment`。
-- 仓内 `cli-node` 以上游 `cc438892`（Claude Code 2.1.293）为基线重打 `caller-system-v3+safeguards-v1` 补丁；适配 `wireBody` / `nativeExtras`，阻止内部 `kin_safeguards_beta` 外发，保留调用方 safeguards 门禁。成品 SHA-256 `8d0b8ef1…`；内核采用上游并确认 `bin/kin-kernel` 与槽位 `kin-kernel.bin` 相同（见 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md)、`share/wrap-cli/PATCH.json`）。
+- 仓内 `cli-node` 以 `payload-2026.10.12-effort`（Claude Code 2.1.293）为基线重打 `caller-system-v3+safeguards-v1` 补丁；阻止内部 `kin_safeguards_beta` 外发，保留调用方 safeguards 门禁。成品 SHA-256 `b921c7c1…`；内核采用上游并确认 `bin/kin-kernel` 与槽位 `kin-kernel.bin` 相同（见 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md)、`share/wrap-cli/PATCH.json`）。
 
 - 采用 v1.3.91 的 native 错误与恢复：CLI 的真实 HTTP / 网络错误（code、status、type、message、retry-after）原样返回，不再统一成 `incomplete_response`；请求失败或执行位全忙都不再回收 CLI，恢复由内核（关闭未 ack 的 slot、限次重启 CLI）和 watchdog（限次重启容器）有界执行。Node 每个 hop 带 `request_id`，客户端断开时调内核 `/internal/v1/cancel`。依赖新 `kin-kernel` 与新 `cli-node`，Node、内核、CLI 必须一起上线。
 - watchdog 探测放宽（fork 定制，`kernel-watchdog.mjs`）：健康探测等待 `kernel_watchdog.health_timeout_ms`（默认 3000，范围 500–15000），连续 `kernel_watchdog.fail_threshold` 次（默认 3，范围 1–10，约 1 分钟）探测需要重启才进入“递增等待 → 重启容器”流程；中间一次健康就清零，并清掉尚未开始重启的等待状态。原因：上游探测只等 800 毫秒、单次失败就进入重启流程，会误杀正在出结果的槽位。合并上游时 `kernel-watchdog.mjs` 有冲突要保留这两项及连续失败计数。

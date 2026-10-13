@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
-import { Outlet } from '@tanstack/react-router'
+import { useEffect, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Outlet, useNavigate } from '@tanstack/react-router'
 import { getCookie } from '@/lib/cookies'
 import { cn } from '@/lib/utils'
 import { LayoutProvider } from '@/context/layout-provider'
@@ -10,6 +11,7 @@ import { AppSidebar } from '@/components/layout/app-sidebar'
 import { StarHint } from '@/components/layout/star-hint'
 import type { NavLamps } from '@/components/layout/types'
 import { SkipToMain } from '@/components/skip-to-main'
+import { onboardingQueryOptions } from '@/features/welcome/queries'
 
 type AuthenticatedLayoutProps = {
   children?: ReactNode
@@ -45,6 +47,7 @@ export function AuthenticatedLayout({
             )}
           >
             <AppHeader actions={headerActions} />
+            <GuideGate />
             {children ?? <Outlet />}
           </SidebarInset>
           <StarHint />
@@ -52,4 +55,15 @@ export function AuthenticatedLayout({
       </LayoutProvider>
     </SearchProvider>
   )
+}
+
+function GuideGate() {
+  const navigate = useNavigate()
+  const onboarding = useQuery(onboardingQueryOptions())
+  const unused = onboarding.data?.guide_used === false
+  useEffect(() => {
+    if (!unused) return
+    void navigate({ to: '/welcome', search: { setup: true }, replace: true })
+  }, [unused, navigate])
+  return null
 }

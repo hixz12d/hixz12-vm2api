@@ -186,13 +186,14 @@ export type Vm = {
   auth_scheme?: string
   availability?: {
     /**
-     * 后端 `availability.mjs` 实际产出 6 种：
-     * `none` / `bad` / `off` / `quota` / `cool` / `ok`。
-     * 此前只声明了 5 种（含后端根本不返回的 `warn`/`caution`），
-     * 导致 `off` 被误归类、「关闭调用」筛选恒为空。
+     * 后端 `availability.mjs` 实际产出 8 种：
+     * `none` / `bad` / `off` / `quota` / `cool` / `drain` / `rest` / `ok`。
+     * `rest`：`policy.active_hours` 工作时段外，休息中不接单。
+     * `drain`：5h/7d 进入闸线前 `critical_band` 到闸线 + `gate_overshoot` 之间，
+     * 仍接单（一次一个），但不再是单纯的「可用」。
      * 注意 `off` 的 `usable` 为 false，判断顺序上必须先于 `!usable`。
      */
-    key: 'ok' | 'none' | 'bad' | 'off' | 'quota' | 'cool'
+    key: 'ok' | 'none' | 'bad' | 'off' | 'quota' | 'cool' | 'drain' | 'rest'
     usable: boolean
     text?: string
     reason?: string
@@ -328,6 +329,12 @@ export type Vm = {
   schedule_level?: number
   /** 调度等级来源；缺失时按自动模式展示。 */
   schedule_level_mode?: 'auto' | 'manual'
+  /** 本槽工作时段；null / 缺省 = 24h 接单。窗口外不参与调度。 */
+  active_hours?: VmActiveHours | null
+  /** 工作时段实际使用的时区（自身钉住 → 槽位时区 → UTC）。 */
+  active_hours_timezone?: string | null
+  /** 此刻是否在工作时段内；未设时段为 null。独立于 availability（它可能被冷却/额度盖住）。 */
+  active_hours_active?: boolean | null
   rpm?: number
   /** 同等级权重（只用于 Codex 选槽；Claude 预调度不看），不是调度等级。 */
   weight?: number
@@ -437,11 +444,31 @@ export type PoolSeatLive = {
   seats_grace: number
   queue_depth: number
   conc_waiting: number
+  /** 正在这台 VM 上执行的请求数（含无席位探测与 pin）。 */
+  inflight?: number
 }
 
 /** `GET /api/panel/pool/stream` 的 `event: seats` 负载。 */
 export type PoolSeatSnapshot = PoolQueueSummary & {
   seats: Record<string, PoolSeatLive>
+  ts: number
+}
+
+/** 单台 VM 绑定的 SOCKS5 实时健康，随每次探测推送。 */
+export type PoolProxyLive = Pick<
+  VmProxySnap,
+  | 'id'
+  | 'status'
+  | 'enabled'
+  | 'blocked_reason'
+  | 'latency_ms'
+  | 'last_error'
+  | 'last_probe_at'
+>
+
+/** `GET /api/panel/pool/stream` 的 `event: proxy` 负载；键为 VM id。 */
+export type PoolProxySnapshot = {
+  proxies: Record<string, PoolProxyLive>
   ts: number
 }
 
@@ -580,6 +607,18 @@ export type VmQuotaView = {
 }
 
 export type VmQuotaOverride = Partial<VmQuotaView>
+
+/** 单槽工作时段（`vm.policy.active_hours`）。start 晚于 end = 跨夜班次。 */
+export type VmActiveHours = {
+  /** 本地 'HH:MM' 开工时间。 */
+  start: string
+  /** 本地 'HH:MM' 收工时间；与 start 不允许相同。 */
+  end: string
+  /** IANA 时区钉住值；缺省跟随槽位时区（代理出口时区）。 */
+  timezone?: string
+  /** 允许窗口开始的星期，0 = 周日；缺省 = 每天。 */
+  days?: number[]
+}
 
 /** VM 并发 / RPM / 席位上限跟随时的取值：并发与 RPM 来自分档，席位来自 `inference.session_slots`。 */
 export type VmSchedulingInherited = {

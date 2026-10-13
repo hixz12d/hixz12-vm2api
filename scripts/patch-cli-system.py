@@ -19,7 +19,8 @@ BASELINES = {
     "cli-node-v1.3.94": "ef30963b3fe4ddd0dda08247ff31edce8d61d03535c1af2328d09ade132b0d06",
     "cli-node-v1.3.103": "51e51f4a5ea9067d1da2f3482fa8beb2682e2a52693cde21dfc22c4c8a4cf7fb",
     "cli-node-v1.3.123": "884a04fdcb186a5122c6da50acac7597fb2b20c3745045ab8a5826f792d43beb",
-    "cli-node": "facc1f8194bd271809c06edb15735e0bdd2459ba72b5d6be2ab30359578557a5",
+    "cli-node-v1.3.144": "facc1f8194bd271809c06edb15735e0bdd2459ba72b5d6be2ab30359578557a5",
+    "cli-node": "cf74b699fff1cbedf8f9a5dbd7108fa54b666adc75c644abd94c8fff509831a4",
     "cc-node": "6fef71bdda7ad0929681711efee472552635f88b0a6ead51f711d10e03f55ca5",
 }
 
@@ -33,8 +34,8 @@ def replace_once(source, before, after):
 
 def patch(source, name):
     prompt = "systemPrompt2" if name == "legacy-cli-node" else "systemPrompt"
-    if name == "cli-node":
-        return patch_wire_safeguards(patch_current_cli(source))
+    if name in ("cli-node", "cli-node-v1.3.144"):
+        return patch_wire_safeguards(patch_current_cli(source), assembled=name == "cli-node")
     if name == "cli-node-v1.3.123":
         return patch_upstream_safeguards(patch_current_cli(source))
     if name in ("cli-node-v1.3.103", "cli-node-v1.3.94", "cli-node-v1.3.91"):
@@ -186,7 +187,7 @@ function systemFromRequest(request2) {''')
     return source
 
 
-def patch_wire_safeguards(source):
+def patch_wire_safeguards(source, assembled=False):
     """Preserve the fork gate on v1.3.125+'s wireBody/request-beta path.
 
     The new nativeExtras path must never leak the internal beta field. Infer
@@ -208,11 +209,24 @@ function systemFromRequest(request2) {''')
                           '  kinSafeguards,\n  contextManagement,\n  onResponseHeaders,\n  onError\n}) {')
     source = replace_once(source, '      safeguards,\n      outputConfigOverride: outputConfig,\n',
                           '      kinSafeguards,\n      outputConfigOverride: outputConfig,\n')
-    source = replace_once(source, '    const nativeExtras = {};',
-                          '    const kinSafeguards = isKinQuerySource(options2.querySource) ? options2.kinSafeguards : undefined;\n'
-                          '    const nativeExtras = {};')
-    source = replace_once(source, '      ...options2.safeguards != null ? { safeguards: options2.safeguards } : {},\n',
-                          '      ...kinSafeguards ? { safeguards: kinSafeguards.safeguards } : {},\n')
+    if assembled:
+        # v1.3.158 re-copies optional fields from wireBody after assembling.
+        # Apply the gate last so that path cannot restore invalid safeguards.
+        source = replace_once(source, '    const params = assembleMessageRequest({',
+                              '    const kinSafeguards = isKinQuerySource(options2.querySource) ? options2.kinSafeguards : undefined;\n'
+                              '    const params = assembleMessageRequest({')
+        source = replace_once(source, '      safeguards: options2.safeguards,',
+                              '      safeguards: kinSafeguards?.safeguards,')
+        source = replace_once(source, '    const gatedBetas = withRequestProtocolBetas(requestBetas, params);',
+                              '    delete params.safeguards;\n'
+                              '    if (kinSafeguards) params.safeguards = kinSafeguards.safeguards;\n'
+                              '    const gatedBetas = withRequestProtocolBetas(requestBetas, params);')
+    else:
+        source = replace_once(source, '    const nativeExtras = {};',
+                              '    const kinSafeguards = isKinQuerySource(options2.querySource) ? options2.kinSafeguards : undefined;\n'
+                              '    const nativeExtras = {};')
+        source = replace_once(source, '      ...options2.safeguards != null ? { safeguards: options2.safeguards } : {},\n',
+                              '      ...kinSafeguards ? { safeguards: kinSafeguards.safeguards } : {},\n')
     source = replace_once(source, '    const gatedBetas = withRequestProtocolBetas(requestBetas, params);',
                           '    const gatedBetas = withRequestProtocolBetas(\n'
                           '      requestBetas.filter((beta) => !/^dangerous-tool-use-/.test(beta)),\n'
