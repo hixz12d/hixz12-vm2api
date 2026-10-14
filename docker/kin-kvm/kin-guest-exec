@@ -98,7 +98,9 @@ else
   remote="sh -c $(posix_quote "$inner")"
 fi
 
-ssh_opts='-i '"$KEY"' -p 2222 -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=3 -o LogLevel=ERROR'
+# No wall-clock cap: official turns, OAuth and shells outlive seconds.
+# ConnectTimeout bounds the dial; keepalives detect a dead guest.
+ssh_opts='-i '"$KEY"' -p 2222 -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null -o ConnectTimeout=3 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 -o LogLevel=ERROR'
 # Word-split ssh_opts is intentional (fixed tokens).
 # shellcheck disable=SC2086
 set -- $ssh_opts
@@ -111,11 +113,10 @@ if [ "$detach" -eq 0 ] && [ "$interactive" -eq 1 ]; then
   set -- "$@" -o RequestTTY=auto
 fi
 
-if ! timeout 8 ssh "$@" root@127.0.0.1 "$remote"; then
-  st=$?
-  if [ "$st" -eq 255 ] || [ "$st" -eq 124 ]; then
-    echo "guest ssh unavailable" >&2
-    exit 1
-  fi
-  exit "$st"
+st=0
+ssh "$@" root@127.0.0.1 "$remote" || st=$?
+if [ "$st" -eq 255 ]; then
+  echo "guest ssh unavailable" >&2
+  exit 1
 fi
+exit "$st"
