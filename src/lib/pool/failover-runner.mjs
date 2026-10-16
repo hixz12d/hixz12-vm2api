@@ -29,6 +29,10 @@ const DEFAULTS = {
   max_account_switches: 10,
   max_total_attempts: 12,
   total_retry_deadline_ms: 120000,
+  // Same-session serialization waits out the previous turn. Cap a wedged tail
+  // so the queue cannot sit forever. 0 disables the cap. Long enough that a
+  // normal generation still runs serially; keepalive covers the Cloudflare wait.
+  session_queue_timeout_ms: 900_000,
   delivery_mode: 'realtime',
   max_same_account_retries: 1,
   same_account_retry_delay_ms: 500,
@@ -263,38 +267,38 @@ function sleepWithSignal(ms, signal) {
   })
 }
 
-/**
- * Resolves false when the previous same-session request finished, true when
- * maxWaitMs ran out first. A caller whose sub-agent marker was stripped on the
- * way in looks like its own main session; waiting for a long turn would stall
- * it for minutes, so after the cap it runs alongside instead.
- */
-function waitForSessionTurn(previous, signal, maxWaitMs = 0) {
-  if (signal?.aborted)
+/** Preserve the fork's bounded parallel fallback and the upstream hard queue timeout. */
+function waitForSessionTurn(previous, signal, maxWaitMs = 0, timeoutMs = 0) {
+  const soft = Number(maxWaitMs)
+  const hard = Number(timeoutMs)
+  const softMs = Number.isFinite(soft) && soft > 0 ? soft : Infinity
+  const hardMs = Number.isFinite(hard) && hard > 0 ? hard : Infinity
+  const delay = Math.min(softMs, hardMs)
+  if (signal?.aborted) {
     return Promise.reject(Object.assign(new Error('Request was cancelled'), { code: 'request_cancelled' }))
+  }
   return new Promise((resolve, reject) => {
+    let settled = false
     let timer = null
-    const cleanup = () => {
-      if (timer) clearTimeout(timer)
+    const finish = (fn, value) => {
+      if (settled) return
+      settled = true
       signal?.removeEventListener?.('abort', onAbort)
+      if (timer) clearTimeout(timer)
+      fn(value)
     }
     const onAbort = () => {
-      cleanup()
-      reject(Object.assign(new Error('Request was cancelled'), { code: 'request_cancelled' }))
+      finish(reject, Object.assign(new Error('Request was cancelled'), { code: 'request_cancelled' }))
     }
     signal?.addEventListener?.('abort', onAbort, { once: true })
-    if (maxWaitMs > 0) {
+    if (Number.isFinite(delay)) {
       timer = setTimeout(() => {
-        cleanup()
-        resolve(true)
-      }, maxWaitMs)
+        if (hardMs <= softMs) {
+          finish(reject, Object.assign(new Error('Session queue timed out'), { code: 'session_queue_timeout' }))
+        } else finish(resolve, true)
+      }, delay)
     }
-    previous
-      .catch(() => {})
-      .then(() => {
-        cleanup()
-        resolve(false)
-      })
+    previous.catch(() => {}).then(() => finish(resolve, false))
   })
 }
 
@@ -551,6 +555,7 @@ export class FailoverRunner {
         previous,
         args.signal,
         Number(this.config.session_queue_max_wait_ms) || 0,
+        this.config.session_queue_timeout_ms,
       )
       const sessionQueueMs = Date.now() - queuedAt
       if (overflowed) {
@@ -578,6 +583,13 @@ export class FailoverRunner {
       return { ...result, sessionQueueMs }
     } catch (error) {
       if (error?.code === 'request_cancelled') return clientCancelledResult()
+      if (error?.code === 'session_queue_timeout') {
+        const retryMs = Number(this.config.session_queue_timeout_ms)
+        return poolOverloadedError({
+          reason: 'session_queue_timeout',
+          retry_after_ms: Number.isFinite(retryMs) && retryMs > 0 ? retryMs : 1000,
+        })
+      }
       throw error
     } finally {
       releaseTurn()
@@ -797,6 +809,7 @@ export class FailoverRunner {
       }
       repairPending = false
       snapshotPins()
+      const attemptStickyBound = pinBaseline.get(stickyKey) || null
       lastSelected = selected
       pinnedSlot = selected.slotIndex ?? null
       if (selected.seatMoved) seatMovedTo = selected.vmId
@@ -829,6 +842,7 @@ export class FailoverRunner {
                 repaired,
                 attemptStartedAt: attemptStarted,
                 freshSlot,
+                stickyBound: attemptStickyBound,
               })
             : clone(requestBody)
         const wrappedAttempt =
@@ -843,7 +857,11 @@ export class FailoverRunner {
           outboundSessionAccountId = selected.accountId
           bindAll(
             { accountId: selected.accountId, vmId: selected.vmId, sessionId: outboundSessionId },
-            { countHit: false },
+            {
+              countHit: false,
+              // Prebinding moved the VM already; replace the previous VM's session.
+              replaceSession: !!attemptStickyBound?.vmId && attemptStickyBound.vmId !== selected.vmId,
+            },
           )
         }
         if (groupScope && !groupScope.allowsVm(selected.vmId)) {
@@ -983,6 +1001,26 @@ export class FailoverRunner {
         budget.noteSwitch(selected.accountId, selected.vmId, { spill: policy.reason === 'slot_busy' })
       } catch (error) {
         noteHop(null)
+        if (error?.code === 'response_sent') {
+          this.attemptsRepo?.complete?.(requestId, attemptNo, {
+            upstreamStatus: 403,
+            errorScope: 'request',
+            action: 'stop',
+            downstreamCommitted: true,
+            terminalState: 'policy_block',
+            latencyMs: Date.now() - attemptStarted,
+          })
+          return {
+            ok: false,
+            responseSent: true,
+            status: 403,
+            via: 'account-scope',
+            vmId: selected.vmId,
+            accountId: selected.accountId,
+            attemptCount: attemptNo,
+            finalState: 'policy_block',
+          }
+        }
         if (signal?.aborted || error?.code === 'selection_cancelled' || error?.code === 'request_cancelled') {
           this.attemptsRepo?.complete?.(requestId, attemptNo, {
             upstreamStatus: 0,

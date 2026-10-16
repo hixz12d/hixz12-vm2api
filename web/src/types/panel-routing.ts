@@ -46,7 +46,11 @@ export type DistillRules = {
     min_max_tokens: number
     require_no_tools: boolean
     require_single_turn: boolean
+    /** 结构收割用的赛题正则。空字符串表示不做这项。 */
+    contest_pattern: string
   }
+  /** 官方客户端和 0 注入也拦。面板删掉即停，不会被代码补回。 */
+  hard_needles: string[]
   needles: string[]
   /** Extra regexes. Built-in distillation / CoT patterns live on the hard rules. */
   patterns: string[]
@@ -116,13 +120,17 @@ export type JevScopeAccount = {
   name: string | null
   platform: string | null
   plan_type: string | null
-  type: string
+  account_tier?: string | null
+  /** `claude:max` / `gpt:plus`. The chip id. */
+  scope_key?: string
+  type?: string
   schedulable: boolean
 }
 
 export type JevScopeInventory = {
-  account_type_options: JevScopeOption[]
-  account_plan_type_options: JevScopeOption[]
+  account_platform_plan_options?: JevScopeOption[]
+  account_type_options?: JevScopeOption[]
+  account_plan_type_options?: JevScopeOption[]
   accounts_total: number
   accounts: JevScopeAccount[]
 }
@@ -133,7 +141,8 @@ export type JevInterceptConfig = {
   hard_regex_enabled: boolean
   /** GPT / Codex 请求是否过拦截关卡，默认 false。 */
   openai_platform_enabled: boolean
-  /** 账号范围：空 = 所有账号都进关卡。三个列表取并集，跟 sub2api 风控一致。 */
+  /** 账号范围。空 = 所有账号都进关卡。平台+套餐与指定账号取并集。 */
+  account_platform_plans: string[]
   account_types: string[]
   account_plan_types: string[]
   account_ids: string[]
@@ -201,6 +210,14 @@ export type NotifyTelegramConfig = {
   chat_id: string
 }
 
+export type NotifyWecomConfig = {
+  enabled: boolean
+  /** 企业微信群机器人 webhook 地址或 key；GET 永远为空，仅以 webhook_set 表示已配置。 */
+  webhook: string
+  webhook_set?: boolean
+  mention_all: boolean
+}
+
 /** `GET /routing -> notify` 与 `GET /notify -> config` 的脱敏通知配置。 */
 export type NotifyConfig = {
   enabled: boolean
@@ -212,6 +229,7 @@ export type NotifyConfig = {
   console_url: string
   events: NotifyEvents
   telegram: NotifyTelegramConfig
+  wecom: NotifyWecomConfig
   email?: Record<string, unknown>
 }
 
@@ -221,7 +239,12 @@ export type NotifyStatus = {
   last_events?: { type?: string; title?: string }[]
   last_error?: string | null
   last_run_at?: string | null
-  channels?: { email?: boolean; telegram?: boolean; any?: boolean }
+  channels?: {
+    email?: boolean
+    telegram?: boolean
+    wecom?: boolean
+    any?: boolean
+  }
 }
 
 export type BackupsPayload = {

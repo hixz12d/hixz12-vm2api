@@ -1,0 +1,91 @@
+{
+  "upstream": "9baaffbffd0e52d3201f0a26d61a3016c2b5529b",
+  "version": "1.3.178",
+  "fork_base": "61b21db5",
+  "scope": "local source integration; no production deployment, restart, migration, git commit or push",
+  "pending_merge_recovered": {
+    "previous_target": "b93aeddf5a60f2e77281e33bc446592789dd244a",
+    "preserved": [
+      "caller system and timezone-only cli-hop environment",
+      "safeguards gate and final crag system packing",
+      "account line/table/grid views and fleet filters",
+      "fork theme tokens"
+    ]
+  },
+  "backend": {
+    "environment": "local node:22-trixie-slim Docker; 4 CPUs, 3 GiB; no production mounts or Docker socket",
+    "command": "node --test --test-concurrency=2 <changed test/unit/*.test.mjs plus fork regression files>",
+    "selection": "changed unit test files relative to fork_base, plus extra_files",
+    "extra_files": [
+      "group-routing", "smart-score", "client-abort", "client-tool-environment",
+      "empty-response-backoff", "kernel-client-abort", "kernel-config-ownership",
+      "kernel-stream-integrity", "panel-wrap-sync", "sync-wrap-cli", "vm-db-sync",
+      "wrap-cli-runtime", "cli-node-guard"
+    ],
+    "files": 85,
+    "tests": 1381,
+    "passed": 1381,
+    "failed": 0,
+    "skipped": 0,
+    "syntax_checked_changed_mjs_files": 146,
+    "watchdog_fixture_resolution": "Three new recovery tests explicitly use fail_threshold=1 to isolate their original one-failure scenario; production defaults remain unchanged.",
+    "default_watchdog_runtime_check": "3000ms probe, three consecutive failures, healthy reset and 60s first restart backoff passed"
+  },
+  "frontend": {
+    "files": [
+      "src/features/vm/vm-rack-model.test.ts",
+      "src/features/vm/vm-table.test.ts",
+      "src/features/vm/vm-owner.test.ts",
+      "src/features/proxies/proxy-sort.test.ts",
+      "src/lib/persona-template.test.ts",
+      "src/lib/vm-kind.test.ts",
+      "src/features/vm/engine-contract.test.ts"
+    ],
+    "tests_passed": 63,
+    "typecheck": "passed",
+    "build": "passed; web/dist regenerated",
+    "ui_review": "degraded single-context source review; no browser or sub-agent tool available",
+    "detector": "impeccable detect --json on manually merged list-page, system-preview, health-pane and test-chat-result-card",
+    "detector_findings": 0,
+    "browser_rendering": "not performed"
+  },
+  "native_integration": {
+    "file": "test/e2e/auto-mode.e2e.test.mjs",
+    "passed": 4,
+    "failed": 0,
+    "skipped": 1,
+    "skip_reason": "No old CLI supplied for the legacy rejection case",
+    "upstream": "local HTTP fixture with fake credentials, not Anthropic"
+  },
+  "image": {
+    "docker_build": "passed locally",
+    "startup": "passed with network=none and an empty disposable data directory",
+    "health_http_status": 200,
+    "kin_computer_entrypoint_install": "passed",
+    "real_kin_computer_docker_identity": "creation, hostname/MAC/machine-id validation and second-call reuse passed",
+    "kin_computer_sha256": "ed8664a1bd8f735eb1332d7d96d442622efbf64b887b4d694529bb3dd3b16df3"
+  },
+  "retained_cli_sha256": {
+    "cli-node": "b921c7c1d22d1b612b6e64a1908cf75cc94c18cc44709a933d988c6e89cdf825",
+    "cc-node": "9ed70a3748ec7b63be617b9ee3add91820f399c9a1f90e0d45ace4fed1fb2c9f"
+  },
+  "migration": {
+    "added": "037_usage_logs_billing_normalize.sql",
+    "effect": "Adds pricing provenance/search fields and normalizes historical OpenAI input token accounting",
+    "production_executed": false,
+    "deployment_requirement": "Fresh database backup and migration verification before production rollout"
+  },
+  "dependency_audit": {
+    "lockfiles_changed": false,
+    "moderate": 1,
+    "package": "ip-address (transitive)",
+    "note": "Existing address-classification and long-input advisories; no automatic dependency changes"
+  },
+  "not_verified": [
+    "production or real Anthropic requests",
+    "migration on the production-sized database",
+    "browser-rendered UI and responsive layout",
+    "real KVM, remote nodes and ARM64",
+    "real cache hit rates and long-term stability"
+  ]
+}

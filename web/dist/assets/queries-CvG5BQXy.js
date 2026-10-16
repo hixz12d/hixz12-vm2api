@@ -1,0 +1,1 @@
+import{h as e,j as t}from"./button-DQnB5G5k.js";function n(){return t({queryKey:[`panel`,`users`],queryFn:()=>e(`/api/panel/users`)})}export{n as t};

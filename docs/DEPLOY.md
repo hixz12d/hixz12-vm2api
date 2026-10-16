@@ -54,6 +54,8 @@ sudo bash /opt/vm2api/deploy/install.sh changelog
 
 保留 `.env` / `vms/` / `data/`。不要 `docker rm` 槽。一键更新会自动把新版 `share/wrap-cli`（包括 `kin-kernel.bin`）同步到所有槽并重启槽内 dataplane；如需暂时跳过可加 `--no-sync-wrap`。管理台 **设置 → 关于** 可复制同一条命令、看 changelog。指定版本：`--version v1.2.22`。
 
+首次登录后，在「用户」中找到当前管理员，点击「改密码」设置至少 8 位的新密码。默认密码管理员也会写入用户列表；修改后数据库密码优先，重启或更新不会被 `.env` 中的旧密码覆盖。
+
 **ARM64 主机（实验性）**：同一条命令按 `uname -m` 自动选择 `vX.Y.Z-arm64` 控制面镜像并准备 QEMU（slot 仍是 amd64）。`--version` 可带 `-amd64` / `-arm64` 后缀，须与宿主一致。详见 [ARM64.md](ARM64.md)。
 
 **手动（同样只拉镜像）：**
@@ -73,6 +75,14 @@ curl -sS --noproxy '*' http://127.0.0.1:8787/health
 `bin/` 与 `share/wrap-cli` 由镜像入口写入挂载目录，`src/config` 缺文件时用镜像内默认值补齐。`bin/kin-*` 必须 **755**。
 
 **本 fork 源码模式：**上面的官方安装脚本与镜像不包含 fork 定制；使用 fork 源码构建，Compose 默认镜像为 `hixz12-vm2api:local`。
+
+**新建槽位的闭源依赖**：`kin-computer` 只分发编译后二进制，不公开源码。它由 `deploy/payload.json` 固定大小与 SHA256，随 Release 和控制面镜像交付；镜像入口自动安装到 `bin/kin-computer`，无需额外挂载私有源码目录。本 fork 只按清单补齐 `kin-computer`，不要执行全量 `fetch:payload` 覆盖已打补丁的 CLI；默认读取仓库的 `bin/kin-computer`，也可用 `KIN_COMPUTER_BIN` 指定绝对路径。二进制为 linux amd64，ARM64 控制面通过 QEMU 运行；Docker 身份生成还需 Bash 和 Python 3（控制面镜像已安装）。缺失时面板建槽返回 HTTP 400 `computer_service_missing`，生成失败返回 `computer_create_failed`。已有容器启动不会重新发布身份或改写主机名。
+
+`v1.3.176` 原镜像未包含该依赖；补传 Release 附件不会改变旧镜像。继续使用该镜像时，需将附件安装到挂载的 `bin/kin-computer`，在 `.env` 设置 `KIN_COMPUTER_BIN=/opt/vm2api/bin/kin-computer` 后重新创建控制面容器以载入环境变量（不要重建槽位容器）。
+
+集群节点已有目标槽镜像标签时跳过传输；仅在缺少云端基础系统时拉取它，母机只上传程序层。此优化不代表远端槽位已接入本机容器的全部计算机身份挂载。
+
+**本 fork 源码构建：**
 
 ```bash
 git clone https://github.com/hixz12d/hixz12-vm2api.git /opt/vm2api

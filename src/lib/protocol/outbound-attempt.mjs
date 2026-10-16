@@ -28,6 +28,7 @@ import { withRequestProtocolBetas } from './claude-code-betas.mjs'
 import {
   refreshOfficialSystemEnvironment,
   stampBillingPromptId,
+  collapseSystemBudgetReminders,
   CRS_OFFICIAL_SYSTEM,
   CRS_OFFICIAL_CLI_SYSTEM,
   CRS_COMPACT_IDENTITY,
@@ -195,6 +196,19 @@ function applyCliHopSafeguards(body, safeguards, { safeguardsBeta, autoModeServe
 }
 
 /**
+ * Crag joins blocks with one newline before wrapping them in <system>.
+ * Pack the native CLI separator ourselves, and always supply a gateway
+ * block so a caller's first user <system> block cannot be promoted instead.
+ * Runs last: the slot persona rebuilds system[] after prepareCliHopBody.
+ */
+export function packCragSystem(body) {
+  if (!body || typeof body !== 'object') return body
+  const system = body.system
+  const text = Array.isArray(system) ? system.map(systemBlockText).join('\n\n') : system
+  return { ...body, system: text || '​' }
+}
+
+/**
  * Caller fields plus Node-owned message breakpoints.
  * CLI owns persona layout and system/tools markers; kernel only forwards.
  *
@@ -211,11 +225,11 @@ export function prepareCliHopBody(
   {
     stream = true,
     repaired = false,
-    dataplane,
     cacheTtl = DEFAULT_CACHE_TTL,
     safeguardsBeta = '',
     autoModeServer = true,
     requestContext = null,
+    preserveSystem = false,
   } = {},
 ) {
   if (requestContext?.purpose === 'auto_mode_classifier') {
@@ -228,19 +242,16 @@ export function prepareCliHopBody(
   delete body.safeguards
   delete body.kin_safeguards_beta
   delete body.metadata
-  const leftover = stripCliOwnedSystem(body.system)
-  if (leftover == null) delete body.system
-  else body.system = leftover
-  if (dataplane === 'crag') {
-    // Crag joins blocks with one newline before wrapping them in <system>.
-    // Pack the native CLI separator ourselves, and always supply a gateway
-    // block so a caller's first user <system> block cannot be promoted instead.
-    body.system = (Array.isArray(leftover) ? leftover.map(systemBlockText).join('\n\n') : leftover) || '\u200b'
+  if (!preserveSystem) {
+    const leftover = stripCliOwnedSystem(body.system)
+    if (leftover == null) delete body.system
+    else body.system = leftover
   }
   body = stabilizeSystemBudget(body)
   body = stabilizeMessageBudgets(body)
   // cli-node sends mid-conversation-system. Only models that reject the role need the lift.
   if (!modelSupportsMidConversationSystem(body.model)) body = liftMidConversationSystemMessages(body)
+  body = collapseSystemBudgetReminders(body)
 
   if (!repaired) {
     body = ensureUnofficialAdaptiveThinking(body)
@@ -254,7 +265,7 @@ export function prepareCliHopBody(
   body = ensureOutputConfigSchema(body)
   body = alignSamplingWithThinking(body)
   body = stripIllegalCacheControlFields(body)
-  body = removeCacheControlFields(body)
+  body = removeCacheControlFields(body, { keepSystem: preserveSystem })
   body = applyMessageBreakpoints(body, normalizeCacheTtl(cacheTtl), 'rewrite')
   return applyCliHopSafeguards(body, safeguards, { safeguardsBeta, autoModeServer })
 }

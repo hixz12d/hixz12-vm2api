@@ -34,6 +34,8 @@ export type TestChatError = {
   retry_after?: number
   /** true = 请求被本地拦截（冷却、额度保护等），没有发到 Anthropic。 */
   local?: boolean
+  status?: number
+  upstream_message?: string
   [key: string]: unknown
 }
 

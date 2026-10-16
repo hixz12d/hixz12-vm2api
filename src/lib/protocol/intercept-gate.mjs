@@ -23,6 +23,7 @@ import {
   jevAccountInScope,
   jevModelDocument,
   jevScopeConfigured,
+  jevScopeWaits,
   matchHardPolicy,
   policyBlockError,
 } from './jev-intercept.mjs'
@@ -36,6 +37,12 @@ function deviceStore(devices) {
   } catch {
     return null
   }
+}
+function distillEvidenceMessage(message, evidence) {
+  const text = String(message || '').trim()
+  const why = String(evidence || '').trim()
+  if (text && why) return `${text}: ${why}`
+  return text || why
 }
 
 function hardRulesFor(inbound, body, jev, distillOn) {
@@ -126,17 +133,23 @@ export async function evaluateProtocolIntercept({
   account = null,
   fetchImpl,
 } = {}) {
-  // GPT / Codex traffic skips every layer unless the panel opts it in; once in, it runs the same chain.
-  // With an account scope set, the Codex hop asks again once the slot is claimed: only there is
-  // the serving account known. Until then the request waits instead of being judged.
+  // GPT / Codex skips every layer unless the panel opts it in. Once a scope
+  // is set, the slot decides GPT: a scope with no GPT pair and no named
+  // account is out of range. Claude stays in the gate until a Claude pair
+  // or a named account is selected; a GPT-only scope does not turn it off.
   if (isOpenaiPlatformModel(inbound, body)) {
     if (!jevScopeConfigured(jev)) {
       if (jev?.openai_platform_enabled !== true) return pass('platform')
+    } else if (!jevScopeWaits(jev, 'gpt')) {
+      return pass('scope')
     } else if (!account) {
       return pass('scope-wait')
     } else if (!jevAccountInScope(jev, account)) {
       return pass('scope')
     }
+  } else if (jevScopeWaits(jev, 'claude')) {
+    if (!account) return pass('scope-wait')
+    if (!jevAccountInScope(jev, account)) return pass('scope')
   }
   const distill = detectDistill({ inbound, body, official, zeroInject }, distillRules)
   if (distill.action === 'block') {
@@ -149,7 +162,7 @@ export async function evaluateProtocolIntercept({
       via: 'distill-detect',
       final_state: 'distill_blocked',
       error: distillBlockError(distillRules, requestId),
-      errorMessage: evidence ? `${distill.error?.message || '不允许蒸馏'}: ${evidence}` : distill.error?.message,
+      errorMessage: distillEvidenceMessage(distill.error?.message, evidence),
       intercept: gateVerdict({ kind: 'block', by: 'distill', keyword: evidence.slice(0, 40) }),
       deviceId: inboundRefusalDeviceId({ inbound, body, headers }),
       fingerprint: refusalFingerprint(body, inbound),
@@ -182,7 +195,7 @@ export async function evaluateProtocolIntercept({
         via: 'distill-detect',
         final_state: 'distill_blocked',
         error,
-        errorMessage: `${error.body?.error?.message || '不允许蒸馏'}: ${keyword}`,
+        errorMessage: distillEvidenceMessage(error.body?.error?.message, keyword),
         intercept: gateVerdict({ kind: 'block', by: 'distill', keyword: keyword.slice(0, 40) }),
         deviceId: inboundRefusalDeviceId({ inbound, body, headers }),
         fingerprint: refusalFingerprint(body, inbound),

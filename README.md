@@ -70,7 +70,7 @@ docker compose pull && docker compose up -d
 curl -sS --noproxy '*' http://127.0.0.1:8787/health
 ```
 
-镜像自带 `bin/kin-{kernel,egress,worker,codex-kernel,cookie-auth}` 与 `share/wrap-cli`，入口写进挂载目录。源码构建也**不在服务器上编 Rust/Go**。槽 UID 是 `10000+序号`，`bin/kin-*` 必须 **755**。
+镜像自带 `bin/kin-{kernel,egress,worker,codex-kernel,oauth-auth,computer}` 与 `share/wrap-cli`，入口写进挂载目录。源码构建也**不在服务器上编 Rust/Go**。槽 UID 是 `10000+序号`，`bin/kin-*` 必须 **755**。新建账号运行环境依赖 `kin-computer`（linux amd64 闭源程序），本 fork 按 `deploy/payload.json` 校验后随镜像提供，不通过全量下载原版 payload 覆盖补丁 CLI。已有容器启动不重新生成身份。
 
 本 fork 使用源码构建：`docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`，默认镜像为 `hixz12-vm2api:local`。上面的官方安装命令与官方预构建镜像不包含 fork 定制。槽位默认沿用本地 `kin-os/*` 镜像；生产环境先在受限 builder 中执行 `node docker/kin-os/build.mjs`，再设置 `VM2API_SLOT_IMAGE_MODE=check`。如需官方槽位预构建镜像，可显式设置 `KIN_OS_REGISTRY=ghcr.io/dofastted`，在源码目录执行 `node docker/kin-os/build.mjs --pull`。详见 [部署](docs/DEPLOY.md) 与 [Fork 兼容性](docs/FORK_COMPATIBILITY.md)。
 

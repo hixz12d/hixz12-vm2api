@@ -15,7 +15,7 @@ import {
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { fleetCounts, type FleetGroup } from '@/lib/vm-status'
+import { fleetCounts, fleetGroup, type FleetGroup } from '@/lib/vm-status'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -40,11 +40,13 @@ import { VmListSkeleton } from '@/features/vm/list-skeleton'
 import { vmsListQueryOptions } from '@/features/vm/queries'
 import { usePoolSeatStream } from '@/features/vm/use-pool-seat-stream'
 import { VmActionsProvider } from '@/features/vm/vm-actions-provider'
+import { VmRack } from '@/features/vm/vm-rack'
+import type { RackSize } from '@/features/vm/vm-rack-blade'
+import { zoneOfGroup, type VmZoneFilter } from '@/features/vm/vm-rack-model'
 import {
   filterVms,
   KindFilterChips,
   sortVms,
-  VmCards,
   VmTable,
   type VmKindFilter,
   type VmSortKey,
@@ -55,6 +57,8 @@ const SORT_CHIPS = [
   ['name', '按名称'],
   ['remain', '按 5 小时剩余'],
   ['today', '按今天花费'],
+  ['cost7', '按 7 天费用'],
+  ['total', '按累计费用'],
   ['cache', '按缓存命中'],
 ] as const
 
@@ -75,6 +79,34 @@ const STATUS_FILTERS: { key: FleetGroup; label: string; hint: string }[] = [
 type ViewMode = 'lines' | 'table' | 'grid'
 const VIEW_KEY = 'vm_list_view'
 
+const SIZES: [RackSize, string, string][] = [
+  ['s', '小', '小卡：一屏看全部账号'],
+  ['m', '中', '中卡：日常巡检'],
+  ['l', '大', '大卡：逐个核对'],
+]
+const SIZE_KEY = 'vm-rack-size'
+
+function readPref<T extends string>(
+  key: string,
+  allowed: readonly T[],
+  fallback: T
+): T {
+  try {
+    const value = localStorage.getItem(key)
+    return allowed.includes(value as T) ? (value as T) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function writePref(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // 隐私模式 / 配额满：本次会话内仍按内存状态生效。
+  }
+}
+
 export function VmListPage() {
   const me = useQuery(meQueryOptions())
   const vmsQ = useQuery(vmsListQueryOptions(5000))
@@ -85,15 +117,23 @@ export function VmListPage() {
   })
   const qc = useQueryClient()
   const [q, setQ] = useState('')
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useState<FleetGroup | 'all'>('all')
+  const zoneFilter: VmZoneFilter =
+    filter === 'all' ? 'all' : zoneOfGroup(filter)
   const [kind, setKind] = useState<VmKindFilter>('all')
-  const [view, setViewState] = useState<ViewMode>(() => {
-    const saved = localStorage.getItem(VIEW_KEY)
-    return saved === 'table' || saved === 'grid' ? saved : 'lines'
-  })
+  const [view, setViewState] = useState<ViewMode>(() =>
+    readPref(VIEW_KEY, ['lines', 'table', 'grid'] as const, 'lines')
+  )
+  const [size, setSizeState] = useState<RackSize>(() =>
+    readPref(SIZE_KEY, ['s', 'm', 'l'] as const, 'l')
+  )
   const setView = (next: ViewMode) => {
     setViewState(next)
-    localStorage.setItem(VIEW_KEY, next)
+    writePref(VIEW_KEY, next)
+  }
+  const setSize = (next: RackSize) => {
+    setSizeState(next)
+    writePref(SIZE_KEY, next)
   }
   const [sort, setSort] = useState<VmSortKey>('status')
   const [dir, setDir] = useState<'asc' | 'desc'>('asc')
@@ -143,12 +183,19 @@ export function VmListPage() {
     (me.data?.role === 'user' && (me.data.vm_create_quota || 0) > 0)
   const scoped = filterVms(vms, '', 'all', kind)
   const counts = fleetCounts(scoped)
-  const list = sortVms(filterVms(vms, q, filter, kind), sort, dir, accounts)
+  const list = sortVms(
+    filterVms(vms, q, 'all', kind).filter(
+      (vm) => filter === 'all' || fleetGroup(vm) === filter
+    ),
+    sort,
+    dir,
+    accounts
+  )
 
   return (
     <PageHeader
       title={VIEW_TITLES.vm}
-      description='槽位和账号用量。5h / 7d 窗口在列表里，未探测的额度不会冒充可用。'
+      description='查看账号状态、剩余额度和用量；可切换简洁列表、详细表格或卡片。'
       fluid
       extra={
         <div className='flex items-center gap-2'>
@@ -264,6 +311,29 @@ export function VmListPage() {
               {dir === 'asc' ? <ArrowUpNarrowWide /> : <ArrowDownWideNarrow />}
             </Button>
             <Separator orientation='vertical' className='mx-1 h-5' />
+            {view === 'grid' ? (
+              <div
+                role='group'
+                aria-label='卡片大小'
+                className='flex items-center rounded-md border border-input p-0.5'
+              >
+                {SIZES.map(([key, label, title]) => (
+                  <button
+                    key={key}
+                    type='button'
+                    title={title}
+                    aria-pressed={size === key}
+                    onClick={() => setSize(key)}
+                    className={cn(
+                      'h-7 min-w-7 rounded-sm px-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground',
+                      size === key && 'bg-accent text-accent-foreground'
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <div
               role='group'
               aria-label='显示方式'
@@ -322,7 +392,13 @@ export function VmListPage() {
                 }}
               />
             ) : view === 'grid' ? (
-              <VmCards vms={list} accounts={accounts} />
+              <VmRack
+                vms={list}
+                accounts={accounts}
+                filter={zoneFilter}
+                size={size}
+                onCreate={canCreate ? () => setCreateOpen(true) : undefined}
+              />
             ) : (
               <VmTable vms={list} accounts={accounts} />
             )

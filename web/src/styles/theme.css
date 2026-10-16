@@ -90,30 +90,24 @@
   --status-none-bg: oklch(0.925 0.012 82);
 
   /*
-   * 分组 = 插线颜色。卡片不再按分组整块着色：surface / border 回到中性，
-   * 只有 fg（文字）、solid（插头色块）保留插线色相。
+   * 分组 = 插线颜色。卡片 / 表格行不按分组整块着色：border 回到中性，
+   * 只有 fg（文字）、solid（插头色块、机架刀片左沿色标）保留插线色相。
    */
-  --tier-pro-surface: var(--card);
   --tier-pro-surface-hover: var(--accent);
   --tier-pro-border: var(--tier-none-border);
   --tier-pro-fg: oklch(0.45 0.11 245);
   --tier-pro-badge-bg: oklch(0.92 0.03 245);
-  --tier-pro-muted: var(--muted-foreground);
   --tier-pro-solid: var(--cord-pro);
   --tier-pro-solid-fg: oklch(0.985 0.005 245);
-  --tier-max-surface: var(--card);
   --tier-max-surface-hover: var(--accent);
   --tier-max-border: var(--tier-none-border);
   --tier-max-fg: oklch(0.44 0.14 320);
   --tier-max-badge-bg: oklch(0.92 0.035 320);
-  --tier-max-muted: var(--muted-foreground);
   --tier-max-solid: var(--cord-max);
   --tier-max-solid-fg: oklch(0.985 0.005 320);
-  --tier-codex-surface: var(--card);
   --tier-codex-surface-hover: var(--accent);
   --tier-codex-border: var(--tier-none-border);
   --tier-codex-fg: oklch(0.43 0.08 195);
-  --tier-codex-muted: var(--muted-foreground);
   --tier-codex-solid: var(--cord-codex);
   --tier-codex-solid-fg: oklch(0.985 0.005 195);
   --tier-none-border: oklch(0.5 0.06 76 / 30%);
@@ -244,27 +238,21 @@
   --status-bad-bg: var(--pink-1);
   --status-none-bg: oklch(0.29 0.012 70);
 
-  --tier-pro-surface: var(--card);
   --tier-pro-surface-hover: var(--accent);
   --tier-pro-border: var(--tier-none-border);
   --tier-pro-fg: oklch(0.8 0.08 245);
   --tier-pro-badge-bg: oklch(0.3 0.04 245);
-  --tier-pro-muted: var(--muted-foreground);
   --tier-pro-solid: var(--cord-pro);
   --tier-pro-solid-fg: oklch(0.18 0.02 245);
-  --tier-max-surface: var(--card);
   --tier-max-surface-hover: var(--accent);
   --tier-max-border: var(--tier-none-border);
   --tier-max-fg: oklch(0.8 0.1 320);
   --tier-max-badge-bg: oklch(0.3 0.05 320);
-  --tier-max-muted: var(--muted-foreground);
   --tier-max-solid: var(--cord-max);
   --tier-max-solid-fg: oklch(0.18 0.02 320);
-  --tier-codex-surface: var(--card);
   --tier-codex-surface-hover: var(--accent);
   --tier-codex-border: var(--tier-none-border);
   --tier-codex-fg: oklch(0.82 0.07 195);
-  --tier-codex-muted: var(--muted-foreground);
   --tier-codex-solid: var(--cord-codex);
   --tier-codex-solid-fg: oklch(0.18 0.02 195);
   --tier-none-border: oklch(0.683 0.087 76 / 24%);

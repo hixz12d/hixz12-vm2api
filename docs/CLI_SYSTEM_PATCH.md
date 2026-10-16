@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-源码融合上游 `0f7008c6`（v1.3.158），原版二进制来自 `deploy/payload.json` 固定的 `payload-2026.10.12-effort`。仓内 `cli-node` 采用该 payload 的 Claude Code 2.1.293，应用 `caller-system-v3+safeguards-v1` 后用官方 Bun 重建；`cc-node` 保持已验证的 `caller-system-v1`。wrap 内核和 OAuth helper 同步新版 payload，Go worker / egress 从融合后的源码编译。下文记录本地融合验证；生产状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
+源码融合至上游 `9baaffbf`（v1.3.178），原版 CLI / 内核仍来自 `deploy/payload.json` 固定的 `payload-2026.10.12-effort`，本轮只补齐新依赖 `kin-computer`，不重打 CLI 补丁。仓内 `cli-node` 继续采用 Claude Code 2.1.293 的 `caller-system-v3+safeguards-v1`，`cc-node` 保持 `caller-system-v1`；两者均按 `PATCH.json` 复核 SHA-256。最新源码验证及实际内核/CLI auto mode 复测见 [UPSTREAM_1_3_178_EVIDENCE.json](UPSTREAM_1_3_178_EVIDENCE.json)。下文的构建、函数一致性及 9 次 safeguards 抓取记录来自 v1.3.158，不冒充本轮重新执行；生产状态以部署仓库 `docs/RUNBOOK.md` 和服务器发布证据为准。
 
 唯一补丁实现是 `scripts/patch-cli-system.py`，固定输入源码 SHA-256，未知基线拒绝应用。`cli-node` 对应当前 payload；`cli-node-v1.3.144` 及脚本中其它版本名可复现旧基线；`cc-node` 对应原固定基线。逐文件来源和成品哈希见 [PATCH.json](../share/wrap-cli/PATCH.json)。
 

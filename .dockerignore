@@ -8,6 +8,7 @@ bin/*
 !bin/kin-worker
 !bin/kin-codex-kernel
 !bin/kin-oauth-auth
+!bin/kin-computer
 !share/wrap-cli
 !share/wrap-cli/**
 !share/crag

@@ -180,6 +180,18 @@ function HealthCacheCard({
           />
         </SettingRow>
         <SettingRow
+          label='全号轮询'
+          desc='每个间隔对所有可调度槽各探一次（受并发上限、工作时段、冷却与凭证排除约束）。列表中首个成功的结果仍写入健康缓存；关闭时探测到第一个可用槽即停止。'
+        >
+          <Switch
+            checked={probe.probe_all_slots === true}
+            onCheckedChange={(checked) =>
+              onProbeChange({ probe_all_slots: checked })
+            }
+            aria-label='全号轮询'
+          />
+        </SettingRow>
+        <SettingRow
           label='结果保留多久'
           desc='单位秒。过期后测试请求会真的调用账号'
         >
