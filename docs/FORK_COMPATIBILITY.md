@@ -26,6 +26,7 @@
 - 构建继续采用 fork 已验证的产物契约：`web/dist` 在本地从融合源码重建并入库，内核及补丁 CLI 继续入库，生产镜像只打包，不在受限 VPS 上重编前端或下载原版 CLI。上游 `deploy/payload.json` 与 fetch 工具保留供核验，但不进入 fork 的 Dockerfile。新增 KVM 构建上下文入镜像；Docker/KVM 请求路径均只检查已准备镜像，不现场拉取或构建。
 - 保留 trixie glibc 兼容、OAuth JSON 启动检查、crag 安装、调用方 system 与 safeguards 门禁；内核与 CLI 必须与控制面一起发布并同步槽位。发布拉上游使用 `--no-tags`，不覆盖重写前的本地标签。
 - KVM/远程槽特征采集走上游 guest reader；本地 Docker 槽保留 fork 的 Python 采集器与字段验证。KVM runner 镜像在未配置注册表时仍使用上游完整 registry 名，不产生以 `/` 开头的非法标签。
+- KVM runner 启动脚本优先读取 `kvm/fingerprint/qemu-smbios.args` 的成对参数，只接受 `-smbios` / 合法 `-uuid`，不执行文件内容；没有该文件时兼容旧环境变量。新版 `kin-computer` 对缺失的硬件 UUID 不生成参数，但环境变量用 `-` 占位，不能继续把它直接传给 QEMU，否则虚拟机立即退出、官方初装报 `hello=1 usage=fail`。准备 KVM 镜像时须同时覆盖 fork 的 `kin-kvm-entry` 和 `kin-guest-exec`，不能只更新 guest-exec。
 
 - 采用 v1.3.124–v1.3.135：密钥平台 / 账号范围、可复用账号池、账号 JSON 导入导出、风险审计替代协议页、模型页与 Haiku 5.5 默认 100K 上限、可配置流空闲超时和可选工具参数流式下发、缓存命中统计修复、OAuth 换票状态修复、代理 IPv6 地理信息、节点本地出口及透明 TCP 按唯一 DNS 域名转发。新增迁移 `032`–`035`；上线前必须备份，不覆盖生产持久配置。
 - 上游 `keyScope` 与 fork `groupScope` 取交集：Claude 直接选号、设备座位、排队、只读额度 / token 查询及 Codex 候选均保留两个限制，空池不放宽到全局。原 `group_id` 分组、分组修改权限、智能评分和账号同步不变；上游 `vm_pool_id` 不自动迁移或替换现有分组。

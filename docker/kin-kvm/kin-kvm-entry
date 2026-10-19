@@ -276,6 +276,31 @@ has_share() {
   echo ",${KIN_KVM_SHARES}," | grep -q ",$1,"
 }
 
+# kin-computer publishes complete SMBIOS arguments. Missing fields are omitted,
+# while the legacy environment represents them as "-" (not a valid QEMU UUID).
+SMBIOS_ARGS=()
+SMBIOS_FILE="$SLOT_KVM/fingerprint/qemu-smbios.args"
+if [ -s "$SMBIOS_FILE" ]; then
+  mapfile -t SMBIOS_ARGS < "$SMBIOS_FILE"
+  [ $(( ${#SMBIOS_ARGS[@]} % 2 )) -eq 0 ] || die "invalid SMBIOS argument pairs"
+  for ((i = 0; i < ${#SMBIOS_ARGS[@]}; i += 2)); do
+    value=${SMBIOS_ARGS[i + 1]}
+    case "${SMBIOS_ARGS[i]}" in
+      -smbios)
+        [[ "$value" =~ ^type=(0|1|2|3|4|17), ]] || die "invalid SMBIOS type"
+        ;;
+      -uuid)
+        [[ "$value" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]] || die "invalid SMBIOS UUID"
+        ;;
+      *) die "unsupported SMBIOS argument" ;;
+    esac
+  done
+else
+  SMBIOS_ARGS=(
+    -uuid "$KIN_KVM_SMBIOS_UUID"
+    -smbios "type=1,manufacturer=$(smbios_escape "$KIN_KVM_SMBIOS_MANUFACTURER"),product=$(smbios_escape "$KIN_KVM_SMBIOS_PRODUCT"),version=$(smbios_escape "$KIN_KVM_SMBIOS_VERSION"),serial=$(smbios_escape "$KIN_KVM_SMBIOS_SERIAL"),uuid=$KIN_KVM_SMBIOS_UUID,family=$(smbios_escape "$KIN_KVM_SMBIOS_FAMILY")"
+  )
+fi
 QEMU=(
   qemu-system-x86_64
   -nodefaults
@@ -285,8 +310,7 @@ QEMU=(
   -cpu "$CPU_MODEL"
   -m "$KIN_KVM_MEMORY_MB"
   -smp "$KIN_KVM_VCPUS"
-  -uuid "$KIN_KVM_SMBIOS_UUID"
-  -smbios "type=1,manufacturer=$(smbios_escape "$KIN_KVM_SMBIOS_MANUFACTURER"),product=$(smbios_escape "$KIN_KVM_SMBIOS_PRODUCT"),version=$(smbios_escape "$KIN_KVM_SMBIOS_VERSION"),serial=$(smbios_escape "$KIN_KVM_SMBIOS_SERIAL"),uuid=$KIN_KVM_SMBIOS_UUID,family=$(smbios_escape "$KIN_KVM_SMBIOS_FAMILY")"
+  "${SMBIOS_ARGS[@]}"
   -drive "if=pflash,format=raw,unit=0,readonly=on,file=$OVMF_CODE"
   -drive "if=pflash,format=raw,unit=1,file=$SLOT_KVM/OVMF_VARS.fd"
   -drive "file=$SLOT_KVM/disk.qcow2,if=none,id=disk0,format=qcow2,cache=writeback,discard=unmap"
