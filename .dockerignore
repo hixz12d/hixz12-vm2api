@@ -6,6 +6,8 @@ bin/*
 !bin/kin-kernel
 !bin/kin-egress
 !bin/kin-worker
+!bin/kin-slot-gate
+!bin/kin-api-kernel
 !bin/kin-codex-kernel
 !bin/kin-oauth-auth
 !bin/kin-computer

@@ -1,0 +1,73 @@
+{
+  "scope": "Local integration only; no git commit, push, deployment or production connection",
+  "fork_head": "95082ff4",
+  "pending_merge_head": "b80329b167943246d15bca486bf1169a75d9711d",
+  "upstream_source_tip": "670dd027a1d89bef17814d5ff3a6041b52a426e8",
+  "integration_method": "Continue the existing merge, resolve remaining conflicts, then apply the b80329b1..670dd027 patch with three-way conflict resolution. MERGE_HEAD remains b80329b1; no ancestry to 670dd027 is claimed.",
+  "version": "1.3.199",
+  "payload": "payload-2026.10.19-kernel-cli",
+  "validation": {
+    "backend": {
+      "runtime": "Node 22, Linux Docker, 2 CPUs, 3 GiB, no network; iproute2 installed for egress listener checks",
+      "files": 37,
+      "passed": 724,
+      "failed": 0,
+      "skipped": 0,
+      "selection": ["group-routing", "smart-score", "empty-response-backoff", "pool-scheduler", "failover-runner", "availability", "schedule-policy", "schedule-eligibility", "auto-mode", "cli-hop-body", "client-tool-environment", "specialist-session", "stream-truncation", "cache-ttl", "crs-persona", "cch", "anthropic-policy", "handle-codex", "responses-ws", "kernel-watchdog", "kernel-watchdog-node-slot", "kernel-watchdog-observation", "guest-identity", "vm-runtime-bin-mount", "vm-runtime-replace", "vm-recreate", "fleet-update", "egress", "docker-slot-memory", "docker-slot-cpu", "machine-spec", "panel-acl", "panel-users", "panel-route-coverage", "api-backend", "security", "wrap-cli-runtime"]
+    },
+    "frontend": {
+      "files": 13,
+      "passed": 67,
+      "failed": 0,
+      "selection": ["guest-identity-display", "vm-perms", "vm-test-schedule", "detail-today", "about-pane", "int-input", "compat-patch", "proxy-results", "sync-report", "persona-template", "api", "engine-contract", "seed-policy-card"],
+      "typecheck": "passed",
+      "build": "passed; web/dist rebuilt",
+      "ui_review": "Single-context source-only review; no sub-agent or browser tool exposed. Fork theme/list layout retained; upstream role gates, per-action pending state and rebuild modes integrated. Destructive reset is opt-in with ID confirmation; reset descriptions match the chosen mode.",
+      "mechanical_scan": { "targets": 13, "findings": 0 },
+      "browser_rendering": "not verified"
+    },
+    "actual_kernel_cli": {
+      "test": "test/e2e/auto-mode.e2e.test.mjs",
+      "passed": 5,
+      "failed": 0,
+      "skipped": 1,
+      "skip_reason": "No old CLI supplied for the legacy compatibility rejection scenario",
+      "upstream": "Container-local HTTP fixture only; no external network",
+      "cli_version": "2.1.296 (Claude Code)",
+      "compiler": "Bun 1.3.14+0d9b296af linux-x64-baseline",
+      "compiler_archive_sha256": "a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7",
+      "graph_flags": 7,
+      "entry": "/$bunfs/root/cli.js",
+      "patch_manifest": "share/wrap-cli/PATCH.json",
+      "unchanged_source_functions": ["splitSysPromptPrefix", "getCacheControl", "buildSystemPromptBlocks", "fillMissingCacheTtl", "applyKinOwnedCacheMarkers", "capCacheMarkers", "finalizeZeroBilling", "withCchPlaceholder", "classifierSystemBlocks"],
+      "direct_safeguards_capture": "Not rerun; existing Node unit checks passed and the pinned CLI patch applied successfully"
+    },
+    "go": {
+      "tests": "go test ./internal/config ./internal/egress ./internal/telemetry",
+      "test_runtime": "golang:1.27.0-bookworm, Linux Docker, no network",
+      "result": "All three packages passed",
+      "build": "Go 1.26.5, GOOS=linux GOARCH=amd64 CGO_ENABLED=0, -trimpath",
+      "artifacts": ["bin/kin-worker", "bin/kin-egress"]
+    },
+    "syntax": { "changed_mjs": 192, "changed_python": 6, "changed_shell": 3, "result": "passed" },
+    "diff_check": "Source diff clean. Vite-generated Combination asset retains five whitespace-only lines inside a dependency CSS template literal; generated output was not hand-edited.",
+    "resolved_first_pass_failures": [
+      "Existing guest-identity React test fixture now supplies the required busy callback",
+      "Watchdog recovery fixtures explicitly select fail_threshold=1 for single-failure scenarios; default 3000ms/three-failure production protection retained",
+      "Existing ordinary-request integration expectation updated to the new thinking.display=summarized default; classifier expectations unchanged",
+      "Egress test container now includes iproute2/ss; no runtime code changed to bypass readiness checks"
+    ]
+  },
+  "database": {
+    "new_migration": "038_api_endpoint_proxy.sql",
+    "change": "api_endpoint_keys.proxy_id TEXT NOT NULL DEFAULT ''",
+    "local": "Fresh test databases initialized during backend checks",
+    "production": "Not accessed; existing-data migration and backup/rollback still required before deployment"
+  },
+  "dependencies": {
+    "manifests_and_locks": "Match upstream tip, including source-map-js 1.2.2",
+    "npm_audit": "One moderate aggregate for indirect ip-address, four advisories; no npm audit fix performed",
+    "advisories": ["GHSA-rpw4-54j3-4h4q", "GHSA-2vr4-cq9g-pvrc", "GHSA-j6r3-76f7-8jcv", "GHSA-h3mg-xc3c-68pw"]
+  },
+  "not_verified": ["Full production image build/startup", "Real Anthropic traffic", "Real cache hit/TTL behavior", "ARM64", "Real KVM or remote cluster nodes", "Production database migration", "Production route checks", "Long-running stability", "Browser rendering"]
+}

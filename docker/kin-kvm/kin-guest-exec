@@ -9,8 +9,8 @@ workdir=''
 interactive=0
 tty=0
 detach=0
-# Newline-separated KEY=VAL so values may contain spaces.
-env_lines=''
+# Accumulated export statements; each -e is quoted at parse time (values may contain newlines).
+env_exports=''
 
 usage() {
   echo "usage: kin-guest-exec [-u uid[:gid]] [-e K=V]... [-w dir] [-i] [-t] [-d] -- argv..." >&2
@@ -36,8 +36,11 @@ while [ $# -gt 0 ]; do
     -e)
       [ $# -ge 2 ] || usage
       case "$2" in
-        *=*) env_lines="${env_lines}${2}
-" ;;
+        *=*)
+          _ek=${2%%=*}
+          _ev=${2#*=}
+          env_exports="${env_exports}export ${_ek}=$(posix_quote "$_ev"); "
+          ;;
         *) echo "kin-guest-exec: -e expects KEY=VAL" >&2; exit 2 ;;
       esac
       shift 2
@@ -68,17 +71,8 @@ fi
 inner=''
 
 # Build the remote script without a pipe so we keep the current shell.
-if [ -n "$env_lines" ]; then
-  oldifs=$IFS
-  IFS='
-'
-  for line in $env_lines; do
-    [ -n "$line" ] || continue
-    key=${line%%=*}
-    val=${line#*=}
-    inner="${inner}export ${key}=$(posix_quote "$val"); "
-  done
-  IFS=$oldifs
+if [ -n "$env_exports" ]; then
+  inner="${inner}${env_exports}"
 fi
 if [ -n "$workdir" ]; then
   inner="${inner}cd $(posix_quote "$workdir") || exit; "

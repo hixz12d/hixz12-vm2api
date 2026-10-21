@@ -1,0 +1,1 @@
+import{_t as e,mt as t}from"./button-B52_LMkq.js";var n=e(t(),1);function r(e=3e4){let[t,r]=(0,n.useState)(()=>Date.now());return(0,n.useEffect)(()=>{let t=setInterval(()=>r(Date.now()),e);return()=>clearInterval(t)},[e]),t}export{r as t};

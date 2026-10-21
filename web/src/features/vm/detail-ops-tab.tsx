@@ -1,18 +1,28 @@
+import { useState } from 'react'
 import type { Vm, VmProxySnap } from '@/types/panel-vm'
 import { type CredType, credTypeLabel } from '@/lib/cred-type'
 import { guestIdentityState } from '@/lib/guest-identity'
 import { isCodexVm } from '@/lib/vm-kind'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { TabsContent } from '@/components/ui/tabs'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { ChoiceTiles } from '@/components/choice-tiles'
 import { Field } from '@/features/vm/detail-section-primitives'
 import { VmEnvironmentCard } from '@/features/vm/environment-card'
 import { NodeChip } from '@/features/vm/node-chip'
+import { VmPhysicalFeaturesCard } from '@/features/vm/physical-features-card'
 import { isRemoteVm, REMOTE_UNSUPPORTED_TEXT } from '@/features/vm/placement'
 import { VmOwnerAdminCard } from '@/features/vm/vm-owner-admin-card'
 import { VmShellCard } from '@/features/vm/vm-shell-card'
@@ -26,6 +36,8 @@ type VmOpsTabProps = {
   refreshBlocked: string
   savingTimezone: boolean
   onAction: (path: string, body?: unknown) => void
+  /** 该路径的操作正在进行。 */
+  busy: (path: string) => boolean
   /** 终端快捷指令执行后刷新详情。 */
   onRefresh: () => void
   onTimezoneSave: (timezone: string) => void
@@ -35,6 +47,8 @@ type VmOpsTabProps = {
 }
 
 export function VmOpsTab(props: VmOpsTabProps) {
+  const [kernelOpen, setKernelOpen] = useState(false)
+  const [kernelMode, setKernelMode] = useState<'keep' | 'traits'>('keep')
   const {
     vm,
     proxy,
@@ -44,6 +58,7 @@ export function VmOpsTab(props: VmOpsTabProps) {
     refreshBlocked,
     savingTimezone,
     onAction,
+    busy,
     onRefresh,
     onTimezoneSave,
     onTimezoneFollowProxy,
@@ -101,6 +116,11 @@ export function VmOpsTab(props: VmOpsTabProps) {
           </Field>
         </CardContent>
       </Card>
+      <VmPhysicalFeaturesCard
+        vm={vm}
+        collecting={busy('/collect-identity')}
+        onCollect={() => onAction('/collect-identity')}
+      />
       <VmEnvironmentCard
         vm={vm}
         proxy={proxy}
@@ -116,16 +136,19 @@ export function VmOpsTab(props: VmOpsTabProps) {
             '用刷新令牌换一张新的访问凭证。凭证快过期或刚报错时用。'
           }
           disabled={!canRefresh}
+          loading={busy('/oauth/refresh')}
           onClick={() => onAction('/oauth/refresh', {})}
         />
         <OpsButton
           label={gpt ? '重新加载 Codex 程序' : '重新加载程序'}
           hint='让这个账号换上最新版本的程序。加载的几秒里，它正在处理的请求可能失败。'
+          loading={busy('/reload')}
           onClick={() => onAction('/reload')}
         />
         <OpsButton
           label='设为当前调度账号'
           hint='手动指定下一批请求优先用这个账号。'
+          loading={busy('/activate')}
           onClick={() => onAction('/activate')}
         />
       </OpsGroup>
@@ -137,6 +160,7 @@ export function VmOpsTab(props: VmOpsTabProps) {
         <OpsButton
           label='重新读取机器特征'
           hint='重新读取这台机器的语言、时区、机器编号等信息。'
+          loading={busy('/collect-identity')}
           onClick={() => onAction('/collect-identity')}
         />
         {gpt ? null : (
@@ -151,6 +175,7 @@ export function VmOpsTab(props: VmOpsTabProps) {
                     : `官方初装只支持完整 OAuth 凭证，这个账号是 ${credTypeLabel(credType)}。`
               }
               disabled={!officialCc || remote}
+              loading={busy('/official-cc-bootstrap')}
               onClick={() =>
                 onAction('/official-cc-bootstrap', {
                   force: true,
@@ -161,6 +186,7 @@ export function VmOpsTab(props: VmOpsTabProps) {
             <OpsButton
               label='按官方配置对齐特征'
               hint='用官方客户端生成的配置文件校准设备特征。'
+              loading={busy('/reconcile-fingerprint')}
               onClick={() => onAction('/reconcile-fingerprint', {})}
             />
           </>
@@ -173,10 +199,14 @@ export function VmOpsTab(props: VmOpsTabProps) {
           desc='内核是账号里真正发请求的程序。只在内核报错或你要换版本时用。'
         >
           <OpsButton
-            label='重装这个账号的内核'
-            hint={remote ? REMOTE_UNSUPPORTED_TEXT : '重新装一遍这个账号的内核文件。'}
-            disabled={remote}
-            onClick={() => onAction('/wrap-cli/repair')}
+            label='重装这个账号的内核…'
+            hint={
+              remote
+                ? '集群节点上的账号会用同一份内核、cli-node 和统计上报程序重建镜像再换容器，凭证和指纹保留。'
+                : '重新装一遍这个账号的内核、cli-node 和统计上报程序，可选择保留原数据或重建新特征。'
+            }
+            loading={busy('/wrap-cli/repair')}
+            onClick={() => setKernelOpen(true)}
           />
           <OpsButton
             label='把这个账号的内核设为模板'
@@ -186,6 +216,7 @@ export function VmOpsTab(props: VmOpsTabProps) {
                 : '以后给其他账号安装内核时，照这个账号的版本来装。不会复制凭证和出口代理。'
             }
             disabled={remote}
+            loading={busy('/wrap-cli/promote')}
             onClick={() => onAction('/wrap-cli/promote')}
           />
         </OpsGroup>
@@ -204,16 +235,57 @@ export function VmOpsTab(props: VmOpsTabProps) {
 
       <OpsGroup
         title='危险操作'
-        desc='会清掉数据，点了会再让你输入账号编号确认。'
+        desc='重建会中断请求，可选择保留数据或清空凭证；删除无法恢复。操作前会再次确认。'
         danger
       >
         <Button size='sm' variant='outline' onClick={onReset}>
-          清空重建运行环境…
+          重建运行环境…
         </Button>
         <Button size='sm' variant='destructive' onClick={onDelete}>
           删除这个账号…
         </Button>
       </OpsGroup>
+      <Dialog open={kernelOpen} onOpenChange={setKernelOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>重装这个账号的内核</DialogTitle>
+          </DialogHeader>
+          <ChoiceTiles
+            label='更新方式'
+            value={kernelMode}
+            onChange={setKernelMode}
+            choices={[
+              {
+                value: 'keep',
+                title: '保留原数据重建',
+                detail:
+                  '留下凭证、设备指纹和统计，只换内核、cli-node 和统计上报程序。',
+              },
+              {
+                value: 'traits',
+                title: '重建新特征',
+                detail: remote
+                  ? '集群节点上的账号只换镜像，不在这里清远程家目录。'
+                  : '清空家目录并重新生成机器身份（设备指纹会变）。',
+              },
+            ]}
+          />
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setKernelOpen(false)}>
+              取消
+            </Button>
+            <Button
+              variant={kernelMode === 'traits' ? 'destructive' : 'default'}
+              onClick={() => {
+                setKernelOpen(false)
+                onAction('/wrap-cli/repair', { mode: kernelMode })
+              }}
+            >
+              {kernelMode === 'keep' ? '保留原数据重建' : '重建新特征'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TabsContent>
   )
 }
@@ -249,11 +321,13 @@ function OpsButton({
   label,
   hint,
   disabled,
+  loading,
   onClick,
 }: {
   label: string
   hint: string
   disabled?: boolean
+  loading?: boolean
   onClick: () => void
 }) {
   return (
@@ -264,6 +338,7 @@ function OpsButton({
             size='sm'
             variant='outline'
             disabled={disabled}
+            loading={loading}
             onClick={onClick}
           >
             {label}

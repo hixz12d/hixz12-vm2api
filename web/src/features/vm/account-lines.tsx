@@ -41,6 +41,7 @@ import {
 } from '@/features/vm/schedulable-switch'
 import { fableRow } from '@/features/vm/usage-meter'
 import { useVmActions } from '@/features/vm/vm-actions-context'
+import { useVmPerms } from '@/features/vm/vm-perms'
 
 /** 账号的灯：坏了红、要留意琥珀；正常、主动暂停、没凭证都不亮。 */
 export function accountLamp(vm: Vm): {
@@ -140,6 +141,7 @@ function AccountLine({
   onClearCooldown?: (vm: Vm) => void
 }) {
   const actions = useVmActions()
+  const perms = useVmPerms()
   const { lamp, text, idle } = accountLamp(vm)
   const plan = planOf(vm)
   const today = vmTodayStats(vm, accounts)
@@ -288,15 +290,19 @@ function AccountLine({
               <DropdownMenuItem onSelect={() => actions.openDetail(vm)}>
                 查看详情卡
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => actions.openTest(vm)}>
-                测试连接
-              </DropdownMenuItem>
+              {perms.test ? (
+                <DropdownMenuItem onSelect={() => actions.openTest(vm)}>
+                  测试连接
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem onSelect={() => actions.openStats(vm)}>
                 查看统计
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => actions.openReauth(vm)}>
-                重新授权
-              </DropdownMenuItem>
+              {perms.credential ? (
+                <DropdownMenuItem onSelect={() => actions.openReauth(vm)}>
+                  重新授权
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuSeparator />
               {onClearCooldown && cooling ? (
                 <DropdownMenuItem onSelect={() => onClearCooldown(vm)}>
@@ -312,7 +318,7 @@ function AccountLine({
                     variant='destructive'
                     onSelect={() => onReset(vm)}
                   >
-                    清空重建运行环境…
+                    重建运行环境…
                   </DropdownMenuItem>
                 </>
               ) : null}

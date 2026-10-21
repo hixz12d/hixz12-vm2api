@@ -2,6 +2,7 @@ import {
   Activity,
   Archive,
   BellRing,
+  Bot,
   Fingerprint,
   Gauge,
   Info,
@@ -19,6 +20,7 @@ export const SETTINGS_TABS = [
   ['sticky', '同一会话固定账号'],
   ['pool', '账号怎么分配'],
   ['quota', '额度用完怎么办'],
+  ['openai', 'GPT 账号（OpenAI）'],
   ['logs', '日志保存'],
   ['protocol', '请求改写'],
   ['whitelist', '提示词规则'],
@@ -39,7 +41,9 @@ export const SETTINGS_TAB_INTROS: Record<SettingsTabId, string> = {
     '同一段对话的请求尽量一直交给同一个账号处理，这样能命中缓存、省钱，也更像真人在用。一般保持默认。',
   pool: '有多个账号时，新请求按什么规则挑账号，某个账号出错时要不要换一个重试。',
   quota:
-    '账号的 5 小时 / 7 天额度快用完或用完时怎么处理，以及每种套餐默认允许的并发和速度。',
+    '账号的 5 小时 / 7 天额度快用完或用完时怎么处理，以及每种套餐默认允许的并发和速度。GPT 账号的额度在「GPT 账号（OpenAI）」页。',
+  openai:
+    'GPT（Codex）账号专用：请求怎么传输、允许哪些客户端调用、额度闸线和客户端画像。全局 WebSocket 只影响请求转发，不影响终端或集群。',
   logs: '请求日志保留多久、记录多少细节。出问题排查时需要日志，但记得越多越占空间。',
   protocol:
     '转发前怎么整理请求，让它看起来就是官方 Claude Code 发出的。属于底层设置，不确定时不要改。',
@@ -58,7 +62,7 @@ export const SETTINGS_TAB_INTROS: Record<SettingsTabId, string> = {
 
 /**
  * 设置页左侧分组导航。id 必须来自 SETTINGS_TABS（类型层面约束），
- * 分组只改呈现顺序，不改路由与合法 tab 集合。
+ * 分组只改呈现顺序，不改路由与合法 tab 集合。同一 tab 可出现在多组。
  */
 export const SETTINGS_NAV_GROUPS: {
   label: string
@@ -70,6 +74,7 @@ export const SETTINGS_NAV_GROUPS: {
       { id: 'sticky', icon: Magnet },
       { id: 'pool', icon: Layers },
       { id: 'quota', icon: Gauge },
+      { id: 'openai', icon: Bot },
       { id: 'health', icon: Activity },
     ],
   },
@@ -84,6 +89,7 @@ export const SETTINGS_NAV_GROUPS: {
     label: '账号环境',
     items: [
       { id: 'init', icon: PackageCheck },
+      { id: 'openai', icon: Bot },
       { id: 'telemetry', icon: RadioTower },
       { id: 'socks5', icon: Network },
     ],
@@ -114,3 +120,37 @@ export function settingsTabId(tab: string | undefined): SettingsTabId {
     ? (tab as SettingsTabId)
     : 'sticky'
 }
+
+export function settingsNavItemKey(
+  groupLabel: string,
+  id: SettingsTabId
+): string {
+  return `${groupLabel}:${id}`
+}
+
+/** 桌面指示条锚在第一处出现的激活项，避免重复 OpenAI 入口抢 ref。 */
+export function firstSettingsNavKey(active: SettingsTabId): string {
+  for (const group of SETTINGS_NAV_GROUPS) {
+    for (const item of group.items) {
+      if (item.id === active) return settingsNavItemKey(group.label, item.id)
+    }
+  }
+  return settingsNavItemKey(SETTINGS_NAV_GROUPS[0]?.label ?? '', active)
+}
+
+/** 窄屏 pill 去重，两组入口仍指向同一 tab。 */
+export const SETTINGS_NAV_UNIQUE_ITEMS: {
+  id: SettingsTabId
+  icon: LucideIcon
+}[] = (() => {
+  const seen = new Set<SettingsTabId>()
+  const items: { id: SettingsTabId; icon: LucideIcon }[] = []
+  for (const group of SETTINGS_NAV_GROUPS) {
+    for (const item of group.items) {
+      if (seen.has(item.id)) continue
+      seen.add(item.id)
+      items.push(item)
+    }
+  }
+  return items
+})()

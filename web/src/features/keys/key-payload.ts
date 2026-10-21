@@ -27,8 +27,10 @@ function groupTypeOf(value: string): KeyGroupType {
 
 export function keyLimitsPayload(
   draft: KeyLimitsDraft,
-  mode: 'create' | 'edit'
+  mode: 'create' | 'edit',
+  options: { isAdmin?: boolean } = {}
 ): Record<string, unknown> {
+  const isAdmin = options.isAdmin ?? true
   const requests = nonNegative(draft.quota_requests, '请求额度')
   if (!Number.isInteger(requests)) throw new Error('请求额度必须是整数')
   const body: Record<string, unknown> = {
@@ -38,12 +40,12 @@ export function keyLimitsPayload(
     quota_usd: nonNegative(draft.quota_usd, 'USD 额度'),
     rpm: nonNegative(draft.rpm, 'RPM'),
   }
-  if (draft.group_id !== undefined) {
+  if (isAdmin && draft.group_id !== undefined) {
     if (!Number.isSafeInteger(draft.group_id) || draft.group_id <= 0)
       throw new Error('请选择有效分组')
     body.group_id = draft.category === 'api' ? 1 : draft.group_id
   }
-  if (draft.group_type === 'pool') {
+  if (isAdmin && draft.group_type === 'pool') {
     const vm_pool_id = String(draft.vm_pool_id || '').trim()
     if (!vm_pool_id) throw new Error('选择一个账号池')
     body.group_type = 'all'
@@ -60,7 +62,7 @@ export function keyLimitsPayload(
     }
     body.group_type = group_type
     body.allowed_vms = allowed_vms
-    if (draft.vm_pool_id !== undefined) body.vm_pool_id = null
+    if (isAdmin && draft.vm_pool_id !== undefined) body.vm_pool_id = null
   }
   if (mode === 'create') {
     body.name = draft.name.trim()

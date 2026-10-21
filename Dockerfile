@@ -15,7 +15,7 @@ COPY VERSION CHANGELOG.md ./
 COPY docker/kin-os ./docker/kin-os
 COPY docker/kin-kvm ./docker/kin-kvm
 COPY web/dist ./web/dist
-COPY bin/kin-kernel bin/kin-egress bin/kin-worker bin/kin-codex-kernel bin/kin-oauth-auth bin/kin-computer /opt/vm2api/image-bin/
+COPY bin/kin-kernel bin/kin-egress bin/kin-worker bin/kin-slot-gate bin/kin-codex-kernel bin/kin-oauth-auth bin/kin-computer bin/kin-api-kernel /opt/vm2api/image-bin/
 COPY share/wrap-cli /opt/vm2api/image-wrap-cli
 COPY share/crag /opt/vm2api/image-crag
 COPY scripts/docker-entrypoint.sh /usr/local/bin/vm2api-entrypoint
@@ -36,6 +36,7 @@ ENV NODE_ENV=production \
     KIN_WORKER_BIN=/opt/vm2api/bin/kin-worker \
     KIN_CODEX_KERNEL_BIN=/opt/vm2api/bin/kin-codex-kernel \
     KIN_OAUTH_AUTH_BIN=/opt/vm2api/bin/kin-oauth-auth \
-    KIN_COMPUTER_BIN=/opt/vm2api/bin/kin-computer
+    KIN_COMPUTER_BIN=/opt/vm2api/bin/kin-computer \
+    KIN_API_KERNEL_BIN=/opt/vm2api/bin/kin-api-kernel
 EXPOSE 8787
 ENTRYPOINT ["/usr/local/bin/vm2api-entrypoint"]

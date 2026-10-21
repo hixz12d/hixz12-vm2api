@@ -14,7 +14,14 @@ import {
   buildSetupTokenAuthorizeURL,
   extractOAuthCodeFromRedirect,
 } from '../../src/lib/oauth/cookie-auth.mjs'
-import { FULL_OAUTH_SCOPE, REDIRECT_URI } from '../../src/lib/oauth/oauth-contract.mjs'
+import fs from 'node:fs'
+import {
+  BOOTSTRAP_URL,
+  FULL_OAUTH_SCOPE,
+  REDIRECT_URI,
+  TOKEN_UA,
+  TOKEN_URL,
+} from '../../src/lib/oauth/oauth-contract.mjs'
 
 // auth.js is private upstream source and is not distributed. Exercise the production
 // JSON subprocess boundary instead of a separate, unavailable JavaScript implementation.
@@ -255,7 +262,7 @@ function makeStrictOAuthFetch(seen, opts = {}) {
       seen.push({ stage: 'token' })
       const body = JSON.parse(init.body)
       assert.equal(init.method, 'POST')
-      assert.equal(headers['user-agent'] || headers['User-Agent'], 'claude-cli/2.1.293 (external, sdk-cli)')
+      assert.equal(headers['user-agent'] || headers['User-Agent'], TOKEN_UA)
       assert.equal(headers['x-app'], 'cli')
       assert.equal(body.grant_type, 'authorization_code')
       assert.equal(body.redirect_uri, REDIRECT_URI)
@@ -278,7 +285,7 @@ function makeStrictOAuthFetch(seen, opts = {}) {
     if (url === 'https://api.anthropic.com/api/claude_cli/bootstrap?entrypoint=claude-vscode&model=claude-opus-5') {
       seen.push({ stage: 'bootstrap' })
       assert.equal(init.method, 'GET')
-      assert.equal(headers['user-agent'], 'claude-cli/2.1.293 (external, sdk-cli)')
+      assert.equal(headers['user-agent'], TOKEN_UA)
       assert.equal(headers['x-app'], 'cli')
       assert.equal(headers['anthropic-beta'], 'oauth-2025-04-20')
       assert.equal(headers.authorization, 'Bearer sk-ant-oat01-token')

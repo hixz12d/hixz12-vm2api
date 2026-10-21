@@ -1,3 +1,4 @@
+import { type ComponentProps, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,6 +9,7 @@ import {
   healthProbeQueryOptions,
   type HealthSnapshotView,
 } from '@/features/settings/queries'
+import { settleInt, typingInt } from './int-input'
 
 type Obj = Record<string, unknown>
 
@@ -29,6 +31,47 @@ function clampInt(raw: string, min: number, max: number, fallback: number) {
   const n = Math.round(Number(raw))
   if (!Number.isFinite(n)) return fallback
   return Math.min(max, Math.max(min, n))
+}
+
+/**
+ * 输入时不限范围（否则键入「120」第一个键就被拉成 30），失焦时再限到 [min, max]。
+ * 未失焦直接保存时由网关按同样范围收口。
+ */
+function DeferredIntInput({
+  value,
+  min,
+  max,
+  fallback,
+  onCommit,
+  ...props
+}: Omit<ComponentProps<typeof Input>, 'value' | 'onChange' | 'onBlur'> & {
+  value: number
+  min: number
+  max: number
+  fallback: number
+  onCommit: (next: number) => void
+}) {
+  const [text, setText] = useState<string | null>(null)
+  return (
+    <Input
+      {...props}
+      type='number'
+      min={min}
+      max={max}
+      value={text ?? String(value)}
+      onChange={(event) => {
+        setText(event.target.value)
+        const n = typingInt(event.target.value)
+        if (n !== null) onCommit(n)
+      }}
+      onBlur={() => {
+        if (text === null) return
+        const settled = settleInt(text, min, max, fallback)
+        setText(null)
+        if (settled !== value) onCommit(settled)
+      }}
+    />
+  )
 }
 
 export function HealthPane(props: HealthPaneProps) {
@@ -165,17 +208,13 @@ function HealthCacheCard({
           />
         </SettingRow>
         <SettingRow label='多久检查一次' desc='单位秒，30–86400'>
-          <Input
+          <DeferredIntInput
             className='w-28'
-            type='number'
             min={30}
             max={86400}
+            fallback={600}
             value={Number(probe.interval_sec ?? 600)}
-            onChange={(event) =>
-              onProbeChange({
-                interval_sec: clampInt(event.target.value, 30, 86400, 600),
-              })
-            }
+            onCommit={(next) => onProbeChange({ interval_sec: next })}
             aria-label='探测间隔'
           />
         </SettingRow>
@@ -195,17 +234,13 @@ function HealthCacheCard({
           label='结果保留多久'
           desc='单位秒。过期后测试请求会真的调用账号'
         >
-          <Input
+          <DeferredIntInput
             className='w-28'
-            type='number'
             min={30}
             max={172800}
+            fallback={900}
             value={Number(probe.cache_ttl_sec ?? 900)}
-            onChange={(event) =>
-              onProbeChange({
-                cache_ttl_sec: clampInt(event.target.value, 30, 172800, 900),
-              })
-            }
+            onCommit={(next) => onProbeChange({ cache_ttl_sec: next })}
             aria-label='缓存有效期'
           />
         </SettingRow>
@@ -292,7 +327,7 @@ function SignatureRepairCard({
           </p>
           <p>
             关闭则把 400
-            原样返回给下游（做签名相关测试时需要）。其他自动修复不受这个开关影响。
+            原样返回给下游（做签名相关测试时需要），同一账号的思考内容原样保留（缺字段时补空字段）；换账号时的清理不受这个开关影响。其他自动修复也不受影响。
           </p>
         </div>
         <Switch

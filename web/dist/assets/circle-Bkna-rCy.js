@@ -1,1 +1,0 @@
-import{i as e}from"./button-DQnB5G5k.js";var t=e(`circle`,[[`circle`,{cx:`12`,cy:`12`,r:`10`,key:`1mglay`}]]);export{t};

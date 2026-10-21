@@ -13,8 +13,14 @@ import {
   alignSamplingWithThinking,
   modelSupportsMidConversationSystem,
 } from './anthropic-policy.mjs'
-import { liftMidConversationSystemMessages } from './sanitize.mjs'
-import { ensureUnofficialAdaptiveThinking, ensureUnofficialEffortHigh, normalizeThinkingForModel } from './thinking.mjs'
+import { liftMidConversationSystemMessages, promoteContentToBlocks } from './sanitize.mjs'
+import {
+  applyThinkingDisplay,
+  ensureUnofficialAdaptiveThinking,
+  ensureUnofficialEffortHigh,
+  normalizeThinkingForModel,
+  thinkingDisplayMode,
+} from './thinking.mjs'
 import { ensureOutputConfigSchema } from './request-rectifier.mjs'
 import {
   applyCrsIdentityReplace,
@@ -27,6 +33,7 @@ import { hasClaudeCode1mSuffix } from './context-1m.mjs'
 import { withRequestProtocolBetas } from './claude-code-betas.mjs'
 import {
   refreshOfficialSystemEnvironment,
+  hasEnvironmentSection,
   stampBillingPromptId,
   collapseSystemBudgetReminders,
   CRS_OFFICIAL_SYSTEM,
@@ -47,6 +54,7 @@ import {
   normalizeCacheTtl,
   removeCacheControlFields,
   stripIllegalCacheControlFields,
+  validateCacheBreakpoints,
 } from './cache-ttl.mjs'
 import { apiKeyBetaHeader, setupTokenBetaHeader } from './claude-code-betas.mjs'
 import { applyModelRequestRules } from './model-policy.mjs'
@@ -75,11 +83,12 @@ export function isCliOwnedSystemText(text) {
   return false
 }
 
-export function stripCliOwnedSystem(system) {
+export function stripCliOwnedSystem(system, { preserveCallerEnvironment = false } = {}) {
   if (system == null) return undefined
-  if (typeof system === 'string') return isCliOwnedSystemText(system) ? undefined : system
+  const keep = (text) => (preserveCallerEnvironment && hasEnvironmentSection(text)) || !isCliOwnedSystemText(text)
+  if (typeof system === 'string') return keep(system) ? system : undefined
   if (!Array.isArray(system)) return system
-  const kept = system.filter((block) => !isCliOwnedSystemText(systemBlockText(block)))
+  const kept = system.filter((block) => keep(systemBlockText(block)))
   return kept.length ? kept : undefined
 }
 
@@ -160,6 +169,81 @@ function stabilizeMessageBudgets(body) {
   return changed ? { ...body, messages } : body
 }
 
+/** One marker, on the last text of the current tail, ttl omitted. */
+function officialMessageMarker(messages, ttl = DEFAULT_CACHE_TTL) {
+  if (!Array.isArray(messages) || messages.length === 0) return messages
+  const next = messages.map((message) => {
+    if (!message || typeof message !== 'object') return message
+    if (typeof message.content === 'string') {
+      if (!message.cache_control) return message
+      const copy = { ...message }
+      delete copy.cache_control
+      return copy
+    }
+    if (!Array.isArray(message.content)) return message
+    let changed = false
+    const content = message.content.map((block) => {
+      if (!block?.cache_control) return block
+      changed = true
+      const copy = { ...block }
+      delete copy.cache_control
+      return copy
+    })
+    return changed ? { ...message, content } : message
+  })
+  let tail = -1
+  for (let i = next.length - 1; i >= 0; i--) {
+    if (next[i]?.role !== 'user') continue
+    const content = next[i].content
+    if (typeof content === 'string' ? content : Array.isArray(content) && content.length) {
+      tail = i
+      break
+    }
+  }
+  if (tail < 0) return next
+  const message = next[tail]
+  if (typeof message.content === 'string') {
+    next[tail] = {
+      ...message,
+      content: [
+        { type: 'text', text: message.content, cache_control: { type: 'ephemeral', ttl: normalizeCacheTtl(ttl) } },
+      ],
+    }
+    return next
+  }
+  const content = message.content.slice()
+  for (let i = content.length - 1; i >= 0; i--) {
+    if (content[i]?.type === 'thinking' || content[i]?.type === 'redacted_thinking') continue
+    content[i] = { ...content[i], cache_control: { type: 'ephemeral', ttl: normalizeCacheTtl(ttl) } }
+    next[tail] = { ...message, content }
+    return next
+  }
+  return next
+}
+/** Official Claude Code omits eager streaming and tool cache markers. A caller TTL here makes CLI fill the omitted system and message markers. */
+function stripEagerInputStreaming(tools) {
+  if (!Array.isArray(tools)) return tools
+  let changed = false
+  const next = tools.map((tool) => {
+    if (!tool || typeof tool !== 'object') return tool
+    const hasOwn = Object.prototype.hasOwnProperty.call(tool, 'eager_input_streaming')
+    const hasCache = Object.prototype.hasOwnProperty.call(tool, 'cache_control')
+    const fn = tool.function
+    const fnHas = fn && typeof fn === 'object' && Object.prototype.hasOwnProperty.call(fn, 'eager_input_streaming')
+    if (!hasOwn && !hasCache && !fnHas) return tool
+    changed = true
+    const copy = { ...tool }
+    delete copy.eager_input_streaming
+    delete copy.cache_control
+    if (fnHas) {
+      copy.function = { ...fn }
+      delete copy.function.eager_input_streaming
+    }
+    return copy
+  })
+  return changed ? next : tools
+}
+
 /** The one caller beta that rides with `safeguards` (Claude Code auto mode). */
 export const SAFEGUARDS_BETA_RE = /^dangerous-tool-use-\d{4}-\d{2}-\d{2}$/
 
@@ -230,6 +314,10 @@ export function prepareCliHopBody(
     autoModeServer = true,
     requestContext = null,
     preserveSystem = false,
+    preserveThinkingBlocks = false,
+    preserveCallerEnvironment = false,
+    autoCompactWindow = null,
+    routing = null,
   } = {},
 ) {
   if (requestContext?.purpose === 'auto_mode_classifier') {
@@ -237,36 +325,49 @@ export function prepareCliHopBody(
     const classifier = prepareClassifierBody(canonicalBody, { stream })
     return applyCliHopSafeguards(classifier, classifier.safeguards, { safeguardsBeta, autoModeServer })
   }
-  let body = officialMessagesBody(canonicalBody, { stream })
+  if (preserveSystem) validateCacheBreakpoints(canonicalBody)
+  let body = officialMessagesBody(canonicalBody, { stream, preserveContentShape: true })
   const safeguards = body.safeguards
   delete body.safeguards
   delete body.kin_safeguards_beta
+  const windowTokens = Number(autoCompactWindow)
+  if (Number.isInteger(windowTokens) && windowTokens >= 100_000 && windowTokens <= 1_000_000) {
+    body.auto_compact_window = windowTokens
+  }
   delete body.metadata
+  // Official family keeps the inbound system and its markers. Rewriting them
+  // into the persona template (billing / reporting / 1h) is what diverges from
+  // the captured Claude Code body: two ephemeral blocks, TTL omitted.
   if (!preserveSystem) {
-    const leftover = stripCliOwnedSystem(body.system)
+    const leftover = stripCliOwnedSystem(body.system, { preserveCallerEnvironment })
     if (leftover == null) delete body.system
     else body.system = leftover
+    body = stabilizeSystemBudget(body)
+    body = stabilizeMessageBudgets(body)
   }
-  body = stabilizeSystemBudget(body)
-  body = stabilizeMessageBudgets(body)
   // cli-node sends mid-conversation-system. Only models that reject the role need the lift.
   if (!modelSupportsMidConversationSystem(body.model)) body = liftMidConversationSystemMessages(body)
-  body = collapseSystemBudgetReminders(body)
+  if (!preserveSystem) body = collapseSystemBudgetReminders(body)
 
   if (!repaired) {
-    body = ensureUnofficialAdaptiveThinking(body)
     normalizeThinkingForModel(body)
     body = pinHaikuCliThinking(body)
     body = ensureUnofficialEffortHigh(body)
-    body = ensureClearThinkingContextManagement(body)
   }
-  body = stripInvalidThinkingBlocks(body)
+  body = applyThinkingDisplay(body, thinkingDisplayMode(routing))
+  body = stripInvalidThinkingBlocks(body, { preserveThinkingBlocks })
   body = applyModelRequestRules(body)
   body = ensureOutputConfigSchema(body)
-  body = alignSamplingWithThinking(body)
-  body = stripIllegalCacheControlFields(body)
-  body = removeCacheControlFields(body, { keepSystem: preserveSystem })
-  body = applyMessageBreakpoints(body, normalizeCacheTtl(cacheTtl), 'rewrite')
+  if (Object.prototype.hasOwnProperty.call(body, 'temperature')) delete body.temperature
+  if (Object.prototype.hasOwnProperty.call(body, 'top_p')) delete body.top_p
+  if (Object.prototype.hasOwnProperty.call(body, 'top_k')) delete body.top_k
+  if (Object.prototype.hasOwnProperty.call(body, 'context_management')) delete body.context_management
+  if (Object.prototype.hasOwnProperty.call(body, 'cache_control')) delete body.cache_control
+  if (!requestContext) {
+    // The patched CLI owns system layout; do not flatten caller blocks here.
+    body.messages = officialMessageMarker(body.messages, cacheTtl)
+    if (Array.isArray(body.tools)) body = { ...body, tools: stripEagerInputStreaming(body.tools) }
+  }
   return applyCliHopSafeguards(body, safeguards, { safeguardsBeta, autoModeServer })
 }
 /** Only legacy Haiku rejects thinking; Haiku 5.5 supports adaptive thinking. */
@@ -288,6 +389,8 @@ export function prepareOutboundAttempt({
   toolNameRewrite = true,
   cacheTtl = null,
   cacheBreakpoints = null,
+  preserveThinkingBlocks = false,
+  preserveCallerEnvironment = false,
   reqHeaders = {},
   officialClient,
   sessionId: sessionIdOverride,
@@ -341,7 +444,7 @@ export function prepareOutboundAttempt({
   )
   const callerSessionId = sessionIdFromOutboundBody(identified)
   if (identity && callerSessionId) identity.callerSessionId = callerSessionId
-  if (identity && !requestContext) {
+  if (identity && !requestContext && !preserveCallerEnvironment) {
     identified = refreshOfficialSystemEnvironment(identified, identity, identified.model)
   }
   const stampOwnedBilling = String(sessionIdOverride || '').trim() && (mode !== 'passthrough' || !keepCallerSession)
@@ -358,6 +461,7 @@ export function prepareOutboundAttempt({
     cacheBreakpoints: keepCallerSession ? null : cacheBreakpoints,
     cacheTtl: cacheTtl || undefined,
     inbound,
+    preserveThinkingBlocks,
   })
   cleaned = stripIllegalCacheControlFields(cleaned)
   if (cacheTtl) cleaned = applyCacheTtlToBody(cleaned, cacheTtl)
@@ -379,6 +483,7 @@ export function prepareOutboundHeaders(reqHeaders, homeDir, identity, model, { c
 
 /** Body + headers after the context_management ↔ context-management beta gate. */
 export function prepareOutboundEnvelope({
+  requestContext = null,
   canonicalBody,
   inbound = {},
   identity,
@@ -388,6 +493,8 @@ export function prepareOutboundEnvelope({
   toolNameRewrite = true,
   cacheTtl = null,
   cacheBreakpoints = null,
+  preserveThinkingBlocks = false,
+  preserveCallerEnvironment = false,
   reqHeaders = {},
   homeDir = '',
   officialClient,
@@ -411,6 +518,7 @@ export function prepareOutboundEnvelope({
   want1m,
 } = {}) {
   const prepared = prepareOutboundAttempt({
+    requestContext,
     canonicalBody,
     inbound,
     identity,
@@ -420,6 +528,8 @@ export function prepareOutboundEnvelope({
     toolNameRewrite,
     cacheTtl,
     cacheBreakpoints,
+    preserveThinkingBlocks,
+    preserveCallerEnvironment,
     reqHeaders,
     officialClient,
     sessionId,
@@ -462,10 +572,16 @@ export function prepareOutboundEnvelope({
     const beta = ensureFastModeBeta(headers['anthropic-beta'] || '', prepared.body)
     if (beta) headers['anthropic-beta'] = beta
   }
+  const displayed =
+    requestContext?.purpose === 'auto_mode_classifier'
+      ? prepared.body
+      : applyThinkingDisplay(prepared.body, thinkingDisplayMode(routing))
   headers['anthropic-beta'] = withRequestProtocolBetas(
     String(headers['anthropic-beta'] || '').split(','),
-    prepared.body,
+    displayed,
   ).join(',')
-  const body = sealClaudeCodeCch(sanitizeAnthropicBodyForBetaTokens(prepared.body, headers?.['anthropic-beta'] || ''))
+  const body = sealClaudeCodeCch(sanitizeAnthropicBodyForBetaTokens(displayed, headers?.['anthropic-beta'] || ''), {
+    enabled: routing?.compatibility?.cch_enabled !== false,
+  })
   return { body, headers, toolNames: prepared.toolNames }
 }

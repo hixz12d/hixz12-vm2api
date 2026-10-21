@@ -19,11 +19,7 @@ export function buildSlotImages(args = [], { runDocker = spawnSync, log = consol
   for (const img of images) {
     const inspected = inspectKernelImage(img.kernel, { runDocker })
     if (!inspected.ok && inspected.code !== 'slot_image_missing') throw new Error(inspected.error)
-    if (inspected.ok && !force) {
-      log(`vm2api: ready ${img.image}`)
-      continue
-    }
-    if (checkOnly) throw new Error(inspected.error)
+    // Tags are mutable: --pull refreshes an existing image so guest fixes reach cached hosts.
     if (pull) {
       const pulled = runDocker('docker', ['pull', img.image], { stdio: 'inherit' })
       if (pulled.status === 0) {
@@ -31,6 +27,13 @@ export function buildSlotImages(args = [], { runDocker = spawnSync, log = consol
         if (!ready.ok) throw new Error(ready.error)
         continue
       }
+    }
+    if (inspected.ok && !force) {
+      log(`vm2api: keep existing ${img.image}`)
+      continue
+    }
+    if (checkOnly) throw new Error(inspected.error)
+    if (pull) {
       if (pullOnly) {
         log(`vm2api: ${img.image} not pulled; prepare the image before starting a slot`)
         continue

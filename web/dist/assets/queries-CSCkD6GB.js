@@ -1,0 +1,1 @@
+import{M as e,h as t}from"./button-B52_LMkq.js";function n(){return e({queryKey:[`panel`,`users`],queryFn:()=>t(`/api/panel/users`)})}export{n as t};

@@ -21,6 +21,13 @@ import {
 import { importErrorMessage } from '@/lib/import-errors'
 import { proxyNamedLabel } from '@/lib/vm-status'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -31,6 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { WsTerminal } from '@/components/ws-terminal'
 import { dashboardQueryOptions } from '@/features/overview/queries'
 import { CodexCredentialPanel } from '@/features/vm/codex-credential-panel'
 import { ConvertOauthToSetupButton } from '@/features/vm/convert-oauth-button'
@@ -163,7 +171,7 @@ function ClaudeCredentialPanel({
   const [code, setCode] = useState('')
   const [sessionKey, setSessionKey] = useState('')
   const [apiKey, setApiKey] = useState('')
-
+  const [loginOpen, setLoginOpen] = useState(false)
   const activeMethod = resolveImportMethod(kind, method)
   const sig = `${kind}:${activeMethod}`
   const linkReady = !!(link.sessionId && link.authUrl && link.sig === sig)
@@ -404,6 +412,40 @@ function ClaudeCredentialPanel({
             {importCred.isPending ? '正在导入…' : '导入'}
           </Button>
         </div>
+      ) : activeMethod === 'cc' ? (
+        <div className='space-y-2'>
+          <Hint>
+            打开槽终端并启动 claude。初次进入按两次回车拿到授权链接，按 c
+            复制，授权码粘回这个终端。需要容器已运行且 cli-node 已安装。
+          </Hint>
+          <Button size='sm' onClick={() => setLoginOpen(true)}>
+            打开官方登录终端
+          </Button>
+          <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
+            <DialogContent className='flex h-[70vh] max-w-4xl flex-col'>
+              <DialogHeader>
+                <DialogTitle>官方登录</DialogTitle>
+                <DialogDescription>
+                  终端启动 claude。初次进入按两次回车拿到授权链接，按 c
+                  复制，授权码粘回这个终端。
+                </DialogDescription>
+              </DialogHeader>
+              <div className='min-h-0 flex-1'>
+                {loginOpen ? (
+                  <WsTerminal
+                    ticketPath={`/api/panel/vms/${encodeURIComponent(vmId)}/shell-ticket`}
+                    socketPath={`/api/panel/vms/${encodeURIComponent(vmId)}/shell`}
+                    officialLogin
+                    onLogin={() => {
+                      void invalidate()
+                      toast.success('官方登录已写入槽凭证')
+                    }}
+                  />
+                ) : null}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       ) : linkReady ? (
         <div className='space-y-2'>
           <div className='flex flex-wrap items-center gap-2'>
@@ -478,9 +520,7 @@ function ClaudeCredentialPanel({
           <Hint>
             {kind === 'setup-token'
               ? `会生成一个授权链接。在走同一条代理（${proxyHint || '这个账号的出口代理'}）的浏览器里打开、登录并同意，再把授权码贴回来。导入后按 Setup Token 方式运行。`
-              : activeMethod === 'cc'
-                ? '会生成官方 Claude Code 的授权链接，在你自己的浏览器里打开就行，换凭证的请求会走这个账号的出口代理。'
-                : `会生成一个授权链接。在走同一条代理（${proxyHint || '这个账号的出口代理'}）的浏览器里打开、登录并同意，再把授权码贴回来。`}
+              : `会生成一个授权链接。在走同一条代理（${proxyHint || '这个账号的出口代理'}）的浏览器里打开、登录并同意，再把授权码贴回来。`}
           </Hint>
           <Button
             size='sm'

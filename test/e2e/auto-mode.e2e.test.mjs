@@ -606,7 +606,7 @@ test('classifier terminal/error/cancel/concurrency boundaries through actual ELF
   assert.equal(ordinary.status, 200, ordinary.text)
   const wire = h.captured.at(-1)
   assert.equal(wire.max_tokens, 128)
-  assert.deepEqual(wire.thinking, { type: 'adaptive' })
+  assert.deepEqual(wire.thinking, { type: 'adaptive', display: 'summarized' })
   assert.ok(wire.system.some((block) => block.text.includes('# Environment')))
   assert.equal(wire.request_context, undefined)
   h.setHealth({ ...h.health, classifier_request_context: false })
@@ -694,6 +694,38 @@ test('actual kernel+CLI ELF keeps per-message effort and top-level high', { time
       `${item.name} missing ${beta} body.betas=${JSON.stringify(wire.betas)} header=${headers?.['anthropic-beta']}`,
     )
   }
+})
+test('actual kernel+CLI ELF drops thinking without a usable signature on final wire', { timeout: 30000 }, async (t) => {
+  const h = await harness(t)
+  const result = await h.send({
+    model: 'claude-opus-5-5',
+    max_tokens: 256,
+    thinking: { type: 'adaptive' },
+    system: [{ type: 'text', text: 'Drop thinking blocks that have no usable signature.' }],
+    messages: [
+      { role: 'user', content: 'Continue the prior turn.' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: 'existing thinking', signature: 'existing-signature-0123456789' },
+          { type: 'thinking', thinking: 'missing signature' },
+          { type: 'thinking', thinking: '', signature: 'empty-thinking-signature' },
+          { type: 'redacted_thinking', data: 'redacted-thinking' },
+          { type: 'text', text: 'previous answer' },
+        ],
+      },
+      { role: 'user', content: 'Now answer.' },
+    ],
+  })
+  assert.equal(result.status, 200, result.text)
+  const wireMessage = h.captured.at(-1).messages.find((message) => message.role === 'assistant')
+  assert.ok(wireMessage)
+  assert.deepEqual(wireMessage.content, [
+    { type: 'thinking', thinking: 'existing thinking', signature: 'existing-signature-0123456789' },
+    { type: 'thinking', thinking: '', signature: 'empty-thinking-signature' },
+    { type: 'redacted_thinking', data: 'redacted-thinking' },
+    { type: 'text', text: 'previous answer' },
+  ])
 })
 
 test('new kernel refuses classifier context against actual old CLI', {

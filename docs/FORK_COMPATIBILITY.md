@@ -1,18 +1,19 @@
 # Fork 运行兼容性
 
-## 当前策略：优先采用上游 v1.3.178
+## 当前策略：优先采用上游 v1.3.205，保留 fork 运行契约
 
-源码融合至上游 `9baaffbf`（v1.3.178，新增 v1.3.159–v1.3.178），基于 fork `61b21db5`，保留已做的 KVM guest-exec 超时修复及未完成合并中的手工处理。源码、前端产物、镜像和模拟请求已完成本地验证；上线走部署仓库受限构建、一次备份、迁移和请求级验收，不覆盖持久配置。生产状态以部署仓库 `docs/RUNBOOK.md` 和服务器证据为准，源码验证清单见 [UPSTREAM_1_3_178_EVIDENCE.json](UPSTREAM_1_3_178_EVIDENCE.json)。
+源码基于 fork `95082ff4`，继续原有 v1.3.199 合并，以三方补丁纳入 `670dd027..dcdeedea155c878e075fbfbc8c02f97bcc6e5e11`。冲突已解决并完成本地验证，进入正式发布流程。合并采用 `b80329b1` 作为上游父提交，后续改动以补丁纳入，不声称已建立到 `dcdeedea` 的合并祖先关系。上游 v1.3.205 标签的 VERSION 仍为 1.3.204，fork 将 VERSION 对齐为 1.3.205。验证清单见 [UPSTREAM_1_3_205_EVIDENCE.json](UPSTREAM_1_3_205_EVIDENCE.json)，生产状态以部署仓库 `docs/RUNBOOK.md` 为准。
 
-- 接入新版价格目录、模型目录定时同步、5h/7d 窗口估算、缓存输入与非缓存输入分开计价、搜索费用与价格来源字段。新增迁移 `037_usage_logs_billing_normalize.sql` 会改写匹配的历史 OpenAI 用量行；正式上线必须做一次新鲜备份并验证迁移，不能把降级镜像当成完整的数据回退。
-- 接入请求排队期 SSE 保活、排队后再读取出站会话绑定、Codex 503 换号与空闲内核诊断、单账号凭证清空、批量策略、出口探测、企业微信通知及账号服务诊断/恢复。恢复功能沿用上游管理员诊断详情隔离；分组与 Key 范围、取消传播、智能评分、同账号重试及拒答默认不封设备继续保留。
-- 会话队列同时保留 fork `session_queue_max_wait_ms=15000` 的超时并行兜底和上游 `session_queue_timeout_ms=900000` 的硬超时；两者设为正值时先到者生效，硬超时先到或相等时返回 529。fork 的队列链清理、空回复退避和等待耗时统计不丢失。需要完全采用上游串行等待时可显式把前者设为 0；本次不修改生产值。
-- watchdog 新增 `hold/release/reset`、桥接自愈和缺失容器恢复，仍先经过 fork 默认 3000ms 探测、连续 3 次失败及有界递增重启预算；`reset` 同时清理连续失败计数。现有三个恢复用例显式配置 `fail_threshold=1`，与原有单次失败的测试场景一致；默认三次门槛另外做了运行检查。
-- 新建运行环境需要 `kin-computer`。只从原 payload 补取此文件，按清单大小和 SHA-256 校验后随 Git、Dockerfile、`.dockerignore` 和镜像入口一起交付；不全量下载覆盖补丁 CLI。现有容器不重新发布设备身份，本地 Docker/KVM 请求路径继续只检查镜像，不临时拉取或构建。
-- 管理台保留 fork 默认简洁账号线视图、详细表格、状态筛选、主题和用量/分组入口，卡片视图接入新版机架、尺寸选择及费用排序。接入恢复入口、出口探测、价格设置和账号归属管理；测试失败同时保留“本地拦截”提示与上游具体原因。`web/dist` 已由融合源码重建。
-- 本轮 CLI、内核、OAuth helper 与 Go 源码基线未变，`cli-node` / `cc-node` 按 `PATCH.json` 核对未被覆盖；保留调用方 system、crag 传输包装与 safeguards 门禁。实际内核/CLI 的 auto mode 模拟联调通过，不代表真实 Anthropic、缓存命中或长期稳定性验收。
-- 验证：85 个后端单元文件共 1381 项通过；7 个前端文件共 63 项通过；auto mode 实际内核/CLI 联调 4 项通过、1 项旧 CLI 场景跳过；前端类型检查和构建、本机 Docker 镜像构建、无外网启动 `/health=200`、实际 `kin-computer` Docker 身份生成与幂等性均通过。界面仅做源码自查及机械扫描（0 条报告），未做浏览器渲染检查。
-- 依赖锁文件没有变化。审计发现现有间接依赖 `ip-address` 的 1 项 moderate 汇总告警（地址范围判断及超长输入处理）；未擅自执行 `npm audit fix`。本轮没有验证 ARM64、真实 KVM/远程节点、生产存量数据库迁移及完整生产请求。
+- 接入备份工作线程、统一 OAuth 凭证与官方终端登录、额度窗口重置修复、消息线程 beta、Responses WebSocket 中断、账号内存扩容验证及失败回滚。采用租户权限收紧：非管理员提交的 user_id / group_id 不用于修改 Key，账号范围仍受所有权约束；fork 的真实分组存在性与启用状态校验保留。
+- 保留分组与 Key 范围交集、健康缓存分组校验、智能评分、请求取消传播、会话级空回复退避、账号同步、拒答默认不封设备，以及默认 3000ms / 连续三次失败的 watchdog 保护。WebSocket 转入 HTTP 请求流水线时仍携带 groupScope。空回复沿用本轮开始时同组换号策略，不跨组。
+- 会话队列同时保留 `session_queue_max_wait_ms=15000` 并行兜底与 `session_queue_timeout_ms=900000` 硬超时；先到者生效，硬超时先到或相等返回 529。生产持久配置不变。
+- cli-hop 不采用上游强制的“两段官方 system”改写：继续从调用方快照恢复 system、由补丁 CLI 组装，不注入槽位环境。恢复快照后仍应用新版 thinking 账号归属过滤，不能绕过签名归属保护。采用最新 user 消息单断点及显式请求 TTL（默认 1h、显式 5m 保持），工具缓存标记与 eager_input_streaming 按上游清理；保留 safeguards 门禁及 auto mode 分类路径。真实缓存命中尚未验证。
+- 管理台保留主题、账号线视图、分组 / 用量入口和白话文案，接入官方终端登录、种子配置编辑及遥测观测。编辑需解锁，写入需确认；复用已有草稿同步规则，后台刷新不覆盖未保存编辑，切换账号重置组件状态。`web/dist` 已重建。
+- payload 名仍是 `payload-2026.10.19-kernel-cli`，但 CLI 字节已更新，按当前 manifest SHA-256 固定输入，在 Claude Code 2.1.296 上重打 `caller-system-v3+safeguards-v1`；cc-node、wrap / Codex 内核及其它 payload 相比本轮开始未变。Go worker / egress / 新增 slot-gate 已交叉编译为 Linux amd64，并补齐既有 Dockerfile 所需但原来缺失的 api-kernel。Dockerfile 继续打包仓内产物、不下载原版覆盖补丁；.dockerignore 放行 slot-gate 与 api-kernel，实际打包上下文的离线 COPY 构建通过。详情见 [CLI_SYSTEM_PATCH.md](CLI_SYSTEM_PATCH.md)。
+- 新增迁移 `039_cluster_node_direct_links`、`040_cluster_node_platform`、`041_usage_logs_inbound_device`；此前待提交的 `038_api_endpoint_proxy` 仍包含在内。本地新数据库初始化通过，不等于生产存量迁移验收。集群直连、macOS 节点和旧集群槽迁移仅接入能力，不启用；旧槽迁移会改变容器 ID，生产发布不得触发，不改为 KVM。
+- 验证：58 个后端文件共 997 项通过、2 项非 root SSH 场景跳过；9 个前端文件共 60 项通过；真实内核 / CLI 模拟联调 5 项通过、旧 CLI 场景 1 项跳过；Go config / egress / telemetry / slotgate 四包与 API kernel server 包通过；类型检查、前端构建、246 个变更 .mjs、7 个 Python、3 个 shell 语法检查通过。只适配已有测试的 fork 契约和真实分组夹具，没有新增自编测试。
+- 界面仅单上下文源码自查与 14 个目标机械扫描（0 条报告），没有浏览器渲染验收。未构建完整生产镜像，未验证真实 Anthropic、ARM64、真实 KVM / 远程节点、生产数据库迁移或长期稳定性。diff 检查只有原有生成 Combination 资源内 5 行 CSS 模板空白告警，不手改生成文件。
+- 依赖锁文件未变化，未执行 audit fix；此前记录的间接依赖 ip-address moderate 告警本轮未重新审计，不作为已消除。
 
 - 采用临近额度线时优先完成已占座请求、限制临界区并发、按缓存未命中输入判断大请求；保留分组与 Key 账号范围交集、智能评分、同账号重试及拒答默认不封设备。
 - 采用每账号工作时段（Claude / Codex）、风险规则按账号类型 / 套餐 / 账号范围生效、普通 Key 不能伪造健康探测头绕过计费、面板会话文件原子写入与 0600 权限、DNS TCP 多次查询修复。

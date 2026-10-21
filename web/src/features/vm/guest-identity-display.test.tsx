@@ -18,6 +18,7 @@ function render(vm: Vm) {
           canRefresh={true}
           refreshBlocked=''
           savingTimezone={false}
+          busy={() => false}
           onAction={noop}
           onRefresh={noop}
           onTimezoneSave={noop}

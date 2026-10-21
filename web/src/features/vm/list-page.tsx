@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { ChoiceTiles } from '@/components/choice-tiles'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { EmptyState } from '@/components/empty-state'
 import { PageHeader } from '@/components/page-header'
@@ -40,6 +41,7 @@ import { VmListSkeleton } from '@/features/vm/list-skeleton'
 import { vmsListQueryOptions } from '@/features/vm/queries'
 import { usePoolSeatStream } from '@/features/vm/use-pool-seat-stream'
 import { VmActionsProvider } from '@/features/vm/vm-actions-provider'
+import { vmPermsFor } from '@/features/vm/vm-perms'
 import { VmRack } from '@/features/vm/vm-rack'
 import type { RackSize } from '@/features/vm/vm-rack-blade'
 import { zoneOfGroup, type VmZoneFilter } from '@/features/vm/vm-rack-model'
@@ -113,7 +115,7 @@ export function VmListPage() {
   usePoolSeatStream()
   const usage = useQuery({
     ...usageQueryOptions(5000),
-    enabled: me.data?.role !== 'user',
+    enabled: vmPermsFor(me.data?.role).dashboard,
   })
   const qc = useQueryClient()
   const [q, setQ] = useState('')
@@ -138,18 +140,19 @@ export function VmListPage() {
   const [sort, setSort] = useState<VmSortKey>('status')
   const [dir, setDir] = useState<'asc' | 'desc'>('asc')
   const [resetTarget, setResetTarget] = useState<Vm | null>(null)
+  const [resetMode, setResetMode] = useState<'keep' | 'traits'>('keep')
   const [resetInput, setResetInput] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<Vm | null>(null)
   const [deleteInput, setDeleteInput] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const resetVm = useMutation({
-    mutationFn: (id: string) =>
+    mutationFn: ({ id, mode }: { id: string; mode: 'keep' | 'traits' }) =>
       api(`/api/panel/vms/${encodeURIComponent(id)}/reset`, {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify({ mode }),
       }),
-    onSuccess: async () => {
-      toast.success('运行环境已清空重建，请重新导入凭证')
+    onSuccess: async (_data, { mode }) => {
+      toast.success(mode === 'keep' ? '已保留原数据重建' : '已按新特征重建')
       setResetTarget(null)
       setResetInput('')
       await qc.invalidateQueries({ queryKey: vmsListQueryOptions().queryKey })
@@ -181,6 +184,7 @@ export function VmListPage() {
   const canCreate =
     me.data?.role === 'admin' ||
     (me.data?.role === 'user' && (me.data.vm_create_quota || 0) > 0)
+  const perms = vmPermsFor(me.data?.role)
   const scoped = filterVms(vms, '', 'all', kind)
   const counts = fleetCounts(scoped)
   const list = sortVms(
@@ -274,6 +278,11 @@ export function VmListPage() {
             <Input
               className='h-8 w-64 ps-8'
               type='search'
+              name='vm-filter'
+              autoComplete='off'
+              data-1p-ignore
+              data-lpignore='true'
+              data-bwignore
               placeholder='搜索名称、邮箱、出口代理'
               aria-label='搜索账号'
               value={q}
@@ -367,29 +376,49 @@ export function VmListPage() {
         </div>
         <VmActionsProvider
           accounts={accounts}
-          onReset={(vm) => {
-            setResetInput('')
-            setResetTarget(vm)
-          }}
-          onDelete={(vm) => {
-            setDeleteInput('')
-            setDeleteTarget(vm)
-          }}
+          onReset={
+            perms.admin
+              ? (vm) => {
+                  setResetInput('')
+                  setResetTarget(vm)
+                  setResetMode('keep')
+                }
+              : undefined
+          }
+          onDelete={
+            perms.remove
+              ? (vm) => {
+                  setDeleteInput('')
+                  setDeleteTarget(vm)
+                }
+              : undefined
+          }
         >
           {list.length ? (
             view === 'lines' ? (
               <AccountLines
                 vms={list}
                 accounts={accounts}
-                onClearCooldown={(vm) => clearCooldown.mutate(vm)}
-                onReset={(vm) => {
-                  setResetInput('')
-                  setResetTarget(vm)
-                }}
-                onDelete={(vm) => {
-                  setDeleteInput('')
-                  setDeleteTarget(vm)
-                }}
+                onClearCooldown={
+                  perms.credential ? (vm) => clearCooldown.mutate(vm) : undefined
+                }
+                onReset={
+                  perms.admin
+                    ? (vm) => {
+                        setResetMode('keep')
+                        setResetInput('')
+                        setResetTarget(vm)
+                      }
+                    : undefined
+                }
+                onDelete={
+                  perms.remove
+                    ? (vm) => {
+                        setDeleteInput('')
+                        setDeleteTarget(vm)
+                      }
+                    : undefined
+                }
               />
             ) : view === 'grid' ? (
               <VmRack
@@ -427,7 +456,7 @@ export function VmListPage() {
             setResetInput('')
           }
         }}
-        title='清空重建运行环境？'
+        title='重建运行环境？'
         desc={
           resetTarget ? (
             <>
@@ -438,13 +467,14 @@ export function VmListPage() {
                 </span>
               </p>
               <div className='mt-2 grid gap-1.5 text-sm'>
-                <p className='text-destructive'>
-                  会清空：凭证、设备特征、用量统计、运行环境里的所有文件。重建后需要重新导入凭证，清掉的内容无法找回。
+                <p>换上当前版本的程序并重建容器，正在处理的请求会中断。</p>
+                <p className={resetMode === 'traits' ? 'text-destructive' : ''}>
+                  {resetMode === 'keep'
+                    ? '保留凭证、设备特征和统计，只更换运行程序。'
+                    : '清空凭证和家目录，重新生成设备特征；需要重新导入凭证，清掉的内容无法找回。'}
                 </p>
-                <p>会保留：账号名称、出口代理、时区和其他设置。</p>
                 <p className='text-muted-foreground'>
-                  输入 <b className='text-foreground'>{resetTarget.id}</b>{' '}
-                  确认。
+                  输入 <b className='text-foreground'>{resetTarget.id}</b> 确认。
                 </p>
               </div>
             </>
@@ -452,15 +482,34 @@ export function VmListPage() {
             ''
           )
         }
-        confirmText='清空并重建'
+        confirmText={resetMode === 'keep' ? '保留原数据重建' : '重建新特征'}
         cancelBtnText='取消'
-        destructive
+        destructive={resetMode === 'traits'}
         disabled={resetInput.trim() !== resetTarget?.id}
         isLoading={resetVm.isPending}
         handleConfirm={() => {
-          if (resetTarget) resetVm.mutate(resetTarget.id)
+          if (resetTarget)
+            resetVm.mutate({ id: resetTarget.id, mode: resetMode })
         }}
       >
+        <ChoiceTiles
+          label='重建方式'
+          value={resetMode}
+          onChange={setResetMode}
+          choices={[
+            {
+              value: 'keep',
+              title: '保留原数据重建',
+              detail: '留下凭证、指纹、主机名和统计，只换容器里的服务。',
+            },
+            {
+              value: 'traits',
+              title: '重建新特征',
+              detail:
+                '清掉凭证和家目录，重新生成主机名、machine-id 和设备特征。',
+            },
+          ]}
+        />
         <Input
           autoFocus
           autoComplete='off'
@@ -470,8 +519,13 @@ export function VmListPage() {
           value={resetInput}
           onChange={(e) => setResetInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && resetInput.trim() === resetTarget?.id) {
-              resetVm.mutate(resetTarget.id)
+            if (
+              e.key === 'Enter' &&
+              resetInput.trim() === resetTarget?.id &&
+              !resetVm.isPending &&
+              resetTarget
+            ) {
+              resetVm.mutate({ id: resetTarget.id, mode: resetMode })
             }
           }}
         />
@@ -526,7 +580,11 @@ export function VmListPage() {
           value={deleteInput}
           onChange={(e) => setDeleteInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && deleteInput.trim() === deleteTarget?.id) {
+            if (
+              e.key === 'Enter' &&
+              deleteInput.trim() === deleteTarget?.id &&
+              !deleteVm.isPending
+            ) {
               deleteVm.mutate(deleteTarget.id)
             }
           }}

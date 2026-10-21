@@ -1,0 +1,1 @@
+import{M as e,h as t}from"./button-B52_LMkq.js";function n(n){return e({queryKey:[`panel`,`dashboard`],queryFn:()=>t(`/api/panel/dashboard`),...n?{refetchInterval:n,refetchOnWindowFocus:!1}:{}})}function r(n){return e({queryKey:[`panel`,`usage`],queryFn:()=>t(`/api/panel/usage`),...n?{refetchInterval:n,refetchOnWindowFocus:!1}:{}})}export{r as n,n as t};

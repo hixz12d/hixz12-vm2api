@@ -1,0 +1,1 @@
+import{M as e,h as t}from"./button-B52_LMkq.js";function n(n=`vm`){return e({queryKey:[`panel`,`billing`,n],queryFn:()=>t(`/api/panel/billing?group_by=${encodeURIComponent(n)}`)})}export{n as t};
