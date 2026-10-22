@@ -1,8 +1,18 @@
 # Fork 运行兼容性
 
-## 当前策略：优先采用上游 v1.3.205，保留 fork 运行契约
+## 当前策略：优先采用上游 v1.3.208，保留 fork 运行契约
 
-源码基于 fork `95082ff4`，继续原有 v1.3.199 合并，以三方补丁纳入 `670dd027..dcdeedea155c878e075fbfbc8c02f97bcc6e5e11`。冲突已解决并完成本地验证，进入正式发布流程。合并采用 `b80329b1` 作为上游父提交，后续改动以补丁纳入，不声称已建立到 `dcdeedea` 的合并祖先关系。上游 v1.3.205 标签的 VERSION 仍为 1.3.204，fork 将 VERSION 对齐为 1.3.205。验证清单见 [UPSTREAM_1_3_205_EVIDENCE.json](UPSTREAM_1_3_205_EVIDENCE.json)，生产状态以部署仓库 `docs/RUNBOOK.md` 为准。
+基于已上线 fork `5dacc2f8`，以 `dcdeedea..593d465a80e4fa312a83710f64265c6703a46ed5` 的三方增量补丁整合 v1.3.206–v1.3.208；合并父节点记录为 `593d465a`，保留 fork 历史，不覆盖旧标签。既有 v1.3.205 已整合内容不重复应用。验证见 [UPSTREAM_1_3_208_EVIDENCE.json](UPSTREAM_1_3_208_EVIDENCE.json)，实际生产版本以运维仓库 `docs/RUNBOOK.md` 为准。
+
+- 采用跨终端帧授权链接提取、官方安装后的统计上报默认关闭、统计上报状态与上传间隔设置（1 分钟至 24 小时，默认 10 分钟）、官方身份只有 userID 时的识别修复。保留 fork 导航分组和白话标签，OpenAI 只保留一个入口。
+- 随上游移除 persona_rules 白名单和相关页面；不影响风险审计、拒答缓存或 safeguards 门禁。持久 routing.json 不覆盖，旧规则在用户下次保存 compatibility 设置时由上游清理；常驻约束 persona_standing 保持原逻辑。
+- 采用 v1.3.208 最终版本：上游已撤回中途的请求体重组和缓存布局变更，仅补齐 cli-hop 的 billing 标记。保留 fork 调用方 system、缓存 TTL、thinking 归属检查、auto mode 与 safeguards。最终 payload manifest 与已上线 v1.3.205 完全一致，CLI / Rust 内核不替换，不将中途发布产物带入生产。
+- Go worker 按新源码重新交叉编译为 Linux amd64；只更新控制面与 worker，不触发账号重建。前端由融合源码重新构建并提交 web/dist。无新增数据库迁移、依赖或锁文件变更。
+- 用户明确要求本次不带入未提交的调度准入 / 等待预算修复：src/lib/pool 与生产基线逐字不变。分组、Key 范围、智能评分、账号同步、取消与额度保护仍沿用生产版本。
+
+### v1.3.205 已保留的基线契约
+
+既有 v1.3.205 基线以 `b80329b1` 为合并父节点，并已纳入至 `dcdeedea` 的三方补丁；其验证见 [UPSTREAM_1_3_205_EVIDENCE.json](UPSTREAM_1_3_205_EVIDENCE.json)。以下为继续保留的运行契约，旧验证数字不代表本轮重跑。
 
 - 接入备份工作线程、统一 OAuth 凭证与官方终端登录、额度窗口重置修复、消息线程 beta、Responses WebSocket 中断、账号内存扩容验证及失败回滚。采用租户权限收紧：非管理员提交的 user_id / group_id 不用于修改 Key，账号范围仍受所有权约束；fork 的真实分组存在性与启用状态校验保留。
 - 保留分组与 Key 范围交集、健康缓存分组校验、智能评分、请求取消传播、会话级空回复退避、账号同步、拒答默认不封设备，以及默认 3000ms / 连续三次失败的 watchdog 保护。WebSocket 转入 HTTP 请求流水线时仍携带 groupScope。空回复沿用本轮开始时同组换号策略，不跨组。

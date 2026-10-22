@@ -35,9 +35,9 @@ const MEMORY: [string, string][] = [
   ['8g', '8 GB'],
 ]
 
-const BASIC: [string, string, string][] = [
-  ['enabled', '导入凭证后自动安装', '开启'],
-  ['sync_telemetry', '安装后照官方方式上报统计', '安装成功后打开'],
+const BASIC: [string, string, string, boolean][] = [
+  ['enabled', '导入凭证后自动安装', '开启', true],
+  ['sync_telemetry', '安装后照官方方式上报统计', '安装成功后打开', false],
 ]
 
 const ADVANCED: [string, string, string][] = [
@@ -106,13 +106,13 @@ export function OfficialCcSettingsPane({
         </p>
 
         <div className='divide-y'>
-          {BASIC.map(([key, label, hint]) => (
+          {BASIC.map(([key, label, hint, defaultOn]) => (
             <SwitchRow
               key={key}
               id={`occ-${key}`}
               label={label}
               hint={hint}
-              checked={config[key] !== false}
+              checked={defaultOn ? config[key] !== false : config[key] === true}
               onChange={(v) => set({ [key]: v })}
             />
           ))}

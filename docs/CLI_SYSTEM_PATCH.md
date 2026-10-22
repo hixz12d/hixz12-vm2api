@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-本地源码融合至上游 `dcdeedea`（v1.3.205），原版 CLI / 内核来自 `deploy/payload.json` 的 `payload-2026.10.19-kernel-cli`。该 payload 名未变但 CLI 字节已变化，必须按 manifest SHA-256 校验。仓内 `cli-node` 已在新版 Claude Code 2.1.296 上重打 `caller-system-v3+safeguards-v1`，`cc-node` 保持原 `caller-system-v1` 成品；两者均按 `PATCH.json` 复核 SHA-256。本地融合和验证已完成，发布由部署仓库的一键上线流程执行。验证见 [UPSTREAM_1_3_205_EVIDENCE.json](UPSTREAM_1_3_205_EVIDENCE.json)；生产状态以部署仓库 `docs/RUNBOOK.md` 为准。
+源码融合至上游 `593d465a`（v1.3.208）。最终 `deploy/payload.json` 与已上线 v1.3.205 完全一致，沿用 `payload-2026.10.19-kernel-cli` 的已校验产物，没有采用 v1.3.208 中途发布后撤回的请求体 / 缓存布局产物。仓内 `cli-node` 为 Claude Code 2.1.296 + `caller-system-v3+safeguards-v1`，`cc-node` 保持原 `caller-system-v1`；按 `PATCH.json` 复核 SHA-256。本轮保留原 CLI / Rust 内核，仅采用 Node 层补齐 billing 标记，并重新构建 Go worker。当前源码检查见 [UPSTREAM_1_3_208_EVIDENCE.json](UPSTREAM_1_3_208_EVIDENCE.json)，CLI 之前的重建与模拟联调证据见 [UPSTREAM_1_3_205_EVIDENCE.json](UPSTREAM_1_3_205_EVIDENCE.json)，不将旧测试计入本轮。实际生产状态以运维仓库 `docs/RUNBOOK.md` 为准。
 
 唯一补丁实现是 `scripts/patch-cli-system.py`，固定输入源码 SHA-256，未知基线拒绝应用。`cli-node` 对应当前 payload；`cli-node-v1.3.199`、`cli-node-v1.3.178`、`cli-node-v1.3.144` 及其它版本名可复现旧基线；`cc-node` 对应原固定基线。逐文件来源和成品哈希见 [PATCH.json](../share/wrap-cli/PATCH.json)。
 

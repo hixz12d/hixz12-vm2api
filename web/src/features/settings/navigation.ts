@@ -7,7 +7,6 @@ import {
   Gauge,
   Info,
   Layers,
-  ListChecks,
   Magnet,
   Network,
   PackageCheck,
@@ -23,7 +22,6 @@ export const SETTINGS_TABS = [
   ['openai', 'GPT 账号（OpenAI）'],
   ['logs', '日志保存'],
   ['protocol', '请求改写'],
-  ['whitelist', '提示词规则'],
   ['init', '官方 Claude Code 安装'],
   ['health', '账号健康检查'],
   ['notify', '消息通知'],
@@ -47,8 +45,6 @@ export const SETTINGS_TAB_INTROS: Record<SettingsTabId, string> = {
   logs: '请求日志保留多久、记录多少细节。出问题排查时需要日志，但记得越多越占空间。',
   protocol:
     '转发前怎么整理请求，让它看起来就是官方 Claude Code 发出的。属于底层设置，不确定时不要改。',
-  whitelist:
-    '按规则改写或保留请求里的提示词内容。属于底层设置，不确定时不要改。',
   init: '导入完整 OAuth 凭证后，是否自动在账号的运行环境里安装官方 Claude Code，以及安装的细节。',
   health:
     '定期检查每个账号还能不能用，连续出错的账号会被暂时停用，过一会儿再试。',
@@ -62,7 +58,7 @@ export const SETTINGS_TAB_INTROS: Record<SettingsTabId, string> = {
 
 /**
  * 设置页左侧分组导航。id 必须来自 SETTINGS_TABS（类型层面约束），
- * 分组只改呈现顺序，不改路由与合法 tab 集合。同一 tab 可出现在多组。
+ * 分组只改呈现顺序，不改路由与合法 tab 集合。每个 tab 只出现一次。
  */
 export const SETTINGS_NAV_GROUPS: {
   label: string
@@ -89,7 +85,6 @@ export const SETTINGS_NAV_GROUPS: {
     label: '账号环境',
     items: [
       { id: 'init', icon: PackageCheck },
-      { id: 'openai', icon: Bot },
       { id: 'telemetry', icon: RadioTower },
       { id: 'socks5', icon: Network },
     ],
@@ -98,7 +93,6 @@ export const SETTINGS_NAV_GROUPS: {
     label: '高级',
     items: [
       { id: 'protocol', icon: Fingerprint },
-      { id: 'whitelist', icon: ListChecks },
     ],
   },
   {
@@ -121,36 +115,6 @@ export function settingsTabId(tab: string | undefined): SettingsTabId {
     : 'sticky'
 }
 
-export function settingsNavItemKey(
-  groupLabel: string,
-  id: SettingsTabId
-): string {
-  return `${groupLabel}:${id}`
-}
-
-/** 桌面指示条锚在第一处出现的激活项，避免重复 OpenAI 入口抢 ref。 */
-export function firstSettingsNavKey(active: SettingsTabId): string {
-  for (const group of SETTINGS_NAV_GROUPS) {
-    for (const item of group.items) {
-      if (item.id === active) return settingsNavItemKey(group.label, item.id)
-    }
-  }
-  return settingsNavItemKey(SETTINGS_NAV_GROUPS[0]?.label ?? '', active)
-}
-
-/** 窄屏 pill 去重，两组入口仍指向同一 tab。 */
-export const SETTINGS_NAV_UNIQUE_ITEMS: {
-  id: SettingsTabId
-  icon: LucideIcon
-}[] = (() => {
-  const seen = new Set<SettingsTabId>()
-  const items: { id: SettingsTabId; icon: LucideIcon }[] = []
-  for (const group of SETTINGS_NAV_GROUPS) {
-    for (const item of group.items) {
-      if (seen.has(item.id)) continue
-      seen.add(item.id)
-      items.push(item)
-    }
-  }
-  return items
-})()
+export const SETTINGS_NAV_ITEMS = SETTINGS_NAV_GROUPS.flatMap(
+  (group) => group.items
+)

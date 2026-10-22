@@ -1,0 +1,61 @@
+{
+  "scope": "Local integration validation; production result is recorded separately in the operations RUNBOOK and server release evidence",
+  "version": "1.3.208",
+  "production_base": "5dacc2f81a2802a327e0f9782aac6cba0b534eff",
+  "previous_integrated_upstream": "dcdeedea155c878e075fbfbc8c02f97bcc6e5e11",
+  "upstream_tip": "593d465a80e4fa312a83710f64265c6703a46ed5",
+  "integration": "Record upstream_tip as the second parent; apply the previously integrated upstream..upstream_tip delta with git apply --3way, resolving VERSION and three settings UI conflicts. Preserve existing fork history and published customizations.",
+  "excluded_work": "User explicitly excluded the uncommitted scheduling admission/wait-budget changes. The three src/lib/pool files are identical to production_base; the user's changes are preserved separately and restored after deployment.",
+  "preserved": [
+    "Account group and key scope intersection, no cross-group fallback, quota protection and production scheduling",
+    "Caller system, safeguards beta gate, auto-mode classifier, thinking ownership and existing cache TTL behavior",
+    "Fork navigation labels/theme, groups and usage pages; OpenAI navigation entry is unique",
+    "Production configuration, credentials, account containers and unrelated services"
+  ],
+  "upstream_changes": [
+    "OAuth authorization link extraction across terminal frames",
+    "Telemetry sidecar status, identity fallback, configurable upload interval (default 600 seconds)",
+    "Retirement of persona_rules and persona_leak_append; persona_standing and risk audit remain",
+    "Final 1.3.208 billing marker fix; upstream reverted its intermediate body/cache restructuring"
+  ],
+  "payload": {
+    "manifest_unchanged_from_production": true,
+    "cli_and_rust_kernel_unchanged": true,
+    "patch_manifest_verified": true,
+    "cli_node_sha256": "f61f64fd90b367f9274f4e74afe8b34acf61edea448ff46440f64c1a599f416d",
+    "cc_node_sha256": "9ed70a3748ec7b63be617b9ee3add91820f399c9a1f90e0d45ace4fed1fb2c9f",
+    "worker_build": "Go 1.26.5, GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o ../bin/kin-worker ./cmd/kin-worker",
+    "worker_elf_amd64_verified": true,
+    "worker_sha256": "5145b3f716f0b713e8fba45f96466cfe89921d203fee73798c06aabd7aca5dc6"
+  },
+  "validation": {
+    "backend": {
+      "runtime": "Node 22 Linux Docker, 2 CPUs / 3 GiB, network disconnected during tests",
+      "files": 16,
+      "passed": 293,
+      "failed": 0,
+      "selection": ["crs-persona", "crs-persona-usage", "persona-template", "routing-runtime-load", "worker-telemetry", "official-fingerprint", "group-routing", "auto-mode", "auto-mode-api", "cli-hop-body", "client-tool-environment", "panel-route-coverage", "panel-vm-seed-settings", "telemetry-status", "persona-settings-switch", "persona-coverage.mock"]
+    },
+    "frontend": {
+      "files": 8,
+      "passed": 47,
+      "failed": 0,
+      "selection": ["telemetry-interval", "telemetry-slot-state", "cred-type", "login-terminal", "persona-template", "persona-drafts", "protocol-authority", "server-draft"],
+      "typecheck": "passed",
+      "build": "passed; web/dist rebuilt from final merged sources",
+      "critique": "DEGRADED: single-context source review, no sub-agent/browser tool exposed. Retains theme and plain-language navigation, uses per-account status, explicit bulk confirmation and per-item progress/errors. Secondary technical jargon and missing browser rendering remain limitations; no unrelated redesign.",
+      "mechanical_scan": {"targets": 7, "findings": 0},
+      "browser_rendering": "not verified"
+    },
+    "go": {
+      "runtime": "golang:1.27.0-bookworm Linux Docker, 2 CPUs / 2 GiB",
+      "command": "go test ./internal/config ./internal/telemetry",
+      "result": "both affected packages passed"
+    },
+    "syntax": {"changed_mjs": 15, "result": "node --check passed; operations Python py_compile passed"}
+  },
+  "database_migrations_changed": false,
+  "dependencies_changed": false,
+  "dependency_warning": "npm ci reports one moderate vulnerability in the existing dependency graph. No audit fix or dependency changes performed.",
+  "not_verified": ["Browser rendering", "Real cache hit/TTL behavior", "Windows auto mode client", "KVM/macOS/remote nodes", "Long-running stability"]
+}
