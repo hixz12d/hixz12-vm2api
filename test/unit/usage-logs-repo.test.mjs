@@ -198,13 +198,13 @@ test('billingStats TTL starts after a slow aggregation finishes', () => {
     const compute = repo._computeBillingStats.bind(repo)
     repo._computeBillingStats = (opts) => {
       computes++
-      clock += 20_000 // Simulate a scan slower than the 10-second cache TTL.
+      clock += 70_000 // Simulate a scan slower than the 60-second cache TTL.
       return compute(opts)
     }
     const first = repo.billingStats()
     assert.equal(repo.billingStats(), first)
     assert.equal(computes, 1)
-    clock += 10_001
+    clock += 60_001
     repo.billingStats()
     assert.equal(computes, 2)
   } finally {

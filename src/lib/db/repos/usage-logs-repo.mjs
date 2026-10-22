@@ -8,7 +8,8 @@
  * may pass either name.
  */
 
-import { getDb } from '../database.mjs'
+import { Worker } from 'node:worker_threads'
+import { getDb, getDbPath, isDbOpen } from '../database.mjs'
 import { collectErrors, enrichLogRow, excludeErrorClassSql, ingressAuthSql } from '../../admin/error-class.mjs'
 import {
   costColumnsFromUsage,
@@ -33,8 +34,17 @@ import { collapseBlockKeywords, foldInterceptRows } from '../../protocol/interce
 
 /** settings key: ISO instant before which usage_logs rows may have been pruned. Monotonic. */
 const PRUNED_THROUGH_KEY = 'usage_logs_pruned_through'
-const BILLING_STATS_CACHE_TTL_MS = 10_000
+const BILLING_STATS_CACHE_TTL_MS = 60_000
 const BILLING_BACKFILL_INTERVAL_MS = 60_000
+// A worker refresh that has not answered by then is treated as hung.
+const BILLING_REFRESH_STUCK_MS = 120_000
+
+// Reset instants jitter by seconds between usage probes; a minute is enough
+// precision for window alignment and keeps the cache key stable.
+function resetMinute(value) {
+  const t = Date.parse(value || '')
+  return Number.isFinite(t) ? Math.floor(t / 60_000) : null
+}
 
 function billingStatsCacheKey(accountWindows) {
   if (!Array.isArray(accountWindows) || accountWindows.length === 0) return 'rolling'
@@ -42,9 +52,9 @@ function billingStatsCacheKey(accountWindows) {
     .map((win) => ({
       account_id: win?.account_id || '',
       vm_id: win?.vm_id || '',
-      reset_5h: win?.reset_5h || null,
-      reset_7d: win?.reset_7d || null,
-      reset_7d_oi: win?.reset_7d_oi || null,
+      reset_5h: resetMinute(win?.reset_5h),
+      reset_7d: resetMinute(win?.reset_7d),
+      reset_7d_oi: resetMinute(win?.reset_7d_oi),
     }))
     .sort((a, b) =>
       `${a.account_id}\0${a.vm_id}`.localeCompare(`${b.account_id}\0${b.vm_id}`, 'en', { sensitivity: 'case' }),
@@ -285,7 +295,15 @@ export class UsageLogsRepo {
     // during one refresh. Keep this cache repository-local so it never affects
     // request accounting or persists across processes.
     this._billingStatsCache = new Map()
+    this._billingStatsLatest = null
     this._billingBackfillAt = 0
+    // Only the gateway's own database gets a background refresher; standalone
+    // connections (tests, the worker itself) keep computing inline.
+    this._billingDbPath = isDbOpen() && db === getDb() ? getDbPath() : null
+    this._billingWorker = null
+    this._billingWorkerFailed = false
+    this._billingRefreshing = null
+    this._billingPending = null
     this._insert = db.prepare(`
       INSERT INTO usage_logs (${SUMMARY_COLUMNS.join(', ')})
       VALUES (${SUMMARY_COLUMNS.map(() => '?').join(', ')})
@@ -1054,18 +1072,93 @@ export class UsageLogsRepo {
       } catch {}
     }
 
-    const value = this._computeBillingStats({ accountWindows, now })
-    if (this._billingStatsCache.size > 32) {
-      for (const [cacheKey, entry] of this._billingStatsCache) {
-        if (entry.expires_at <= cacheNow) this._billingStatsCache.delete(cacheKey)
-      }
+    // Stale-while-revalidate off the main thread. The aggregation reads every
+    // row of the 7-day window into JS and blocked the event loop (all proxied
+    // requests included) for 1–2 s on each panel refresh. Once a snapshot
+    // exists, serve it and let the worker recompute; only the first snapshot
+    // after start, or a dead worker, computes inline.
+    if (cacheable && this._billingStatsLatest && this._ensureBillingWorker()) {
+      this._refreshBillingStats(key, accountWindows)
+      return (cached || this._billingStatsLatest).value
     }
+
+    const value = this._computeBillingStats({ accountWindows, now })
     // Start the TTL after the expensive synchronous aggregation completes. On
     // large databases the computation itself can exceed the TTL; anchoring the
     // expiry at cache lookup time would make a freshly computed entry already
     // stale and every refresh would scan the table again.
-    if (cacheable) this._billingStatsCache.set(key, { value, expires_at: Date.now() + BILLING_STATS_CACHE_TTL_MS })
+    if (cacheable) this._storeBillingStats(key, value)
     return value
+  }
+
+  _storeBillingStats(key, value) {
+    const now = Date.now()
+    if (this._billingStatsCache.size > 32) {
+      for (const [cacheKey, entry] of this._billingStatsCache) {
+        if (entry.expires_at <= now) this._billingStatsCache.delete(cacheKey)
+      }
+    }
+    const entry = { value, expires_at: now + BILLING_STATS_CACHE_TTL_MS }
+    this._billingStatsCache.set(key, entry)
+    this._billingStatsLatest = entry
+  }
+
+  _ensureBillingWorker() {
+    if (this._billingWorker) return true
+    if (!this._billingDbPath || this._billingWorkerFailed) return false
+    let worker
+    try {
+      worker = new Worker(new URL('./billing-stats-worker.mjs', import.meta.url), {
+        workerData: { dbPath: this._billingDbPath },
+      })
+    } catch (e) {
+      this._billingWorkerFailed = true
+      console.warn(`[billing-stats] worker unavailable; computing on the main thread: ${e?.message || e}`)
+      return false
+    }
+    // Never keep the process alive for a cache refresher.
+    worker.unref()
+    const stop = (reason) => {
+      if (this._billingWorker !== worker) return
+      this._billingWorker = null
+      this._billingWorkerFailed = true
+      this._billingRefreshing = null
+      this._billingPending = null
+      console.warn(`[billing-stats] worker stopped; computing on the main thread: ${reason}`)
+    }
+    worker.on('message', (msg) => this._onBillingWorkerMessage(msg))
+    worker.on('error', (e) => stop(e?.message || e))
+    worker.on('exit', (code) => stop(`exit ${code}`))
+    this._billingWorker = worker
+    return true
+  }
+
+  _refreshBillingStats(key, accountWindows) {
+    const running = this._billingRefreshing
+    if (running) {
+      if (Date.now() - running.started_at > BILLING_REFRESH_STUCK_MS) {
+        // exit → stop() falls back to inline computation.
+        this._billingWorker?.terminate()
+        return
+      }
+      // One refresh at a time; remember only the newest other window set.
+      if (running.key !== key) this._billingPending = { key, accountWindows }
+      return
+    }
+    this._billingRefreshing = { key, started_at: Date.now() }
+    this._billingWorker.postMessage({ key, accountWindows, now: Date.now() })
+  }
+
+  _onBillingWorkerMessage(msg) {
+    const running = this._billingRefreshing
+    this._billingRefreshing = null
+    if (msg?.ok && running && msg.key === running.key) this._storeBillingStats(msg.key, msg.value)
+    else if (msg && !msg.ok) console.warn(`[billing-stats] refresh failed: ${msg.error}`)
+    const next = this._billingPending
+    this._billingPending = null
+    if (!next || !this._billingWorker) return
+    const cached = this._billingStatsCache.get(next.key)
+    if (!cached || cached.expires_at <= Date.now()) this._refreshBillingStats(next.key, next.accountWindows)
   }
 
   _computeBillingStats({ accountWindows = null, now = Date.now() } = {}) {

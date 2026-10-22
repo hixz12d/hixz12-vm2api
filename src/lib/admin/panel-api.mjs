@@ -1161,7 +1161,9 @@ export async function buildProbeOne({
     } catch {}
   }
   if (!skipHop) accountQuota.ingestOAuthUsage(accountId, result)
-  if (isSetupTokenMode(credentialModeOfVm(vm)) && (force || includeFable) && !result.usage_scope_missing) {
+  // Re-test Fable only when shouldProbeFable says the entitlement is unknown or
+  // stale; a forced quota refresh alone no longer costs up to two 20 s hops.
+  if (isSetupTokenMode(credentialModeOfVm(vm)) && includeFable && !result.usage_scope_missing) {
     try {
       await applyFableProbeResult(accountQuota, accountId, await fableProbe({ exec, timeoutMs: 20000 }))
     } catch {}
@@ -1302,18 +1304,28 @@ export async function buildProbeOne({
   return ok(data)
 }
 
+// Each slot probes through its own worker and exit, so a few can run at once.
+// Serial probing made 「查一遍额度」 take minutes on a full pool.
+const PROBE_ALL_CONCURRENCY = 3
+
 export async function buildProbeAll({ cfg, accountQuota, hop = true, force = true, routingConfig = {} } = {}) {
   const vms = listVms(cfg.paths.project, routingConfig)
-  const items = []
-  for (const s of vms) {
-    const one = await buildProbeOne({ cfg, accountQuota, id: s.id, hop, force, routingConfig })
-    if (one.ok === false || one.status) {
-      const err = one.body?.error || one
-      items.push({ vm_id: s.id, ok: false, error: err?.message || err?.code || String(err || 'probe_failed') })
-    } else {
-      items.push(one.data)
+  const items = new Array(vms.length)
+  let next = 0
+  const lane = async () => {
+    while (next < vms.length) {
+      const i = next++
+      const s = vms[i]
+      const one = await buildProbeOne({ cfg, accountQuota, id: s.id, hop, force, routingConfig })
+      if (one.ok === false || one.status) {
+        const err = one.body?.error || one
+        items[i] = { vm_id: s.id, ok: false, error: err?.message || err?.code || String(err || 'probe_failed') }
+      } else {
+        items[i] = one.data
+      }
     }
   }
+  await Promise.all(Array.from({ length: Math.min(PROBE_ALL_CONCURRENCY, vms.length) }, lane))
   return ok({ items, total: items.length })
 }
 

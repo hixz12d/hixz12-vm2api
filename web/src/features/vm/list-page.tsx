@@ -111,10 +111,10 @@ function writePref(key: string, value: string) {
 
 export function VmListPage() {
   const me = useQuery(meQueryOptions())
-  const vmsQ = useQuery(vmsListQueryOptions(5000))
+  const vmsQ = useQuery(vmsListQueryOptions(30_000))
   usePoolSeatStream()
   const usage = useQuery({
-    ...usageQueryOptions(5000),
+    ...usageQueryOptions(30_000),
     enabled: vmPermsFor(me.data?.role).dashboard,
   })
   const qc = useQueryClient()

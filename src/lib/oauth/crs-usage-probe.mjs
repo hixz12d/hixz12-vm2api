@@ -248,6 +248,12 @@ export function shouldProbeFable({ fable = {}, quota = {}, storedTier = null, no
     const probedAt = Date.parse(fable.probed_at || '')
     return !Number.isFinite(probedAt) || now - probedAt >= 60 * 60_000
   }
+  // A confirmed Max keeps its entitlement; re-test it once a day, not on
+  // every quota refresh.
+  if (stored === 'max') {
+    const probedAt = Date.parse(fable.probed_at || '')
+    return !Number.isFinite(probedAt) || now - probedAt >= 24 * 60 * 60_000
+  }
   return true
 }
 

@@ -79,6 +79,13 @@
 - 主 Key `x-kin-vm` 指定账号的请求（含管理台测试）跳过额度类本地冷却，成功后解除额度类冷却并重判 5h / 7d 安全线；模型级、RPM、过载、认证类冷却和并发上限不变，不跨组回退。额度类口径为 `availability.isQuotaClassCooldownReason`，`AccountRuntimeRepo.QUOTA_CLASS_COOLDOWN` 复制同一正则，改口径需两处同步。
 - 合并上游时注意冲突点：`pool-scheduler.mjs` 的 `account_cooldown` 等待与 `clearQuotaCooldownAfterPinSuccess`、`failover-runner.mjs` pin 成功收尾、`claude-tier.mjs`、`vm-registry.mjs` 的 `persistAccountTier`、`vm-test-chat.mjs` 的 `extractError`（本地拦截返回 `code: pool_overloaded`、`local: true`）。
 
+## 管理台性能
+
+- 用量统计（`UsageLogsRepo.billingStats`）缓存 60 秒，缓存键里的额度重置时间精确到分钟。已有快照时过期也先返回旧快照，由常驻工作线程 `billing-stats-worker.mjs`（只读 SQLite 连接）重算；只有启动后的第一份快照、或工作线程退出后才在主线程同步计算。原因：同步统计在生产实测每次 1–2 秒，期间所有转发请求一起停住。仅网关单例数据库启用工作线程，测试与独立连接仍同步计算。
+- 「查一遍额度」（`buildProbeAll`）最多 3 个槽位并行；手动强制刷新不再无条件补测 Fable，是否测试只看 `shouldProbeFable`：Pro 每小时、已确认 Max 每 24 小时、档位不明每次。
+- 槽位列表页的槽位与用量轮询为 30 秒；席位占用仍由 `/pool/stream` 实时推送。
+- 合并上游时注意：`usage-logs-repo.mjs` 的 `billingStats` / `_ensureBillingWorker`、`panel-api.mjs` 的 `buildProbeAll` 与 `buildProbeOne` 的 Setup Token 补测条件、`crs-usage-probe.mjs` 的 `shouldProbeFable` Max 分支、`web/src/features/vm/list-page.tsx` 的轮询间隔。
+
 ## v1.3.79 基线
 
 同步上游 `291dee4`（v1.3.79）。上游重写了历史，本次以此前已合入的 v1.3.73 文件树作为三方合并基线，保留 fork 历史并将当前上游提交作为合并父节点；未重写 fork 的已发布提交。
