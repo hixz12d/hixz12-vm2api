@@ -92,7 +92,7 @@ test('collectSlotIdentity writes guest facts while preserving identity and concu
   assert.deepEqual(saved.claude, vm.claude)
 })
 
-test('collectSlotIdentity refreshes worker telemetry with new hardware', async () => {
+test('collectSlotIdentity refreshes worker telemetry; hardware stays on the vm record', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kin-guest-telemetry-'))
   const id = 'vm-02'
   const slotDir = path.join(root, 'vms', id)
@@ -139,9 +139,11 @@ test('collectSlotIdentity refreshes worker telemetry with new hardware', async (
   assert.equal(out.ok, true)
   assert.equal(out.telemetry_sync.wrote, true)
   const worker = JSON.parse(fs.readFileSync(path.join(slotDir, 'run', 'worker.json'), 'utf8'))
-  assert.equal(worker.telemetry.identity.cpu_model, 'Observed CPU')
-  assert.equal(worker.telemetry.identity.cpu_cores, 8)
+  assert.equal(worker.telemetry.identity.cpu_model, undefined)
+  assert.equal(worker.telemetry.identity.env.cpu_model, undefined)
   assert.equal(worker.telemetry.identity.env.shell, 'zsh')
+  const saved = JSON.parse(fs.readFileSync(vmPath, 'utf8'))
+  assert.equal(saved.fingerprint.hardware.cpu_model, 'Observed CPU')
   fs.rmSync(root, { recursive: true, force: true })
 })
 

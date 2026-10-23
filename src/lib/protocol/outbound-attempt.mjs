@@ -73,12 +73,11 @@ function systemBlockText(block) {
 export function isCliOwnedSystemText(text) {
   const t = String(text || '').trim()
   if (!t) return true
-  if (/^x-anthropic-billing-header:[^\r\n]*$/i.test(t)) return true
-  // Only the gateway's timezone-only block is owned; client Environment
-  // blocks can contain the real cwd/platform and must survive the hop.
-  if (/^# Environment\r?\n[ \t]*(?:-[ \t]*)?Time ?zone:[^\r\n]+$/i.test(t)) return true
+  if (/^x-anthropic-billing-header/i.test(t)) return true
+  if (t.startsWith('# Environment')) return true
   if (t === CLI_IDENTITY || t === CRS_OFFICIAL_SYSTEM || t === CRS_OFFICIAL_AGENT_IDENTITY) return true
   if (t === CRS_COMPACT_IDENTITY || t === CRS_OFFICIAL_CLI_SYSTEM) return true
+  if (t.startsWith('You are Claude Code')) return true
   // Agent / expansion stay as leftover so wrap CLI identity/zero can still carry 官方完整提示词.
   return false
 }
@@ -168,8 +167,36 @@ function stabilizeMessageBudgets(body) {
   })
   return changed ? { ...body, messages } : body
 }
+const OFFICIAL_CACHE = Object.freeze({ type: 'ephemeral' })
 
-/** One marker, on the last text of the current tail, ttl omitted. */
+function textOf(block) {
+  if (typeof block === 'string') return block
+  return typeof block?.text === 'string' ? block.text : ''
+}
+
+/**
+ * Every cli-hop request leaves as the captured Claude Code shape: the identity
+ * sentence, then the caller's own prompt. Both markers omit ttl. A request that
+ * already has that identity keeps its second block; anything else is joined
+ * behind a fresh identity.
+ */
+export function officialSystemTemplate(system, ttl = DEFAULT_CACHE_TTL) {
+  const blocks = Array.isArray(system) ? system : system == null || system === '' ? [] : [system]
+  const texts = blocks.map(textOf).filter((text) => text.trim())
+  const identityAt = texts.findIndex((text) => text.trim() === CRS_OFFICIAL_CLI_SYSTEM)
+  const body = identityAt >= 0 ? texts.slice(identityAt + 1).join('\n\n') : texts.join('\n\n')
+  const marker = { type: 'ephemeral', ttl: normalizeCacheTtl(ttl) }
+  const out = [{ type: 'text', text: CRS_OFFICIAL_CLI_SYSTEM, cache_control: { ...marker } }]
+  if (body.trim()) out.push({ type: 'text', text: body, cache_control: { ...marker } })
+  return out
+}
+
+/**
+ * Two markers, stamped with the session TTL: the last text of the current tail
+ * and of the user turn before it (4+ messages). The second one sits on the
+ * previous request's write, so a turn that grows past the 20-block lookback
+ * still reads it instead of falling back to the system prefix.
+ */
 function officialMessageMarker(messages, ttl = DEFAULT_CACHE_TTL) {
   if (!Array.isArray(messages) || messages.length === 0) return messages
   const next = messages.map((message) => {
@@ -191,34 +218,36 @@ function officialMessageMarker(messages, ttl = DEFAULT_CACHE_TTL) {
     })
     return changed ? { ...message, content } : message
   })
-  let tail = -1
-  for (let i = next.length - 1; i >= 0; i--) {
+  const users = []
+  for (let i = next.length - 1; i >= 0 && users.length < 2; i--) {
     if (next[i]?.role !== 'user') continue
     const content = next[i].content
-    if (typeof content === 'string' ? content : Array.isArray(content) && content.length) {
-      tail = i
-      break
-    }
+    if (typeof content === 'string' ? content : Array.isArray(content) && content.length) users.push(i)
   }
-  if (tail < 0) return next
-  const message = next[tail]
+  if (users.length === 0) return next
+  stampMessageTail(next, users[0], ttl)
+  if (users.length > 1 && next.length >= 4) stampMessageTail(next, users[1], ttl)
+  return next
+}
+
+function stampMessageTail(messages, index, ttl) {
+  const message = messages[index]
   if (typeof message.content === 'string') {
-    next[tail] = {
+    messages[index] = {
       ...message,
       content: [
         { type: 'text', text: message.content, cache_control: { type: 'ephemeral', ttl: normalizeCacheTtl(ttl) } },
       ],
     }
-    return next
+    return
   }
   const content = message.content.slice()
   for (let i = content.length - 1; i >= 0; i--) {
     if (content[i]?.type === 'thinking' || content[i]?.type === 'redacted_thinking') continue
     content[i] = { ...content[i], cache_control: { type: 'ephemeral', ttl: normalizeCacheTtl(ttl) } }
-    next[tail] = { ...message, content }
-    return next
+    messages[index] = { ...message, content }
+    return
   }
-  return next
 }
 /** Official Claude Code omits eager streaming and tool cache markers. A caller TTL here makes CLI fill the omitted system and message markers. */
 function stripEagerInputStreaming(tools) {
@@ -244,54 +273,6 @@ function stripEagerInputStreaming(tools) {
   return changed ? next : tools
 }
 
-/** The one caller beta that rides with `safeguards` (Claude Code auto mode). */
-export const SAFEGUARDS_BETA_RE = /^dangerous-tool-use-\d{4}-\d{2}-\d{2}$/
-
-/** First `dangerous-tool-use-YYYY-MM-DD` in the caller's anthropic-beta header(s), or ''. */
-export function pickSafeguardsBeta(betaHeader) {
-  const values = Array.isArray(betaHeader) ? betaHeader : [betaHeader]
-  for (const value of values) {
-    for (const token of String(value ?? '').split(',')) {
-      const beta = token.trim()
-      if (SAFEGUARDS_BETA_RE.test(beta)) return beta
-    }
-  }
-  return ''
-}
-
-/** routing.compatibility.auto_mode_server: missing or anything but `false` means on. */
-export function autoModeServerEnabled(routing) {
-  return routing?.compatibility?.auto_mode_server !== false
-}
-
-/**
- * Auto mode server checks: keep the caller's `safeguards` and hand the slot CLI
- * its beta in-body (`kin_safeguards_beta`; the kernel drops envelope headers).
- * Both or neither. A caller-sent `kin_safeguards_beta` is never trusted.
- */
-function applyCliHopSafeguards(body, safeguards, { safeguardsBeta, autoModeServer }) {
-  delete body.safeguards
-  delete body.kin_safeguards_beta
-  const beta = typeof safeguardsBeta === 'string' ? safeguardsBeta.trim() : ''
-  if (autoModeServer === false || !Array.isArray(safeguards) || !SAFEGUARDS_BETA_RE.test(beta)) return body
-  body.safeguards = safeguards
-  body.kin_safeguards_beta = beta
-  return body
-}
-
-/**
- * Crag joins blocks with one newline before wrapping them in <system>.
- * Pack the native CLI separator ourselves, and always supply a gateway
- * block so a caller's first user <system> block cannot be promoted instead.
- * Runs last: the slot persona rebuilds system[] after prepareCliHopBody.
- */
-export function packCragSystem(body) {
-  if (!body || typeof body !== 'object') return body
-  const system = body.system
-  const text = Array.isArray(system) ? system.map(systemBlockText).join('\n\n') : system
-  return { ...body, system: text || '​' }
-}
-
 /**
  * Caller fields plus Node-owned message breakpoints.
  * CLI owns persona layout and system/tools markers; kernel only forwards.
@@ -310,8 +291,6 @@ export function prepareCliHopBody(
     stream = true,
     repaired = false,
     cacheTtl = DEFAULT_CACHE_TTL,
-    safeguardsBeta = '',
-    autoModeServer = true,
     requestContext = null,
     preserveSystem = false,
     preserveThinkingBlocks = false,
@@ -320,16 +299,9 @@ export function prepareCliHopBody(
     routing = null,
   } = {},
 ) {
-  if (requestContext?.purpose === 'auto_mode_classifier') {
-    // Upstream keeps the classifier contract; the fork's safeguards gate still applies.
-    const classifier = prepareClassifierBody(canonicalBody, { stream })
-    return applyCliHopSafeguards(classifier, classifier.safeguards, { safeguardsBeta, autoModeServer })
-  }
+  if (requestContext?.purpose === 'auto_mode_classifier') return prepareClassifierBody(canonicalBody, { stream })
   if (preserveSystem) validateCacheBreakpoints(canonicalBody)
   let body = officialMessagesBody(canonicalBody, { stream, preserveContentShape: true })
-  const safeguards = body.safeguards
-  delete body.safeguards
-  delete body.kin_safeguards_beta
   const windowTokens = Number(autoCompactWindow)
   if (Number.isInteger(windowTokens) && windowTokens >= 100_000 && windowTokens <= 1_000_000) {
     body.auto_compact_window = windowTokens
@@ -364,11 +336,11 @@ export function prepareCliHopBody(
   if (Object.prototype.hasOwnProperty.call(body, 'context_management')) delete body.context_management
   if (Object.prototype.hasOwnProperty.call(body, 'cache_control')) delete body.cache_control
   if (!requestContext) {
-    // The patched CLI owns system layout; do not flatten caller blocks here.
+    body = { ...body, system: officialSystemTemplate(body.system, cacheTtl) }
     body.messages = officialMessageMarker(body.messages, cacheTtl)
     if (Array.isArray(body.tools)) body = { ...body, tools: stripEagerInputStreaming(body.tools) }
   }
-  return applyCliHopSafeguards(body, safeguards, { safeguardsBeta, autoModeServer })
+  return body
 }
 /** Only legacy Haiku rejects thinking; Haiku 5.5 supports adaptive thinking. */
 export function pinHaikuCliThinking(body = {}) {

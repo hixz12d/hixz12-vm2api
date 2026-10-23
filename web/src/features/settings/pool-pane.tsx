@@ -71,21 +71,8 @@ function numOf(source: Obj, key: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback
 }
 
-type PoolStrategy = 'balanced' | 'fill' | 'smart'
-
-/** fork：保留智能评分策略，避免保存设置时把生产的 smart 改成平衡。 */
-function strategyOf(value: unknown): PoolStrategy {
-  return value === 'fill' || value === 'smart' ? value : 'balanced'
-}
-
-const STRATEGY_LABELS: Record<PoolStrategy, string> = {
-  balanced: '平衡',
-  fill: '填充',
-  smart: '智能评分',
-}
-
 const STRATEGIES: {
-  id: PoolStrategy
+  id: 'balanced' | 'fill'
   title: string
   desc: string
   demo: number[]
@@ -105,27 +92,20 @@ const STRATEGIES: {
     demo: [4, 3, 1],
     next: 1,
   },
-  {
-    id: 'smart',
-    title: '智能评分',
-    desc: '按账号额度余量、套餐和手动等级打分，同分时选占用少的 VM；排不上分的再按平衡补位。',
-    demo: [1, 3, 2],
-    next: 0,
-  },
 ]
 
 function StrategyCards({
   value,
   onChange,
 }: {
-  value: PoolStrategy
-  onChange: (next: PoolStrategy) => void
+  value: 'balanced' | 'fill'
+  onChange: (next: 'balanced' | 'fill') => void
 }) {
   return (
     <div
       role='radiogroup'
       aria-label='开席策略'
-      className='grid gap-3 sm:grid-cols-3'
+      className='grid gap-3 sm:grid-cols-2'
     >
       {STRATEGIES.map((strategy) => {
         const selected = strategy.id === value
@@ -448,7 +428,7 @@ export function PoolPane({
   saving = false,
   pending = false,
 }: PoolPaneProps) {
-  const strategy = strategyOf(pool.strategy)
+  const strategy = pool.strategy === 'fill' ? 'fill' : 'balanced'
   const seatCap = Math.min(
     SEAT_CAP_MAX,
     Math.max(1, numOf(inference, 'session_slots', SEAT_CAP_MAX))
@@ -589,7 +569,7 @@ export function PoolPane({
         <SummaryButton
           icon={Layers}
           title='分配策略'
-          value={STRATEGY_LABELS[strategy]}
+          value={strategy === 'fill' ? '填充' : '平衡'}
           desc='Claude 新设备开席的优先顺序'
           pending={pending}
           disabled={saving}
@@ -683,7 +663,7 @@ export function PoolPane({
             {open === 'strategy' ? (
               <>
                 <StrategyCards
-                  value={strategyOf(poolDraft.strategy)}
+                  value={poolDraft.strategy === 'fill' ? 'fill' : 'balanced'}
                   onChange={(next) => updateDraft('pool', { strategy: next })}
                 />
                 <div className='flex items-center justify-between gap-4 rounded-md border px-3 py-2.5'>

@@ -761,7 +761,6 @@ export function personaTemplateVars({
   model = '',
   timezoneOnlyEnv = false,
   messages = null,
-  cliHop = false,
 } = {}) {
   const billing = buildBillingAttributionText(
     firstUserText,
@@ -769,12 +768,7 @@ export function personaTemplateVars({
     sessionId,
     billingIndexesFromMessages(messages),
   )
-  // cli-hop keeps the caller's own # Environment verbatim in caller_system,
-  // so the env slot only carries the slot timezone.
-  const timezoneEnv = () =>
-    buildOfficialEnvironmentSection({ timezone: env.timezone }, { sourceTexts: [], contextManagement: false })
-  const envTimezoneOnly = () =>
-    cliHop ? timezoneEnv() : buildOfficialEnvironmentSection(env, { sourceTexts, contextManagement: false })
+  const envTimezoneOnly = () => buildOfficialEnvironmentSection(env, { sourceTexts, contextManagement: false })
   return {
     billing,
     billing_semi: billing.endsWith(';') ? billing : `${billing};`,
@@ -788,13 +782,13 @@ export function personaTemplateVars({
     agent_standing: String(agentStanding || ''),
     env: () => (withEnv ? envTimezoneOnly() : ''),
     caller_agent: String(callerAgent || '').trim(),
-    caller_system: String(leftover || ''),
+    caller_system: withEnv ? String(leftover || '').trim() : String(leftover || ''),
     env_timezone_only: () => (withEnv ? envTimezoneOnly() : ''),
     env_official: () =>
       !withEnv
         ? ''
-        : cliHop || timezoneOnlyEnv
-          ? timezoneEnv()
+        : timezoneOnlyEnv
+          ? buildOfficialEnvironmentSection({ timezone: env.timezone }, { sourceTexts: [], contextManagement: false })
           : buildOfficialContinuationText(env, sourceTexts, { overwrite: true }),
     timezone: withEnv ? String(env?.timezone || '').trim() : '',
     locale: String(env?.locale || '').trim(),
@@ -1694,7 +1688,6 @@ function applyTemplatePersona(
     identity,
     model,
     callerAgent: rawCallerAgent = '',
-    cliHop = false,
   } = {},
 ) {
   const messages = Array.isArray(body.messages) ? body.messages : []
@@ -1718,22 +1711,15 @@ function applyTemplatePersona(
   const usesCallerAgent = !harness && (preset === 'official' || templateWantsCallerAgent)
   const suppliedAgent = usesCallerAgent ? String(rawCallerAgent || '').trim() : ''
   const callerAgent = suppliedAgent || (preset === 'official' && !harness ? CRS_OFFICIAL_AGENT_PROMPT : '')
-  // cli-hop keeps caller bytes (including its own # Environment); only the
-  // billing / identity lines the slot re-renders and the parked agent prompt drop.
   const leftover = harness
     ? ''
-    : cliHop
-      ? extractSystemTexts(body.system)
-          .filter((text) => !isBillingLine(text) && !isStandaloneOfficialLine(text))
-          .filter((text) => !suppliedAgent || text.trim() !== suppliedAgent)
+    : usesCallerAgent
+      ? parkableSystemTexts(body.system, callerOptions)
+          .filter((text) => !looksLikeAgentPrompt(text))
           .join('\n\n')
-      : usesCallerAgent
-        ? parkableSystemTexts(body.system, callerOptions)
-            .filter((text) => !looksLikeAgentPrompt(text))
-            .join('\n\n')
-        : collectCallerSystemAppend(body, callerOptions)
+      : collectCallerSystemAppend(body, callerOptions)
   const modelId = model || body.model
-  const midSystem = !cliHop && leftoverGoesToMidSystem(preset, modelId)
+  const midSystem = leftoverGoesToMidSystem(preset, modelId)
   let system = renderPersonaTemplate(
     blocks,
     personaTemplateVars({
@@ -1750,7 +1736,6 @@ function applyTemplatePersona(
       leftover: midSystem ? '' : leftover,
       model: modelId,
       messages,
-      cliHop,
     }),
   )
   if (preset === 'official') system = insertOfficialCallerAgent(system, callerAgent)
@@ -1780,7 +1765,6 @@ export function applyCrsUnofficialPersona(
     sessionId,
     identity,
     model,
-    cliHop = false,
   } = {},
 ) {
   if (!body || typeof body !== 'object') return body
@@ -1801,7 +1785,7 @@ export function applyCrsUnofficialPersona(
     !presetFlagEnabled(templateSettings.switches, 'persona_env_presets', templateSettings.preset)
   const cleaned = {
     ...body,
-    system: cliHop ? body.system : stripLeakySystem(body.system, { preserveEnvironment }),
+    system: stripLeakySystem(body.system, { preserveEnvironment }),
     messages: sanitizeUnofficialMessages(body.messages),
   }
   if (personaUsesTemplate(templateSettings)) {
@@ -1817,7 +1801,6 @@ export function applyCrsUnofficialPersona(
       identity,
       model,
       callerAgent: rawCallerAgent,
-      cliHop,
     })
   }
   const doPark =

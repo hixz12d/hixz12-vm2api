@@ -77,7 +77,7 @@ KVM / Docker 槽位将宿主 `data/run/slot-guest-bin/`（仅含 `kin-worker`、
 
 **本 fork 源码模式：**上面的官方安装脚本与镜像不包含 fork 定制；使用 fork 源码构建，Compose 默认镜像为 `hixz12-vm2api:local`。
 
-**新建槽位的闭源依赖**：`kin-computer` 只分发编译后二进制，不公开源码。它由 `deploy/payload.json` 固定大小与 SHA256，随 Release 和控制面镜像交付；镜像入口自动安装到 `bin/kin-computer`，无需额外挂载私有源码目录。本 fork 只按清单补齐 `kin-computer`，不要执行全量 `fetch:payload` 覆盖已打补丁的 CLI；默认读取仓库的 `bin/kin-computer`，也可用 `KIN_COMPUTER_BIN` 指定绝对路径。二进制为 linux amd64，ARM64 控制面通过 QEMU 运行；Docker 身份生成还需 Bash 和 Python 3（控制面镜像已安装）。缺失时面板建槽返回 HTTP 400 `computer_service_missing`，生成失败返回 `computer_create_failed`。已有容器启动不会重新发布身份或改写主机名。
+**新建槽位的闭源依赖**：`kin-computer` 只分发编译后二进制，不公开源码。它由 `deploy/payload.json` 固定大小与 SHA256，随 Release 和控制面镜像交付；镜像入口自动安装到 `bin/kin-computer`，无需额外挂载私有源码目录。源码直接运行前执行 `npm run fetch:payload`；默认读取仓库的 `bin/kin-computer`，也可用 `KIN_COMPUTER_BIN` 指定绝对路径。二进制为 linux amd64，按 Ubuntu 22.04 / GLIBC 2.35 构建，Debian 12 与 Ubuntu 24.04 可向上兼容；ARM64 控制面通过 QEMU 运行。Docker 与 KVM 槽默认生成 Linux PC 计算机（真实 DMI 档案），不依赖 Bash 或 Python 3；手动 `--os macos` 生成 macOS 人设时才需要两者（控制面镜像已安装）。缺失时面板建槽返回 HTTP 400 `computer_service_missing`，生成失败返回 `computer_create_failed`。已有容器启动不会重新发布身份或改写主机名。
 
 `v1.3.176` 原镜像未包含该依赖；补传 Release 附件不会改变旧镜像。继续使用该镜像时，需将附件安装到挂载的 `bin/kin-computer`，在 `.env` 设置 `KIN_COMPUTER_BIN=/opt/vm2api/bin/kin-computer` 后重新创建控制面容器以载入环境变量（不要重建槽位容器）。
 

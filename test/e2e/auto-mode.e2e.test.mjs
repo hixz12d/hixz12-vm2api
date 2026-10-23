@@ -607,7 +607,7 @@ test('classifier terminal/error/cancel/concurrency boundaries through actual ELF
   const wire = h.captured.at(-1)
   assert.equal(wire.max_tokens, 128)
   assert.deepEqual(wire.thinking, { type: 'adaptive', display: 'summarized' })
-  assert.ok(wire.system.some((block) => block.text.includes('# Environment')))
+  assert.ok(wire.system.some((block) => block.text.includes('Ordinary caller prompt')))
   assert.equal(wire.request_context, undefined)
   h.setHealth({ ...h.health, classifier_request_context: false })
   const count = h.captured.length

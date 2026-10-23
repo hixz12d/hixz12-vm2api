@@ -1,0 +1,149 @@
+{
+  "status": "local_only_uncommitted_not_deployed",
+  "date": "2026-10-23",
+  "fork_head": "9d8d6b7b",
+  "upstream_base": "593d465a80e4fa312a83710f64265c6703a46ed5",
+  "upstream_target": "1af2f77cec184f68b49d63407015795551e0bf21",
+  "version": "1.3.218 plus unreleased two-user-message cache breakpoint fix",
+  "integration": {
+    "method": "three-way incremental patch using an alternate Git index; original worktree changes included before application",
+    "merge_commit_created": false,
+    "normal_git_index_modified": false,
+    "release_note": "Record the upstream_target as an integration parent/baseline when committing for release; current HEAD still predates this local integration.",
+    "resolved_conflicts": [
+      "docs/DEPLOY.md",
+      "src/lib/pool/pool-scheduler.mjs",
+      "src/lib/protocol/handle-codex.mjs",
+      "test/unit/api-backend.test.mjs",
+      "test/unit/cli-hop-body.test.mjs",
+      "web/src/features/keys/key-limits-dialog.tsx",
+      "web/src/features/keys/key-payload.ts",
+      "web/src/features/settings/index.tsx"
+    ],
+    "preserved_preexisting_changes": [
+      "pool admission, deadline and concurrency fixes",
+      "per-request cache-prefix snapshot reuse",
+      "debug-only cache-continuity diagnostics",
+      "unreleased admission documentation"
+    ],
+    "preservation_checks": {
+      "reverse_patch_check_passed": [
+        "src/lib/pool/failover-runner.mjs",
+        "src/lib/pool/pool-scheduler.mjs",
+        "src/lib/pool/seat-planner.mjs",
+        "src/lib/protocol/cache-prefix.mjs"
+      ],
+      "handle_protocol": "Upstream removed adjacent intermediate outbound logging lines, so reverse patch context differs. Both preexisting debug guards were reviewed in the merged diff.",
+      "missing_preexisting_added_source_lines": 0
+    }
+  },
+  "retired": [
+    "Claude smart scoring and strategy card",
+    "caller-system and safeguards binary patches for cli-node/cc-node",
+    "Node caller-system snapshot reconstruction and crag system packing",
+    "additional client-tool-environment prompt",
+    "auto_mode_server UI/default and kin_safeguards_beta injection",
+    "patch-cli-system.py and PATCH.json"
+  ],
+  "legacy_config_check": {
+    "smart_strategy_resolves_to": "balanced",
+    "smart_parameters_removed_by_normalization": true,
+    "fill_strategy_preserved": true,
+    "production_config_written": false
+  },
+  "payload": {
+    "release": "payload-2026.10.22-computer-linux",
+    "all_12_manifest_files_size_and_sha256_verified": true,
+    "cli_node_sha256": "b5054cb8494670354e61f3e0a0f7b2c3b768832c841140a4e22407fec24ab009",
+    "cc_node_sha256": "be5eec49a78345dd935e302e88c9d7ad0afbb09a195356d81be1bdea766f3960",
+    "kin_computer_sha256": "a64970838469da0e3b86831212e8f6b0806e3433a65dd062f6556252403c2bb9",
+    "rust_kernel_changed": false,
+    "worker": {
+      "build": "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o ../bin/kin-worker ./cmd/kin-worker",
+      "toolchain": "go1.26.5 windows/amd64 cross-compiling to linux/amd64",
+      "sha256": "e2fb951bb8e84b3cf003bb4ad51427d85152244f3aa8a591ee74e17c0674b28e"
+    }
+  },
+  "validation": {
+    "node_syntax": { "changed_or_new_mjs_files": 80, "failed": 0 },
+    "node_unit": {
+      "runtime": "Node 22.23.3, local Linux Docker, 2 CPUs / 3 GiB",
+      "selection": "47 files: upstream changed unit files plus existing group-routing, failover-runner, seat-planner, auto-mode, crs-persona, usage-logs-repo, cache-prefix, kernel-stream-integrity, client-abort and native-slot-limit coverage where present",
+      "unique_tests": 868,
+      "initial_passed": 866,
+      "initial_failed": 2,
+      "initial_failure": "Two fleet-update egress readiness cases lacked ss in node:22-trixie-slim; production requires iproute2.",
+      "recheck": "Installed iproute2 in a temporary local container and reran fleet-update.test.mjs: 9 passed, 0 failed.",
+      "final_unique_passed": 868,
+      "remaining_failed": 0,
+      "skipped": 0
+    },
+    "auto_mode_e2e": {
+      "file": "test/e2e/auto-mode.e2e.test.mjs",
+      "runtime": "Merged Node code + real Rust kernel + unmodified upstream cli-node, local mock upstream, Docker --network none",
+      "passed": 5,
+      "failed": 0,
+      "skipped": 1,
+      "skip_reason": "KIN_AUTOMODE_OLD_CLI was not supplied",
+      "existing_assertion_adjustment": "Ordinary requests check retained caller text rather than requiring the retired fork Environment block. Existing summarized thinking expectation retained.",
+      "startup": "Binaries copied to container-local /tmp to avoid Windows bind-mount cold-start overhead"
+    },
+    "original_safeguards_wire_inspection": {
+      "method": "Reuse existing E2E harness against upstream Node source and SHA-verified original CLI; capture requests at local mock HTTP upstream",
+      "requested_beta": "dangerous-tool-use-2026-09-03",
+      "captured_safeguards": [{ "type": "dangerous_tool_use" }],
+      "captured_beta": "dangerous-tool-use-2026-09-03",
+      "arbitrary_caller_beta_date_forwarded": false,
+      "real_anthropic_contacted": false,
+      "account_eligibility_verified": false
+    },
+    "go": {
+      "packages": ["internal/config", "internal/telemetry"],
+      "top_level_tests_passed": 28,
+      "failed": 0,
+      "method": "go test -c with GOOS=linux GOARCH=amd64 CGO_ENABLED=0; execute compiled tests in local Linux container",
+      "initial_environment_issue": "Native Windows telemetry test compilation cannot use syscall.Flock; Linux-target compilation and execution passed."
+    },
+    "frontend": {
+      "typecheck": "passed",
+      "build": "passed; web/dist regenerated after final source edit",
+      "existing_test_files": 6,
+      "tests_passed": 33,
+      "failed": 0,
+      "files": [
+        "src/features/keys/key-payload.test.ts",
+        "src/features/models/model-mapping.test.ts",
+        "src/features/models/policy.test.ts",
+        "src/features/vm/login-terminal-start.test.ts",
+        "src/features/vm/vm-perms.test.ts",
+        "src/hooks/server-draft.test.ts"
+      ],
+      "integration_fix": "New model mapping editor reuses resyncDraft so shared routing refreshes do not overwrite unsaved rows.",
+      "critique": {
+        "method": "DEGRADED: single-context source review; no sub-agent/browser tool exposed",
+        "design": "Retain existing theme, group selector and names. Strategy returns to two choices; remove obsolete auto-mode switch; keep administrator-only category control. Adopt upstream container-width responsive layout.",
+        "detector_findings": 0,
+        "browser_rendered": false,
+        "questions_skipped": "User already approved the functional scope; no redesign requested."
+      }
+    },
+    "diff_check": "passed, including generated web/dist; only existing CRLF normalization warning for cache-prefix.mjs",
+    "dependencies_and_lockfiles_changed": false,
+    "new_custom_tests_written": false
+  },
+  "not_verified": [
+    "real Anthropic account eligibility and real Claude Code auto mode",
+    "real prompt-cache hits, costs and TTL behavior",
+    "production database migration and live route verification",
+    "production image build/deployment",
+    "cc-node/crag runtime behavior beyond payload hash verification",
+    "real KVM/remote nodes/ARM64",
+    "browser rendering and long-running stability"
+  ],
+  "deployment_requirements": [
+    "Migration 042 adds usage log image columns; back up before production migration.",
+    "Unlike the upstream-only 1.3.218 upgrade, this fork transition replaces patched CLI binaries: synchronize slot CLI during release.",
+    "Do not overwrite persistent configs or rebuild slot containers/other services.",
+    "Use the existing restricted build, backup, rollback extraction, switch and route-verification workflow."
+  ]
+}

@@ -395,6 +395,22 @@ export function describeCacheContinuity({
   }
 }
 
+// Scheduling peeks the same request body once per candidate account; each
+// snapshot re-hashes the whole history several times (≈15 s of main-thread time
+// per minute under production load). Reuse it per body object, like the prompt
+// token estimate; message count and last message guard an appended history.
+const peekSnapshots = new WeakMap()
+
+function peekSnapshot(body) {
+  const messages = Array.isArray(body.messages) ? body.messages : []
+  const last = messages[messages.length - 1]
+  const hit = peekSnapshots.get(body)
+  if (hit && hit.n === messages.length && hit.last === last) return hit.snapshot
+  const snapshot = snapshotBody(body)
+  peekSnapshots.set(body, { snapshot, n: messages.length, last })
+  return snapshot
+}
+
 /**
  * Compare `body` with the stored turn of `sessionKey` without recording.
  * `confirmed` is true only after a successful hop called confirmCachePrefix.
@@ -402,7 +418,7 @@ export function describeCacheContinuity({
 export function peekCachePrefix(sessionKey, body, now = Date.now()) {
   const key = String(sessionKey || '').trim()
   if (!key || !body || typeof body !== 'object') return null
-  const current = snapshotBody(body)
+  const current = peekSnapshot(body)
   const hit = sessions.get(key)
   const previous = hit && now - hit.at < SESSION_IDLE_MS ? hit : null
   const compared = comparePrefix(previous, current)

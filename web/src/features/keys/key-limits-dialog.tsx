@@ -185,26 +185,28 @@ export function KeyLimitsDialog({
               />
             </Field>
           ) : null}
-          <Field label='类型' hint='一般选「走账号分组」'>
-            <Select
-              value={draft.category}
-              onValueChange={(v) =>
-                setDraft((d) => ({
-                  ...d,
-                  category: v === 'api' ? 'api' : 'oauth',
-                  group_id: v === 'api' ? 1 : d.group_id,
-                }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value='oauth'>走账号分组</SelectItem>
-                <SelectItem value='api'>API 直连（不走分组）</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
+          {canAssignGroup ? (
+            <Field label='类型' hint='一般选「走账号分组」'>
+              <Select
+                value={draft.category}
+                onValueChange={(v) =>
+                  setDraft((d) => ({
+                    ...d,
+                    category: v === 'api' ? 'api' : 'oauth',
+                    group_id: v === 'api' ? 1 : d.group_id,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='oauth'>走账号分组</SelectItem>
+                  <SelectItem value='api'>API 直连（不走分组）</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : null}
           <Field label='账号分组' hint='这个 Key 只会用这个分组里的账号'>
             <Select
               value={String(draft.group_id ?? 1)}
@@ -281,7 +283,10 @@ export function KeyLimitsDialog({
               />
             </Field>
           ) : null}
-          <Field label='额外调用范围' hint='与账号分组同时生效，只会缩小范围，不会跨组'>
+          <Field
+            label='额外调用范围'
+            hint='与账号分组同时生效，只会缩小范围，不会跨组'
+          >
             <Select
               value={draft.group_type}
               onValueChange={(v) => {

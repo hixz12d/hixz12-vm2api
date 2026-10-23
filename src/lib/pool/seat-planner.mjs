@@ -319,7 +319,8 @@ export class SeatPlanner {
     const deadline = Date.now() + this.stickyWaitMs()
     for (const ticket of moved) {
       this.place(ticket, { kind: 'conc', vmId })
-      ticket.deadline = deadline
+      // Moving queues may change the phase timeout, never the request budget.
+      ticket.deadline = Math.min(deadline, ticket.requestDeadline ?? Infinity)
       if (!ticket.granted) ticket.wake?.()
     }
     if (moved.length) this.pump(vmId)

@@ -410,6 +410,17 @@ function selectionFailure(selected, { excluded, lastPolicy, lastResult, hops }) 
   if (CAPACITY_SELECTION_REASONS.has(reason)) return poolOverloadedError(details)
   if (reason === 'pool_rate_limited') return poolRateLimitedError(details)
   if (reason === 'quota_guard_request_too_large') return quotaGuardTooLargeError(details)
+  if (reason === 'seat_budget_exhausted') {
+    return {
+      ...poolError(
+        'seat_budget_exhausted',
+        'Account quota reserve cannot admit a new device. Existing device seats may continue; retry after quota recovery.',
+        { ...details, retry_after_ms: 30_000 },
+      ),
+      // A local admission backoff, not a prediction of the provider's reset.
+      retryAfterSec: 30,
+    }
+  }
   const failed = poolError('account_pool_exhausted', 'No eligible Claude accounts remain', details)
   // An all-rest pool knows when the first working window opens.
   const retryMs = Number(details.retry_after_ms)
@@ -543,11 +554,20 @@ export class FailoverRunner {
   }
 
   async run(args = {}) {
+    // Session serialization, pool admission and ordinary retries share one
+    // clock. Entering runOnce must not give a queued request a fresh budget.
+    const requestDeadline = Date.now() + Number(this.config.total_retry_deadline_ms || 120000)
+    args = { ...args, requestDeadline }
     const sessionKey = String(args.stickyKey || '')
     if (!sessionKey) return this.runOnce(args)
     const backoffKey = JSON.stringify([sessionKey, args.groupScope?.id ?? null])
     const previous = this.sessionTails.get(sessionKey) || Promise.resolve()
     const queuedAt = Date.now()
+    const sessionTimeout = Number(this.config.session_queue_timeout_ms)
+    const sessionWaitMs = Math.min(
+      sessionTimeout > 0 ? sessionTimeout : Infinity,
+      Math.max(1, requestDeadline - queuedAt),
+    )
     let releaseTurn
     const turn = new Promise((resolve) => {
       releaseTurn = resolve
@@ -563,7 +583,7 @@ export class FailoverRunner {
         previous,
         args.signal,
         Number(this.config.session_queue_max_wait_ms) || 0,
-        this.config.session_queue_timeout_ms,
+        sessionWaitMs,
       )
       const sessionQueueMs = Date.now() - queuedAt
       if (overflowed) {
@@ -592,11 +612,14 @@ export class FailoverRunner {
     } catch (error) {
       if (error?.code === 'request_cancelled') return clientCancelledResult()
       if (error?.code === 'session_queue_timeout') {
-        const retryMs = Number(this.config.session_queue_timeout_ms)
-        return poolOverloadedError({
-          reason: 'session_queue_timeout',
-          retry_after_ms: Number.isFinite(retryMs) && retryMs > 0 ? retryMs : 1000,
-        })
+        const exhausted = Date.now() >= requestDeadline
+        return {
+          ...poolOverloadedError({
+            reason: exhausted ? 'pool_deadline_exceeded' : 'session_queue_timeout',
+            retry_after_ms: !exhausted && sessionTimeout > 0 ? sessionTimeout : 1000,
+          }),
+          sessionQueueMs: Date.now() - queuedAt,
+        }
       }
       throw error
     } finally {
@@ -628,6 +651,7 @@ export class FailoverRunner {
     keyScope = null,
     countUsage = true,
     quotaRequest = null,
+    requestDeadline = null,
   } = {}) {
     if (!this.scheduler) throw new Error('FailoverRunner requires a scheduler')
     if (typeof callAttempt !== 'function') throw new Error('FailoverRunner requires callAttempt')
@@ -636,7 +660,10 @@ export class FailoverRunner {
       maxSameUnitRetries: Number(this.config.max_same_account_retries ?? 1),
       maxUnitSwitches: Number(this.config.max_account_switches ?? 10),
       maxTotalAttempts: Number(this.config.max_total_attempts ?? 12),
-      deadlineMs: Number(this.config.total_retry_deadline_ms || 120000),
+      deadlineMs:
+        requestDeadline == null
+          ? Number(this.config.total_retry_deadline_ms || 120000)
+          : Math.max(0, requestDeadline - startedAt),
       startedAt,
     })
     const deadline = budget.deadline
@@ -815,7 +842,7 @@ export class FailoverRunner {
       }
       if (!selected?.ok) {
         const exhausted = selectionFailure(selected, { excluded, lastPolicy, lastResult, hops: budget.hops })
-        if (groupScope && exhausted.status === 503) {
+        if (groupScope && exhausted.status === 503 && exhausted.body.error.code !== 'seat_budget_exhausted') {
           exhausted.body.error.code = 'group_no_eligible_accounts'
           exhausted.body.error.message = '当前分组没有可用账号，不会跨组回退'
         }
